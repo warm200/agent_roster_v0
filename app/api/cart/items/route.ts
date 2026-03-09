@@ -1,5 +1,12 @@
+import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
-import { addMockCartItem, getMockCart } from '@/lib/mock-cart-store'
+
+import { HttpError } from '@/server/lib/http'
+import {
+  CART_COOKIE_NAME,
+  addItemToCart,
+  getActiveCart,
+} from '@/server/services/cart.service'
 
 export async function POST(request: Request) {
   try {
@@ -10,17 +17,24 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'agentId is required' }, { status: 400 })
     }
 
-    const item = addMockCartItem(agentId)
+    const cookieStore = await cookies()
+    const result = await addItemToCart({
+      cartId: cookieStore.get(CART_COOKIE_NAME)?.value ?? null,
+      agentId,
+    })
+    const cart = await getActiveCart({ cartId: result.cookieCartId })
 
-    if (!item) {
-      return NextResponse.json({ error: 'Agent not found' }, { status: 404 })
+    const response = NextResponse.json({
+      cart,
+      item: result.cartItem,
+    })
+    response.cookies.set(CART_COOKIE_NAME, result.cookieCartId, { path: '/' })
+    return response
+  } catch (error) {
+    if (error instanceof HttpError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
     }
 
-    return NextResponse.json({
-      cart: getMockCart(),
-      item,
-    })
-  } catch {
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
   }
 }

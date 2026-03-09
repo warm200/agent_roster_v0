@@ -248,6 +248,48 @@ export async function removeCartItem(input: CartContext & { cartItemId: string }
   return buildCartSnapshot(syncedCart, rows)
 }
 
+export async function replaceCartItems(input: CartContext & { agentIds: string[] }) {
+  const cart = await resolveActiveCart(input)
+  const db = getDb()
+  const desiredAgentIds = [...new Set(input.agentIds)]
+  const currentRows = await loadCartRows(cart.id)
+
+  for (const row of currentRows) {
+    if (!desiredAgentIds.includes(row.agent.id)) {
+      await db.delete(cartItems).where(eq(cartItems.id, row.cartItem.id))
+    }
+  }
+
+  const remainingRows = await loadCartRows(cart.id)
+  const remainingAgentIds = new Set(remainingRows.map((row) => row.agent.id))
+
+  for (const agentId of desiredAgentIds) {
+    if (remainingAgentIds.has(agentId)) {
+      continue
+    }
+
+    const saleRow = await loadSaleRowForAgent(agentId)
+
+    if (!saleRow) {
+      continue
+    }
+
+    await db.insert(cartItems).values({
+      id: crypto.randomUUID(),
+      cartId: cart.id,
+      agentId: saleRow.agent.id,
+      agentVersionId: saleRow.version.id,
+    })
+  }
+
+  const { cart: syncedCart, rows } = await syncCartSummary(cart.id)
+
+  return {
+    cart: buildCartSnapshot(syncedCart, rows),
+    cookieCartId: cart.id,
+  } satisfies ActiveCartResult
+}
+
 function getDb() {
   dbClient ??= createDb()
   return dbClient

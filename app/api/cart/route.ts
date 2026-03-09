@@ -1,9 +1,25 @@
+import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
-import { getMockCart, replaceMockCartItems } from '@/lib/mock-cart-store'
-import { mockAgents } from '@/lib/mock-data'
+
+import { HttpError } from '@/server/lib/http'
+import {
+  CART_COOKIE_NAME,
+  getActiveCartWithCookie,
+  replaceCartItems,
+} from '@/server/services/cart.service'
 
 export async function GET() {
-  return NextResponse.json(getMockCart())
+  try {
+    const cookieStore = await cookies()
+    const result = await getActiveCartWithCookie({
+      cartId: cookieStore.get(CART_COOKIE_NAME)?.value ?? null,
+    })
+    const response = NextResponse.json(result.cart)
+    response.cookies.set(CART_COOKIE_NAME, result.cookieCartId, { path: '/' })
+    return response
+  } catch (error) {
+    return handleCartError(error)
+  }
 }
 
 export async function PUT(request: Request) {
@@ -15,14 +31,23 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: 'agentIds must be an array' }, { status: 400 })
     }
 
-    const agents = agentIds
-      .map((agentId) => mockAgents.find((agent) => agent.id === agentId))
-      .filter((agent): agent is NonNullable<typeof agent> => Boolean(agent))
-
-    replaceMockCartItems(agents)
-
-    return NextResponse.json(getMockCart())
-  } catch {
-    return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
+    const cookieStore = await cookies()
+    const result = await replaceCartItems({
+      cartId: cookieStore.get(CART_COOKIE_NAME)?.value ?? null,
+      agentIds,
+    })
+    const response = NextResponse.json(result.cart)
+    response.cookies.set(CART_COOKIE_NAME, result.cookieCartId, { path: '/' })
+    return response
+  } catch (error) {
+    return handleCartError(error)
   }
+}
+
+function handleCartError(error: unknown) {
+  if (error instanceof HttpError) {
+    return NextResponse.json({ error: error.message }, { status: error.status })
+  }
+
+  return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
 }

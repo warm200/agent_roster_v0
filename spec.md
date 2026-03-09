@@ -30,6 +30,7 @@ Implemented in the current mock app:
 - Backend Telegram service now exists in `server/services/telegram.service.ts` with token validation, encrypted secret storage, pairing, and webhook handling
 - Backend run repository/service now exist in `server/services/run.repository.ts` and `server/services/run.service.ts` with provider-backed run sync against the current DB shape
 - `GET /api/agents` and `GET /api/agents/[slug]` now route through `server/services/catalog.service.ts`
+- `/api/cart`, `/api/cart/items`, and `/api/cart/items/[id]` now route through `server/services/cart.service.ts` using the cart cookie
 
 Still not implemented:
 - Real auth flows, Stripe checkout/webhooks, Telegram webhook/pairing worker, signed downloads, provider abstraction, real run backend
@@ -232,9 +233,9 @@ The initial API routes were broken. Most read/write mock routes have now been re
 | `GET /api/agents` | Service-backed | Uses `catalog.service.ts` with DB-first + mock fallback |
 | `GET /api/agents/[slug]` | Service-backed | Uses `catalog.service.ts` with DB-first + mock fallback |
 | `POST /api/interviews/preview` | Missing | New → `catalogService.previewInterview()` |
-| `GET /api/cart` | Implemented (mock) | Returns mock cart state |
-| `POST /api/cart/items` | Implemented (mock) | Adds cart item by `agentId` |
-| `DELETE /api/cart/items/[cartItemId]` | Implemented (mock) | Removes cart item |
+| `GET /api/cart` | Service-backed | Uses `cart.service.ts` and cart cookie state |
+| `POST /api/cart/items` | Service-backed | Uses `cart.service.ts` and cart cookie state |
+| `DELETE /api/cart/items/[cartItemId]` | Service-backed | Uses `cart.service.ts` and cart cookie state |
 | `POST /api/checkout/session` | Not matched exactly | Current equivalent is `POST /api/checkout` with mock bundle creation; no Stripe session |
 
 ### Authenticated Endpoints
@@ -412,9 +413,9 @@ Normalize current mock routes into final service-backed PRD routes. Several func
 1. [x] `GET /api/agents` → catalogService
 2. [x] `GET /api/agents/[slug]` → catalogService
 3. [ ] `POST /api/interviews/preview` → catalogService
-4. [ ] `GET /api/cart` → cartService
-5. [ ] `POST /api/cart/items` → cartService
-6. [ ] `DELETE /api/cart/items/[cartItemId]` → cartService
+4. [x] `GET /api/cart` → cartService
+5. [x] `POST /api/cart/items` → cartService
+6. [x] `DELETE /api/cart/items/[cartItemId]` → cartService
 7. [ ] `POST /api/checkout/session` → checkoutService
 8. [ ] `POST /api/webhooks/stripe` → checkoutService
 9. [ ] `GET /api/me/orders` → orderService
