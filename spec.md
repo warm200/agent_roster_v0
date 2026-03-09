@@ -35,6 +35,7 @@ Implemented in the current mock app:
 - `POST /api/webhooks/telegram` now routes through `server/services/telegram.service.ts`
 - Legacy `/api/bundles*` and `/api/runs*` routes now route through backend services with a request-user fallback
 - Final `/api/me/orders*` routes now exist for orders, Telegram run-channel setup, run creation, and signed-download grants
+- Final `/api/me/runs*` routes now exist for run list, detail, logs, and result
 
 Still not implemented:
 - Real auth flows, Stripe checkout/webhooks, Telegram webhook/pairing worker, signed downloads, provider abstraction, real run backend
@@ -253,10 +254,10 @@ The initial API routes were broken. Most read/write mock routes have now been re
 | `GET /api/me/orders/[orderId]/run-channel` | Implemented | Uses `telegram.service.ts` |
 | `POST /api/me/orders/[orderId]/runs` | Implemented | Uses `run.service.ts` |
 | `GET /api/me/orders/[orderId]/download` | Implemented | Uses `order.service.ts` for signed download grants |
-| `GET /api/me/runs` | Implemented on alternate path | Current equivalent is service-backed `GET /api/runs` |
-| `GET /api/me/runs/[runId]` | Implemented on alternate path | Current equivalent is service-backed `GET /api/runs/[runId]` |
-| `GET /api/me/runs/[runId]/logs` | Implemented on alternate path | Current equivalent is service-backed `GET /api/runs/[runId]/logs` |
-| `GET /api/me/runs/[runId]/result` | Implemented on alternate path | Current equivalent is service-backed `GET /api/runs/[runId]/result` |
+| `GET /api/me/runs` | Implemented | Uses `run.service.ts` |
+| `GET /api/me/runs/[runId]` | Implemented | Uses `run.service.ts` |
+| `GET /api/me/runs/[runId]/logs` | Implemented | Uses `run.service.ts` |
+| `GET /api/me/runs/[runId]/result` | Implemented | Uses `run.service.ts` |
 
 ### Webhook / Internal Endpoints
 
@@ -429,10 +430,10 @@ Normalize current mock routes into final service-backed PRD routes. Several func
 13. [x] `GET /api/me/orders/[orderId]/run-channel` → telegramService
 14. [x] `POST /api/me/orders/[orderId]/runs` → runService
 15. [x] `GET /api/me/orders/[orderId]/download` → orderService
-16. [ ] `GET /api/me/runs` → runService
-17. [ ] `GET /api/me/runs/[runId]` → runService
-18. [ ] `GET /api/me/runs/[runId]/logs` → runService
-19. [ ] `GET /api/me/runs/[runId]/result` → runService
+16. [x] `GET /api/me/runs` → runService
+17. [x] `GET /api/me/runs/[runId]` → runService
+18. [x] `GET /api/me/runs/[runId]/logs` → runService
+19. [x] `GET /api/me/runs/[runId]/result` → runService
 20. [x] `POST /api/webhooks/telegram` → telegramService
 21. [ ] Normalize or remove legacy/alternate routes (`/api/bundles`, `/api/telegram/verify`, `/api/runs/[runId]/steps/`)
 
