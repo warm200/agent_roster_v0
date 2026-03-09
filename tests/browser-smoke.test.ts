@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict'
 import { after, before, test } from 'node:test'
 import { existsSync } from 'node:fs'
-import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
+import {
+  spawn,
+  spawnSync,
+  type ChildProcessWithoutNullStreams,
+} from 'node:child_process'
 import path from 'node:path'
 
 import { encode } from 'next-auth/jwt'
@@ -11,28 +15,42 @@ const PORT = 3101
 const BASE_URL = `http://127.0.0.1:${PORT}`
 const NEXT_BIN = path.join(process.cwd(), 'node_modules/.bin/next')
 const BUILD_ID_PATH = path.join(process.cwd(), '.next/BUILD_ID')
+const TEST_DATABASE_NAME = 'agent_roster_browser_smoke'
+const TEST_DATABASE_URL = `postgres://agent_roster:agent_roster@localhost:5432/${TEST_DATABASE_NAME}`
 const chromePath =
   process.env.CHROME_BIN ||
   [
     '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
     '/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary',
   ].find((candidate) => existsSync(candidate))
+const dockerAvailable = spawnSync('docker', ['version'], { stdio: 'ignore' }).status === 0
 
 let serverProcess: ChildProcessWithoutNullStreams | null = null
 let browser: Browser | null = null
+let hasSeededBrowserDatabase = false
 
-async function runCommand(args: string[], label: string) {
-  await new Promise<void>((resolve, reject) => {
-    const child = spawn(NEXT_BIN, args, {
+async function runCommand(
+  command: string,
+  args: string[],
+  label: string,
+  envOverrides: Record<string, string> = {},
+) {
+  return new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
+    const child = spawn(command, args, {
       cwd: process.cwd(),
       env: {
         ...process.env,
         NEXT_TELEMETRY_DISABLED: '1',
+        ...envOverrides,
       },
       stdio: 'pipe',
     })
 
+    let stdout = ''
     let stderr = ''
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk.toString()
+    })
     child.stderr.on('data', (chunk) => {
       stderr += chunk.toString()
     })
@@ -40,13 +58,77 @@ async function runCommand(args: string[], label: string) {
     child.on('error', reject)
     child.on('exit', (code) => {
       if (code === 0) {
-        resolve()
+        resolve({ stdout, stderr })
         return
       }
 
       reject(new Error(`${label} failed with code ${code ?? 'unknown'}\n${stderr}`))
     })
   })
+}
+
+async function ensureBrowserSmokeDatabase() {
+  if (!dockerAvailable) {
+    return false
+  }
+
+  const inspect = await runCommand(
+    'docker',
+    ['inspect', '-f', '{{.State.Running}}', 'agent-roster-postgres'],
+    'docker inspect',
+  ).catch(async () => {
+    await runCommand('docker', ['compose', 'up', '-d', 'postgres'], 'docker compose up')
+    return runCommand(
+      'docker',
+      ['inspect', '-f', '{{.State.Running}}', 'agent-roster-postgres'],
+      'docker inspect',
+    )
+  })
+
+  if (!inspect.stdout.includes('true')) {
+    await runCommand('docker', ['start', 'agent-roster-postgres'], 'docker start')
+  }
+
+  await runCommand(
+    'docker',
+    [
+      'exec',
+      'agent-roster-postgres',
+      'psql',
+      '-U',
+      'agent_roster',
+      '-d',
+      'postgres',
+      '-c',
+      `DROP DATABASE IF EXISTS ${TEST_DATABASE_NAME} WITH (FORCE);`,
+    ],
+    'drop test database',
+  )
+
+  await runCommand(
+    'docker',
+    [
+      'exec',
+      'agent-roster-postgres',
+      'psql',
+      '-U',
+      'agent_roster',
+      '-d',
+      'postgres',
+      '-c',
+      `CREATE DATABASE ${TEST_DATABASE_NAME};`,
+    ],
+    'create test database',
+  )
+
+  await runCommand('pnpm', ['db:migrate'], 'pnpm db:migrate', {
+    DATABASE_URL: TEST_DATABASE_URL,
+  })
+  await runCommand('pnpm', ['db:seed'], 'pnpm db:seed', {
+    DATABASE_URL: TEST_DATABASE_URL,
+  })
+
+  return true
 }
 
 async function waitForServer(url: string, attempts = 120) {
@@ -145,8 +227,10 @@ if (!chromePath) {
 } else {
   before(async () => {
     if (!existsSync(BUILD_ID_PATH)) {
-      await runCommand(['build'], 'next build')
+      await runCommand(NEXT_BIN, ['build'], 'next build')
     }
+
+    hasSeededBrowserDatabase = await ensureBrowserSmokeDatabase()
 
     serverProcess = spawn(
       NEXT_BIN,
@@ -156,6 +240,7 @@ if (!chromePath) {
         env: {
           ...process.env,
           AUTH_SECRET: process.env.AUTH_SECRET || 'test-auth-secret',
+          DATABASE_URL: hasSeededBrowserDatabase ? TEST_DATABASE_URL : '',
           GITHUB_CLIENT_ID: 'github-client',
           GITHUB_CLIENT_SECRET: 'github-secret',
           NEXT_TELEMETRY_DISABLED: '1',
@@ -181,6 +266,24 @@ if (!chromePath) {
     if (serverProcess) {
       serverProcess.kill('SIGTERM')
       await new Promise((resolve) => setTimeout(resolve, 500))
+    }
+
+    if (hasSeededBrowserDatabase) {
+      await runCommand(
+        'docker',
+        [
+          'exec',
+          'agent-roster-postgres',
+          'psql',
+          '-U',
+          'agent_roster',
+          '-d',
+          'postgres',
+          '-c',
+          `DROP DATABASE IF EXISTS ${TEST_DATABASE_NAME} WITH (FORCE);`,
+        ],
+        'drop test database',
+      ).catch(() => {})
     }
   })
 
@@ -322,6 +425,43 @@ if (!chromePath) {
         await clickByHref(page, '/app')
         await waitForText(page, 'Dashboard')
         assert.equal(page.url(), `${BASE_URL}/app`)
+      } finally {
+        await page.close()
+      }
+    },
+  )
+
+  test(
+    'browser smoke covers seeded bundle detail and run launch',
+    { timeout: 120_000, skip: !dockerAvailable ? 'Docker not available' : undefined },
+    async () => {
+      assert.ok(browser, 'Browser failed to launch')
+      assert.equal(hasSeededBrowserDatabase, true, 'Seeded browser database was not prepared')
+      const page = await browser.newPage()
+
+      try {
+        await authenticatePage(page, {
+          sub: 'user-1',
+          email: 'user-1@demo.local',
+          name: 'Demo User',
+        })
+
+        await page.goto(`${BASE_URL}/app/bundles`, { waitUntil: 'domcontentloaded' })
+        await waitForText(page, 'My Bundles')
+        await waitForText(page, 'Bundle (2 Agents)')
+        await clickByHref(page, '/app/bundles/order-1')
+        await waitForText(page, 'Launch Run')
+        await waitForText(page, 'Inbox Triage Agent')
+        assert.equal(page.url(), `${BASE_URL}/app/bundles/order-1`)
+
+        await clickByText(page, 'button', 'Launch Run')
+        await page.waitForFunction(
+          (baseUrl) => window.location.href.startsWith(`${baseUrl}/app/runs/`),
+          {},
+          BASE_URL,
+        )
+        await waitForText(page, 'Run Information')
+        assert.ok(page.url().startsWith(`${BASE_URL}/app/runs/`), page.url())
       } finally {
         await page.close()
       }
