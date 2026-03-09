@@ -29,6 +29,9 @@ export async function DELETE(
       return NextResponse.json({ error: error.message }, { status: error.status })
     }
 
-    return NextResponse.json({ error: 'Cart item not found' }, { status: 404 })
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Unable to remove cart item.' },
+      { status: 500 },
+    )
   }
 }

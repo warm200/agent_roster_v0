@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { Header } from '@/components/header'
 import { RiskBadge } from '@/components/risk-badge'
 import { BundleRiskSummary } from '@/components/bundle-risk-summary'
@@ -26,6 +27,7 @@ import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTi
 import { toast } from 'sonner'
 
 export default function CheckoutPage() {
+  const router = useRouter()
   const { items, bundleRisk, totalCents } = useCart()
   const [acceptedTerms, setAcceptedTerms] = useState(false)
   const [acceptedRisk, setAcceptedRisk] = useState(false)
@@ -48,7 +50,16 @@ export default function CheckoutPage() {
       toast.success('Redirecting to Stripe checkout...')
       window.location.assign(payload.sessionUrl)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Network error while creating checkout session')
+      const message =
+        error instanceof Error ? error.message : 'Network error while creating checkout session'
+
+      if (message === 'Authentication required.') {
+        toast.error('Please sign in before paying')
+        router.push(`/login?callbackUrl=${encodeURIComponent('/checkout')}`)
+        return
+      }
+
+      toast.error(message)
     } finally {
       setIsProcessing(false)
     }

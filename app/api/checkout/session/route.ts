@@ -1,7 +1,9 @@
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 
+import { isAuthConfigured } from '@/server/lib/auth'
 import { HttpError } from '@/server/lib/http'
+import { getRequestUserId } from '@/server/lib/request-user'
 import { CART_COOKIE_NAME } from '@/server/services/cart.service'
 import { getCheckoutService } from '@/server/services/checkout.service'
 
@@ -16,6 +18,7 @@ export async function POST(request: NextRequest) {
       body.cartId ??
       (await cookies()).get(CART_COOKIE_NAME)?.value ??
       null
+    const userId = isAuthConfigured() ? await getRequestUserId(request) : (body.userId ?? null)
 
     if (!cartId) {
       return NextResponse.json({ error: 'cartId is required' }, { status: 400 })
@@ -25,7 +28,7 @@ export async function POST(request: NextRequest) {
       cartId,
       origin: request.nextUrl.origin,
       userEmail: body.email ?? null,
-      userId: body.userId ?? null,
+      userId,
     })
 
     return NextResponse.json(session, { status: 201 })

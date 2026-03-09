@@ -47,8 +47,17 @@ export default function CheckoutSuccessPage({
           setOrderId(payload.id)
         }
       } catch (error) {
+        const message =
+          error instanceof Error ? error.message : 'Unable to complete checkout'
+
+        if (message === 'Authentication required.') {
+          const callbackUrl = `/checkout/success?session_id=${encodeURIComponent(params.session_id)}`
+          router.replace(`/login?callbackUrl=${encodeURIComponent(callbackUrl)}`)
+          return
+        }
+
         if (isMounted) {
-          setLoadError(error instanceof Error ? error.message : 'Unable to complete checkout')
+          setLoadError(message)
         }
       } finally {
         if (isMounted) {

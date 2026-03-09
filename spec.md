@@ -45,7 +45,7 @@ Implemented in the current mock app:
 - `POST /api/interviews/preview` now routes through `server/services/catalog.service.ts`
 - `/api/cart`, `/api/cart/items`, and `/api/cart/items/[id]` now route through `server/services/cart.service.ts` using the cart cookie
 - `POST /api/checkout/session` now routes through `server/services/checkout.service.ts`
-- Checkout now creates Stripe checkout sessions and the success page reconciles `session_id` values back into orders
+- Checkout now creates Stripe checkout sessions, requires auth when OAuth providers are configured, and the success page reconciles `session_id` values back into orders
 - `POST /api/webhooks/telegram` now routes through `server/services/telegram.service.ts`
 - `POST /api/webhooks/stripe` now routes through `server/services/checkout.service.ts`
 - `POST /api/internal/scan` now routes through `runService.scanAgentVersion()` for deterministic risk rescans
@@ -58,6 +58,7 @@ Implemented in the current mock app:
 - `usePairingStatus(orderId)` now exists and polls `/api/me/orders/:id/run-channel` until pairing reaches a terminal state
 - `useRunStatus(runId)` now exists and polls `/api/me/runs/:id` until active runs reach a terminal state
 - Cart sync, checkout, and Telegram setup flows now call shared frontend API clients instead of raw `fetch`
+- Telegram pairing now falls back to local polling mode on non-HTTPS local dev origins instead of requiring Telegram webhook registration
 - Catalog, dashboard, bundles, bundle detail, and runs pages now call shared frontend API clients instead of raw `fetch`
 - Route-level error boundaries now exist for the public shell and the authenticated app shell
 - Route-level loading skeletons now exist for catalog, agent detail, dashboard, bundles, bundle detail, runs, and run detail
@@ -186,10 +187,10 @@ v0_version/                        # Next.js 16 full-stack
 | Catalog | `app/agents/page.tsx` | Done: API-backed catalog with loading/error states |
 | Agent Detail | `app/agents/[slug]/page.tsx` | Done: API-backed detail page |
 | Cart | `app/cart/page.tsx` | Done: CartContext persists locally and syncs with mock cart APIs |
-| Checkout | `app/checkout/page.tsx` | Partial: now creates a Stripe checkout session via API and success reconciles the returned `session_id` into an order |
+| Checkout | `app/checkout/page.tsx` | Partial: creates a Stripe checkout session via API, enforces auth when OAuth is enabled, and success reconciles the returned `session_id` into an order |
 | Dashboard | `app/app/page.tsx` | Done: API-backed stats and recent activity |
 | Bundles List | `app/app/bundles/page.tsx` | Done: API-backed bundles list |
-| Bundle Detail | `app/app/bundles/[orderId]/page.tsx` | Partial: API-backed bundle detail, Telegram setup, downloads, and mock run launch |
+| Bundle Detail | `app/app/bundles/[orderId]/page.tsx` | Partial: API-backed bundle detail, Telegram setup with local polling fallback, downloads, and mock run launch |
 | Runs List | `app/app/runs/page.tsx` | Done: API-backed runs list with filters/loading/error states |
 | Run Detail | `app/app/runs/[runId]/page.tsx` | Done: API-backed detail with logs/results/artifacts/runtime disclosure/risk/retry/cancel |
 
@@ -407,7 +408,7 @@ Or use React Server Components where appropriate (catalog pages are good candida
 | Catalog | `GET /api/agents` | Service layer / real backend | Client (has filters) |
 | Agent Detail | `GET /api/agents/:slug` | Service layer / real backend | Server + client UI |
 | Cart | CartContext + `/api/cart*` mock routes | Durable server cart / auth claim | Client |
-| Checkout | CartContext + `POST /api/checkout/session` | Auth enforcement / production Stripe config | Client |
+| Checkout | CartContext + `POST /api/checkout/session` | Production Stripe config | Client |
 | Dashboard | `GET /api/bundles` + `GET /api/runs` | PRD path normalization / auth | Client |
 | Bundles List | `GET /api/bundles` | PRD path normalization / auth | Client |
 | Bundle Detail | `GET /api/bundles/:id` + channel routes | Signed downloads / real Telegram backend | Client |
@@ -547,6 +548,8 @@ OPENAI_API_KEY=     # For preview chat LLM calls
 OPENAI_PREVIEW_MODEL=gpt-4o
 
 # Telegram
+# Production: set an HTTPS webhook URL
+# Local dev: can be left unset; Telegram pairing falls back to polling getUpdates
 TELEGRAM_WEBHOOK_URL=https://your-domain/api/webhooks/telegram
 
 # Internal

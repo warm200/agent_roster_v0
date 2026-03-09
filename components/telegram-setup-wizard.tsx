@@ -209,7 +209,7 @@ export function TelegramSetupWizard({ orderId, initialStatus, onComplete }: Tele
 
             <div className="space-y-3">
               <p className="text-sm text-muted-foreground">
-                Now, open Telegram and send <code className="bg-secondary px-1.5 py-0.5 rounded text-foreground">/start</code> to your bot:
+                Now, open Telegram and start a chat with your bot:
               </p>
 
               {pairingCommand && (
@@ -229,11 +229,11 @@ export function TelegramSetupWizard({ orderId, initialStatus, onComplete }: Tele
               <ol className="space-y-2 text-sm">
                 <li className="flex items-start gap-2">
                   <span className="w-5 h-5 rounded-full bg-secondary flex items-center justify-center text-xs shrink-0">1</span>
-                  <span>Open Telegram and find @{botUsername}</span>
+                  <span>Open the quick-open link above, or find @{botUsername} in Telegram</span>
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="w-5 h-5 rounded-full bg-secondary flex items-center justify-center text-xs shrink-0">2</span>
-                  <span>Send the message: <code className="bg-secondary px-1.5 py-0.5 rounded">/start</code></span>
+                  <span>Tap <code className="bg-secondary px-1.5 py-0.5 rounded">Start</code> in Telegram</span>
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="w-5 h-5 rounded-full bg-secondary flex items-center justify-center text-xs shrink-0">3</span>
@@ -245,7 +245,7 @@ export function TelegramSetupWizard({ orderId, initialStatus, onComplete }: Tele
             {(isPairing || isPolling) && (
               <div className="flex items-center gap-3 p-4 bg-amber-500/10 border border-amber-500/20 rounded-lg">
                 <Spinner className="w-5 h-5 text-amber-400" />
-                <span className="text-sm text-amber-400">Waiting for your message in Telegram and checking webhook status...</span>
+                <span className="text-sm text-amber-400">Waiting for your message in Telegram and checking pairing status...</span>
               </div>
             )}
           </CardContent>

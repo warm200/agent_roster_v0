@@ -18,6 +18,9 @@ const order = {
 }
 
 afterEach(() => {
+  delete process.env.GITHUB_CLIENT_ID
+  delete process.env.GITHUB_CLIENT_SECRET
+  delete process.env.AUTH_SECRET
   setRequestUserIdForTesting(null)
   setCheckoutServiceForTesting(null)
 })
@@ -69,6 +72,90 @@ test('checkout session route forwards cart payload to checkout service', async (
     userId: 'user-test-1',
   })
   assert.equal(payload.sessionId, 'cs_test_123')
+})
+
+test('checkout session route requires auth when oauth is configured', async () => {
+  process.env.GITHUB_CLIENT_ID = 'github-client'
+  process.env.GITHUB_CLIENT_SECRET = 'github-secret'
+  process.env.AUTH_SECRET = 'auth-secret'
+
+  setCheckoutServiceForTesting({
+    async createCheckoutSession() {
+      throw new Error('should not be called')
+    },
+    async handleStripeWebhookEvent() {
+      return { received: true, type: 'checkout.session.completed' as const }
+    },
+    async reconcileCheckoutSession() {
+      return order as never
+    },
+  } satisfies CheckoutService)
+
+  const response = await createSession(
+    new NextRequest('http://localhost/api/checkout/session', {
+      body: JSON.stringify({
+        cartId: 'cart-test-1',
+      }),
+      method: 'POST',
+    }),
+  )
+  const payload = await response.json()
+
+  assert.equal(response.status, 401)
+  assert.equal(payload.error, 'Authentication required.')
+})
+
+test('checkout session route uses authenticated user when oauth is configured', async () => {
+  process.env.GITHUB_CLIENT_ID = 'github-client'
+  process.env.GITHUB_CLIENT_SECRET = 'github-secret'
+  process.env.AUTH_SECRET = 'auth-secret'
+
+  let received:
+    | {
+        cartId: string
+        origin: string
+        userEmail?: string | null
+        userId?: string | null
+      }
+    | undefined
+
+  setRequestUserIdForTesting(() => 'user-auth-1')
+  setCheckoutServiceForTesting({
+    async createCheckoutSession(input) {
+      received = input
+
+      return {
+        sessionId: 'cs_test_auth_123',
+        sessionUrl: 'https://checkout.stripe.com/c/session/test-auth',
+      }
+    },
+    async handleStripeWebhookEvent() {
+      return { received: true, type: 'checkout.session.completed' as const }
+    },
+    async reconcileCheckoutSession() {
+      return order as never
+    },
+  } satisfies CheckoutService)
+
+  const response = await createSession(
+    new NextRequest('http://localhost/api/checkout/session', {
+      body: JSON.stringify({
+        cartId: 'cart-test-1',
+        userId: 'forged-user',
+      }),
+      method: 'POST',
+    }),
+  )
+  const payload = await response.json()
+
+  assert.equal(response.status, 201)
+  assert.deepEqual(received, {
+    cartId: 'cart-test-1',
+    origin: 'http://localhost',
+    userEmail: null,
+    userId: 'user-auth-1',
+  })
+  assert.equal(payload.sessionId, 'cs_test_auth_123')
 })
 
 test('checkout session reconcile route forwards authenticated user to service', async () => {
