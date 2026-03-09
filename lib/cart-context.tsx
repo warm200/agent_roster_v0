@@ -58,8 +58,15 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const [hasLoadedStorage, setHasLoadedStorage] = useState(false)
 
   useEffect(() => {
-    setItems(readStoredCartItems())
+    const storedItems = readStoredCartItems()
+    setItems(storedItems)
     setHasLoadedStorage(true)
+
+    void fetch('/api/cart', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agentIds: storedItems.map((item) => item.agent.id) }),
+    })
   }, [])
 
   useEffect(() => {
@@ -87,14 +94,28 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
       return [...prev, newItem]
     })
+
+    void fetch('/api/cart/items', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agentId: agent.id }),
+    })
   }, [])
 
   const removeItem = useCallback((itemId: string) => {
     setItems((prev) => prev.filter((item) => item.id !== itemId))
+    void fetch(`/api/cart/items/${itemId}`, {
+      method: 'DELETE',
+    })
   }, [])
 
   const clearCart = useCallback(() => {
     setItems([])
+    void fetch('/api/cart', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agentIds: [] }),
+    })
   }, [])
 
   const isInCart = useCallback(

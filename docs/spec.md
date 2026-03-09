@@ -90,9 +90,9 @@ The API routes reference fields that don't exist on the PRD types:
 | `GET /api/agents`                 | Yes       | PARTIAL  | Returns PRD-aligned mock catalog data and derived categories |
 | `GET /api/agents/:slug`           | Yes       | PARTIAL  | Returns a PRD-aligned mock agent record |
 | `POST /api/interviews/preview`    | Yes       | MISSING  | Preview chat is client-side only; no backend |
-| `GET /api/cart`                   | Yes       | MISSING  | Cart is client-side React context only |
-| `POST /api/cart/items`            | Yes       | MISSING  | Client-side only |
-| `DELETE /api/cart/items/:id`      | Yes       | MISSING  | Client-side only |
+| `GET /api/cart`                   | Yes       | PARTIAL  | Exists at `/api/cart`; returns mock cart state |
+| `POST /api/cart/items`            | Yes       | PARTIAL  | Exists at `/api/cart/items`; adds a mock cart item by `agentId` |
+| `DELETE /api/cart/items/:id`      | Yes       | PARTIAL  | Exists at `/api/cart/items/:id`; removes a mock cart item |
 | `POST /api/checkout/session`      | Yes       | PARTIAL  | Route exists at `/api/checkout` as POST; no Stripe session |
 
 ### 4.2 Authenticated Endpoints
@@ -189,7 +189,7 @@ The API routes reference fields that don't exist on the PRD types:
 
 | State Area                          | Status   | Notes |
 |-------------------------------------|----------|-------|
-| Cart state                          | DONE     | React Context with localStorage persistence across refresh |
+| Cart state                          | DONE     | React Context with localStorage persistence and mock API sync |
 | Purchased bundle detail state       | PARTIAL  | Bundle detail now fetches mock order data from `/api/bundles/:orderId`; Telegram setup still uses local step UI on top of mock API responses |
 | Telegram token validate state       | PARTIAL  | Uses mock API-backed validation, but no real secret storage or external Telegram check |
 | Pairing state                       | PARTIAL  | Uses mock API-backed pairing start, but no webhook/polling worker |
@@ -221,7 +221,7 @@ The API routes reference fields that don't exist on the PRD types:
 
 | Area                                | Status   | Notes |
 |-------------------------------------|----------|-------|
-| Pages call API routes               | PARTIAL  | Catalog, dashboard, bundles, bundle detail, runs, and agent detail now fetch through app APIs; cart still reads local mock data |
+| Pages call API routes               | PARTIAL  | Catalog, dashboard, bundles, bundle detail, runs, and agent detail fetch through app APIs; cart mutations now sync to mock cart APIs |
 | API routes match PRD endpoint paths  | NO      | Routes use `/api/bundles`, `/api/runs` instead of `/api/me/orders`, `/api/me/runs` |
 | API route schemas match types.ts     | PARTIAL | Agents/runs/bundles routes now align with shared mock types; checkout/telegram remain mock contracts |
 | Loading states on data fetch         | PARTIAL | Catalog, agent detail, dashboard, bundles, bundle detail, checkout, and runs now render loading states; cart still sync-renders from local state |
@@ -248,7 +248,7 @@ The API routes reference fields that don't exist on the PRD types:
 4. [ ] Create seed script from mock-data
 5. [ ] Set up authentication (NextAuth / Clerk / custom JWT)
 6. [x] Implement catalog endpoints (`GET /api/agents`, `GET /api/agents/:slug`)
-7. [ ] Implement cart endpoints (`GET /api/cart`, `POST /api/cart/items`, `DELETE /api/cart/items/:id`)
+7. [x] Implement cart endpoints (`GET /api/cart`, `POST /api/cart/items`, `DELETE /api/cart/items/:id`)
 8. [ ] Implement checkout/order endpoints (`POST /api/checkout/session`, payment webhook)
 9. [ ] Implement download endpoint with signed URLs
 
