@@ -100,7 +100,7 @@ The API routes reference fields that don't exist on the PRD types:
 | Endpoint                                              | PRD §14.2 | Status   | Notes |
 |-------------------------------------------------------|-----------|----------|-------|
 | `GET /api/me/orders`                                  | Yes       | PARTIAL  | Exists at `/api/bundles` GET; now returns PRD-aligned mock bundle/order data |
-| `GET /api/me/orders/:orderId`                         | Yes       | MISSING  | No single-order endpoint |
+| `GET /api/me/orders/:orderId`                         | Yes       | PARTIAL  | Exists at `/api/bundles/:orderId`; returns PRD-aligned mock bundle/order detail |
 | `POST /api/me/orders/:orderId/run-channel/telegram/validate` | Yes | PARTIAL | Exists at `/api/telegram/verify`; different contract (uses `code` not `botToken`) |
 | `POST /api/me/orders/:orderId/run-channel/telegram/pairing/start` | Yes | MISSING | Pairing simulated in frontend only |
 | `GET /api/me/orders/:orderId/run-channel`             | Yes       | MISSING  | |
@@ -190,7 +190,7 @@ The API routes reference fields that don't exist on the PRD types:
 | State Area                          | Status   | Notes |
 |-------------------------------------|----------|-------|
 | Cart state                          | DONE     | React Context; no persistence across refresh |
-| Purchased bundle detail state       | PARTIAL  | Uses mock data directly; no API fetch |
+| Purchased bundle detail state       | PARTIAL  | Bundle detail now fetches mock order data from `/api/bundles/:orderId`; Telegram/run state is still local |
 | Telegram token validate state       | PARTIAL  | Local component state; no API |
 | Pairing state                       | PARTIAL  | Local component state; no API |
 | Run launch readiness                | PARTIAL  | Bundle page gating is fixed and launch now redirects into a created mock run, but there is no real orchestration backend |

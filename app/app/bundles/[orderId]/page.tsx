@@ -1,17 +1,19 @@
 'use client'
 
-import { use, useState } from 'react'
+import { use, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Spinner } from '@/components/ui/spinner'
 import { RiskBadge } from '@/components/risk-badge'
 import { BundleRiskSummary } from '@/components/bundle-risk-summary'
 import { TelegramSetupWizard } from '@/components/telegram-setup-wizard'
-import { mockOrders, mockRuns, formatPrice } from '@/lib/mock-data'
+import { mockRuns, formatPrice } from '@/lib/mock-data'
+import type { Order } from '@/lib/types'
 import { formatDate, formatDateTime } from '@/lib/utils'
 import { toast } from 'sonner'
 import { 
@@ -19,8 +21,6 @@ import {
   Package, 
   Play, 
   Download, 
-  Send, 
-  CheckCircle2,
   AlertTriangle,
   FileText,
   ExternalLink
@@ -33,15 +33,73 @@ interface PageProps {
 export default function BundleDetailPage({ params }: PageProps) {
   const { orderId } = use(params)
   const router = useRouter()
+  const [order, setOrder] = useState<Order | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
   const [telegramSetup, setTelegramSetup] = useState(false)
   const [isLaunching, setIsLaunching] = useState(false)
-  
-  // In real implementation, this would fetch from API
-  // For demo, show mock data or a new demo order
-  const order = mockOrders.find((o) => o.id === orderId) || {
-    ...mockOrders[0],
-    id: orderId,
-    channelConfig: null,
+
+  useEffect(() => {
+    let isMounted = true
+
+    async function loadOrder() {
+      setIsLoading(true)
+
+      try {
+        const response = await fetch(`/api/bundles/${orderId}`)
+        const payload = await response.json()
+
+        if (!response.ok) {
+          if (isMounted) {
+            setOrder(null)
+          }
+          return
+        }
+
+        if (isMounted) {
+          setOrder(payload)
+        }
+      } catch {
+        if (isMounted) {
+          setOrder(null)
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false)
+        }
+      }
+    }
+
+    loadOrder()
+
+    return () => {
+      isMounted = false
+    }
+  }, [orderId])
+
+  if (isLoading) {
+    return <BundleDetailSkeleton />
+  }
+
+  if (!order) {
+    return (
+      <div className="p-6 lg:p-8">
+        <Link
+          href="/app/bundles"
+          className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-6"
+        >
+          <ChevronLeft className="w-4 h-4" />
+          Back to Bundles
+        </Link>
+        <Card className="border-red-500/30 bg-red-500/5">
+          <CardContent className="p-6">
+            <p className="font-medium text-red-400">Bundle not found</p>
+            <p className="mt-2 text-sm text-muted-foreground">
+              This purchase could not be loaded from the mock API.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    )
   }
 
   const orderRuns = mockRuns.filter((r) => r.orderId === order.id)
@@ -292,6 +350,29 @@ export default function BundleDetailPage({ params }: PageProps) {
           )}
         </TabsContent>
       </Tabs>
+    </div>
+  )
+}
+
+function BundleDetailSkeleton() {
+  return (
+    <div className="space-y-6 p-6 lg:p-8">
+      <Skeleton className="h-5 w-32" />
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex items-center gap-4">
+          <Skeleton className="h-14 w-14 rounded-xl" />
+          <div className="space-y-3">
+            <Skeleton className="h-7 w-56" />
+            <Skeleton className="h-4 w-72" />
+          </div>
+        </div>
+        <Skeleton className="h-10 w-36" />
+      </div>
+      <Skeleton className="h-10 w-80" />
+      <div className="space-y-4">
+        <Skeleton className="h-32 w-full" />
+        <Skeleton className="h-32 w-full" />
+      </div>
     </div>
   )
 }
