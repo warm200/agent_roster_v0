@@ -206,6 +206,10 @@ export const createRunRequestSchema = z.object({
   orderId: z.string().min(1),
 })
 
+export const scanAgentVersionRequestSchema = z.object({
+  version: agentVersionSchema,
+})
+
 export const validateTelegramTokenRequestSchema = z.object({
   botToken: z.string().min(1),
 })

@@ -1,7 +1,8 @@
-import { runLogSchema, runResultSchema } from '@/lib/schemas'
-import type { Order, Run, RunLog, RunResult } from '@/lib/types'
+import { riskProfileSchema, runLogSchema, runResultSchema } from '@/lib/schemas'
+import type { AgentVersion, Order, Run, RunLog, RunResult } from '@/lib/types'
 
 import { HttpError } from '../lib/http'
+import { scanAgentVersion as scanAgentVersionRiskProfile } from '../lib/risk-engine'
 import { getRunProvider } from '../providers'
 import { RunRepository } from './run.repository'
 import { getOrderByIdForUser } from './order.service'
@@ -85,6 +86,10 @@ export class RunService {
   async retryRun(userId: string, runId: string) {
     const run = await this.requireRun(userId, runId)
     return this.createRun(userId, run.orderId)
+  }
+
+  scanAgentVersion(version: AgentVersion) {
+    return riskProfileSchema.parse(scanAgentVersionRiskProfile(version))
   }
 
   private async requireRun(userId: string, runId: string) {

@@ -46,6 +46,7 @@ Implemented in the current mock app:
 - Checkout now creates Stripe checkout sessions and the success page reconciles `session_id` values back into orders
 - `POST /api/webhooks/telegram` now routes through `server/services/telegram.service.ts`
 - `POST /api/webhooks/stripe` now routes through `server/services/checkout.service.ts`
+- `POST /api/internal/scan` now routes through `runService.scanAgentVersion()` for deterministic risk rescans
 - Legacy `/api/bundles*` and `/api/runs*` routes now route through backend services with a request-user fallback
 - Final `/api/me/orders*` routes now exist for orders, Telegram run-channel setup, run creation, and signed-download grants
 - Final `/api/me/runs*` routes now exist for run list, detail, logs, and result
@@ -288,7 +289,7 @@ The initial API routes were broken. Most read/write mock routes have now been re
 |----------|--------|
 | `POST /api/webhooks/stripe` | Implemented | Routes Stripe events into `checkout.service.ts` |
 | `POST /api/webhooks/telegram` | Implemented | Routes Telegram webhook payloads into `telegram.service.ts` |
-| `POST /api/internal/scan` | New → `runService.scanAgentVersion()` |
+| `POST /api/internal/scan` | Implemented | Routes deterministic risk rescans into `runService.scanAgentVersion()` |
 
 ---
 
@@ -459,6 +460,7 @@ Normalize current mock routes into final service-backed PRD routes. Several func
 19. [x] `GET /api/me/runs/[runId]/result` → runService
 20. [x] `POST /api/webhooks/telegram` → telegramService
 21. [x] Normalize or remove legacy/alternate routes (`/api/bundles`, `/api/telegram/verify`, `/api/runs/[runId]/steps/`)
+22. [x] `POST /api/internal/scan` → `runService.scanAgentVersion()`
 
 ### Phase 3: Frontend API Integration (~10 files)
 
