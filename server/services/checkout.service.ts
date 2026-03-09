@@ -4,6 +4,7 @@ import type { CheckoutSession, Order } from '@/lib/types'
 
 import { getStripe } from '../lib/stripe'
 import { HttpError } from '../lib/http'
+import { DEFAULT_REQUEST_USER_ID, ensureRequestUser } from '../lib/request-user'
 import { getActiveCart } from './cart.service'
 import { createPaidOrderFromCart } from './order.service'
 
@@ -21,6 +22,16 @@ function getStripeCheckoutClient() {
 
 function buildStripePaymentReference(session: Stripe.Checkout.Session) {
   return session.payment_intent?.toString() ?? session.id
+}
+
+function getStripeWebhookSecret() {
+  const secret = process.env.STRIPE_WEBHOOK_SECRET
+
+  if (!secret) {
+    throw new HttpError(503, 'Stripe webhook secret is not configured.')
+  }
+
+  return secret
 }
 
 function assertCompletedPaymentSession(session: Stripe.Checkout.Session) {
@@ -157,4 +168,36 @@ export async function handleStripeCheckoutCompletedSession(input: {
     paymentReference: buildStripePaymentReference(input.session),
     userId: input.userId,
   })
+}
+
+export async function handleStripeWebhookEvent(input: {
+  payload: string
+  signature: string
+}) {
+  const stripe = getStripeCheckoutClient()
+  const event = stripe.webhooks.constructEvent(
+    input.payload,
+    input.signature,
+    getStripeWebhookSecret(),
+  )
+
+  if (event.type !== 'checkout.session.completed') {
+    return {
+      received: true,
+      type: event.type,
+    }
+  }
+
+  const session = event.data.object as Stripe.Checkout.Session
+  const userId = session.metadata?.userId?.trim() || DEFAULT_REQUEST_USER_ID
+  await ensureRequestUser(userId)
+  await handleStripeCheckoutCompletedSession({
+    session,
+    userId,
+  })
+
+  return {
+    received: true,
+    type: event.type,
+  }
 }

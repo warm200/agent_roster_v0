@@ -33,6 +33,7 @@ Implemented in the current mock app:
 - `/api/cart`, `/api/cart/items`, and `/api/cart/items/[id]` now route through `server/services/cart.service.ts` using the cart cookie
 - `POST /api/checkout/session` now routes through `server/services/checkout.service.ts`
 - `POST /api/webhooks/telegram` now routes through `server/services/telegram.service.ts`
+- `POST /api/webhooks/stripe` now routes through `server/services/checkout.service.ts`
 - Legacy `/api/bundles*` and `/api/runs*` routes now route through backend services with a request-user fallback
 - Final `/api/me/orders*` routes now exist for orders, Telegram run-channel setup, run creation, and signed-download grants
 - Final `/api/me/runs*` routes now exist for run list, detail, logs, and result
@@ -263,7 +264,7 @@ The initial API routes were broken. Most read/write mock routes have now been re
 
 | Endpoint | Action |
 |----------|--------|
-| `POST /api/webhooks/stripe` | New → `checkoutService.handleStripeEvent()` |
+| `POST /api/webhooks/stripe` | Implemented | Routes Stripe events into `checkout.service.ts` |
 | `POST /api/webhooks/telegram` | Implemented | Routes Telegram webhook payloads into `telegram.service.ts` |
 | `POST /api/internal/scan` | New → `runService.scanAgentVersion()` |
 
@@ -422,7 +423,7 @@ Normalize current mock routes into final service-backed PRD routes. Several func
 5. [x] `POST /api/cart/items` → cartService
 6. [x] `DELETE /api/cart/items/[cartItemId]` → cartService
 7. [x] `POST /api/checkout/session` → checkoutService
-8. [ ] `POST /api/webhooks/stripe` → checkoutService
+8. [x] `POST /api/webhooks/stripe` → checkoutService
 9. [x] `GET /api/me/orders` → orderService
 10. [x] `GET /api/me/orders/[orderId]` → orderService
 11. [x] `POST /api/me/orders/[orderId]/run-channel/telegram/validate` → telegramService
