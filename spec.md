@@ -12,9 +12,11 @@ Implemented in the current mock app:
 - Cart now persists in `localStorage` and syncs against mock cart endpoints
 - Checkout creates a mock purchased bundle and redirects to the returned order ID
 - Telegram setup wizard now uses bundle-scoped mock validate/pairing APIs
+- Drizzle/Postgres foundation files now exist: `drizzle.config.ts`, `.env.example`, `server/db/schema.ts`, `server/db/index.ts`, `server/db/seed.ts`
+- Initial Drizzle migration generated under `drizzle/`
 
 Still not implemented:
-- Real auth, database, Stripe, Telegram webhook/pairing worker, signed downloads, provider abstraction, real run backend
+- Real auth, a running database with applied migrations, Stripe, Telegram webhook/pairing worker, signed downloads, provider abstraction, real run backend
 - PRD endpoint path normalization (`/api/me/orders`, `/api/me/runs`) and production service contracts
 
 ---
@@ -354,22 +356,23 @@ Or use React Server Components where appropriate (catalog pages are good candida
 
 ### Phase 0: Foundation (~15 files)
 
-Port infrastructure into current project. No UI changes.
+Port infrastructure into current project. Current slice landed the DB config/schema/bootstrap/seed scaffold, but migrations and a running Postgres instance are still pending.
 
 1. [ ] Add `docker-compose.yml` (PostgreSQL 16)
-2. [ ] Add `drizzle.config.ts`
-3. [ ] Port `server/db/schema.ts` from agent_roster (adapt imports)
-4. [ ] Port `server/db/index.ts` (Drizzle client init)
-5. [ ] Port `server/db/seed.ts` + merge 5 current agents as seed data
-6. [ ] Add `.env.example` with all vars
+2. [x] Add `drizzle.config.ts`
+3. [x] Port `server/db/schema.ts` from agent_roster (adapt imports)
+4. [x] Port `server/db/index.ts` (Drizzle client init)
+5. [x] Port `server/db/seed.ts` + merge 5 current agents as seed data
+6. [x] Add `.env.example` with all vars
 7. [ ] Port `lib/schemas.ts` (Zod validation from shared/)
 8. [ ] Port `lib/constants.ts` (enums from shared/)
-9. [ ] Install deps: `drizzle-orm`, `drizzle-kit`, `pg`, `@auth/core`, `@auth/drizzle-adapter`, `stripe`, `axios`
-10. [ ] Add `server/lib/auth.ts` (NextAuth v5 config)
-11. [ ] Add `server/lib/stripe.ts` (Stripe client init)
-12. [ ] Add `app/api/auth/[...nextauth]/route.ts`
-13. [ ] Verify: `docker compose up -d && npm run db:migrate && npm run db:seed` works
-14. [ ] Add `services/api.ts` (Axios shared instance)
+9. [x] Install DB deps: `drizzle-orm`, `drizzle-kit`, `pg`, `tsx`
+10. [ ] Install remaining backend deps: `@auth/core`, `@auth/drizzle-adapter`, `stripe`, `axios`
+11. [ ] Add `server/lib/auth.ts` (NextAuth v5 config)
+12. [ ] Add `server/lib/stripe.ts` (Stripe client init)
+13. [ ] Add `app/api/auth/[...nextauth]/route.ts`
+14. [ ] Verify: `docker compose up -d && npm run db:migrate && npm run db:seed` works
+15. [ ] Add `services/api.ts` (Axios shared instance)
 
 ### Phase 1: Port Backend Services (~7 files, ~2000 LOC)
 

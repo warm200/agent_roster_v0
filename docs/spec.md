@@ -202,8 +202,8 @@ Older API route/page scaffolds referenced fields that don't exist on the PRD typ
 
 | Capability                                     | Status   | Notes |
 |------------------------------------------------|----------|-------|
-| Database schema & migrations                   | MISSING  | No DB, no ORM, no migrations |
-| Seed data                                      | PARTIAL  | `mock-data.ts` has 5 agents; not a real seed script |
+| Database schema & migrations                   | PARTIAL  | `drizzle.config.ts`, `server/db/schema.ts`, `server/db/index.ts`, and an initial `drizzle/` migration now exist; no applied migrations or running DB yet |
+| Seed data                                      | PARTIAL  | `server/db/seed.ts` now scaffolds seeding the 5 mock agents; not verified against a real DB yet |
 | Authentication / auth provider                 | MISSING  | No login, no session, no JWT |
 | Real payment (Stripe checkout session)         | MISSING  | Mock only |
 | Real Telegram token validation                 | MISSING  | |
@@ -243,9 +243,9 @@ Older API route/page scaffolds referenced fields that don't exist on the PRD typ
 
 ### Phase 1: Backend Infrastructure
 1. [ ] Set up database (Postgres + Prisma/Drizzle)
-2. [ ] Create schema matching PRD §10 data models
-3. [ ] Write migrations
-4. [ ] Create seed script from mock-data
+2. [x] Create schema matching PRD §10 data models
+3. [x] Write migrations
+4. [x] Create seed script from mock-data
 5. [ ] Set up authentication (NextAuth / Clerk / custom JWT)
 6. [x] Implement catalog endpoints (`GET /api/agents`, `GET /api/agents/:slug`)
 7. [x] Implement cart endpoints (`GET /api/cart`, `POST /api/cart/items`, `DELETE /api/cart/items/:id`)
@@ -294,6 +294,8 @@ Older API route/page scaffolds referenced fields that don't exist on the PRD typ
 - Complete shopping flow UI (browse → detail → cart → checkout → bundle → run)
 - PRD-aligned TypeScript types and mock data for core entities
 - API-backed catalog, agent detail, dashboard, bundles, bundle detail, and run surfaces
+- Initial Drizzle/Postgres backend foundation scaffolding is in place
+- Initial generated SQL migration exists for the new schema
 - Telegram Setup Wizard with 3-step UX
 - Mock Telegram validation and pairing APIs wired into bundle setup
 - Risk Badge + Bundle Risk Summary components
@@ -302,7 +304,7 @@ Older API route/page scaffolds referenced fields that don't exist on the PRD typ
 - Dark mode + responsive layout
 
 **What's critically missing:**
-- No real backend (no DB, no auth, no payment, no Telegram, no run execution)
+- No running real backend yet (no live DB, no auth, no payment, no Telegram, no run execution)
 - APIs are still mock-only; no durable persistence or external integrations
 - No provider abstraction
 - No risk scanning engine
