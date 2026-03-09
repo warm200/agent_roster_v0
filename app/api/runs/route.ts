@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { mockRuns } from "@/lib/mock-data"
+import { mockRunLogs, mockRuns } from "@/lib/mock-data"
 import { createMockRun, getOrderById, getRunSummary } from "@/lib/mock-selectors"
 
 export async function GET(request: NextRequest) {
@@ -77,6 +77,15 @@ export async function POST(request: NextRequest) {
     }
     
     const newRun = createMockRun(order)
+    mockRuns.unshift(newRun)
+    mockRunLogs[newRun.id] = [
+      {
+        timestamp: newRun.createdAt,
+        level: "info",
+        step: "init",
+        message: "Run requested from purchased bundle. Provisioning managed workspace.",
+      },
+    ]
     
     return NextResponse.json(getRunSummary(newRun), { status: 201 })
   } catch {

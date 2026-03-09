@@ -2,10 +2,12 @@
 
 import { use, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Spinner } from '@/components/ui/spinner'
 import { RiskBadge } from '@/components/risk-badge'
 import { BundleRiskSummary } from '@/components/bundle-risk-summary'
 import { TelegramSetupWizard } from '@/components/telegram-setup-wizard'
@@ -30,7 +32,9 @@ interface PageProps {
 
 export default function BundleDetailPage({ params }: PageProps) {
   const { orderId } = use(params)
+  const router = useRouter()
   const [telegramSetup, setTelegramSetup] = useState(false)
+  const [isLaunching, setIsLaunching] = useState(false)
   
   // In real implementation, this would fetch from API
   // For demo, show mock data or a new demo order
@@ -50,13 +54,32 @@ export default function BundleDetailPage({ params }: PageProps) {
   
   const canLaunchRun = order.status === 'paid' && hasTelegramSetup
 
-  const handleLaunchRun = () => {
-    toast.success('Run launch request accepted. Run history uses mock data in this prototype.')
-    // In real implementation, this would create a run via API
-  }
+  const handleLaunchRun = async () => {
+    if (!canLaunchRun || isLaunching) return
 
-  const handleDownload = (agentTitle: string) => {
-    toast.success(`Downloading ${agentTitle} package...`)
+    setIsLaunching(true)
+
+    try {
+      const response = await fetch('/api/runs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId: order.id }),
+      })
+
+      const payload = await response.json()
+
+      if (!response.ok) {
+        toast.error(payload.error || 'Unable to launch run')
+        return
+      }
+
+      toast.success('Run started. Redirecting to run details...')
+      router.push(`/app/runs/${payload.id}`)
+    } catch {
+      toast.error('Network error while launching run')
+    } finally {
+      setIsLaunching(false)
+    }
   }
 
   return (
@@ -93,11 +116,20 @@ export default function BundleDetailPage({ params }: PageProps) {
 
         <Button 
           size="lg" 
-          disabled={!canLaunchRun}
+          disabled={!canLaunchRun || isLaunching}
           onClick={handleLaunchRun}
         >
-          <Play className="w-4 h-4 mr-2" />
-          Launch Run
+          {isLaunching ? (
+            <>
+              <Spinner className="w-4 h-4 mr-2" />
+              Launching...
+            </>
+          ) : (
+            <>
+              <Play className="w-4 h-4 mr-2" />
+              Launch Run
+            </>
+          )}
         </Button>
       </div>
 
@@ -192,12 +224,11 @@ export default function BundleDetailPage({ params }: PageProps) {
                         </p>
                       </div>
                     </div>
-                    <Button 
-                      variant="outline" 
-                      onClick={() => handleDownload(item.agent.title)}
-                    >
-                      <Download className="w-4 h-4 mr-2" />
-                      Download
+                    <Button variant="outline" asChild>
+                      <Link href={item.agentVersion.installPackageUrl}>
+                        <Download className="w-4 h-4 mr-2" />
+                        Download
+                      </Link>
                     </Button>
                   </div>
                 </CardContent>
@@ -242,9 +273,18 @@ export default function BundleDetailPage({ params }: PageProps) {
                     : 'Complete Telegram setup to launch runs.'}
                 </p>
                 {canLaunchRun && (
-                  <Button onClick={handleLaunchRun}>
-                    <Play className="w-4 h-4 mr-2" />
-                    Launch First Run
+                  <Button onClick={handleLaunchRun} disabled={isLaunching}>
+                    {isLaunching ? (
+                      <>
+                        <Spinner className="w-4 h-4 mr-2" />
+                        Launching...
+                      </>
+                    ) : (
+                      <>
+                        <Play className="w-4 h-4 mr-2" />
+                        Launch First Run
+                      </>
+                    )}
                   </Button>
                 )}
               </CardContent>

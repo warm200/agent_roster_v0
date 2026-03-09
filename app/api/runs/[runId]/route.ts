@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { mockRunLogs, mockRuns } from "@/lib/mock-data"
 import { createMockRun, getOrderById, getRunById, getRunSummary } from "@/lib/mock-selectors"
 
 export async function GET(
@@ -59,7 +60,18 @@ export async function PATCH(
         )
       }
 
-      return NextResponse.json(createMockRun(order))
+      const retriedRun = createMockRun(order)
+      mockRuns.unshift(retriedRun)
+      mockRunLogs[retriedRun.id] = [
+        {
+          timestamp: retriedRun.createdAt,
+          level: "info",
+          step: "retry",
+          message: `Retry requested from run ${run.id}. Provisioning managed workspace.`,
+        },
+      ]
+
+      return NextResponse.json(getRunSummary(retriedRun))
     }
     
     return NextResponse.json(

@@ -75,9 +75,9 @@ The API routes reference fields that don't exist on the PRD types:
 | 5    | Checkout & payment                      | PARTIAL  | Simulated 2s delay; no Stripe integration |
 | 6    | Redirect to purchased bundle detail     | PARTIAL  | Hardcoded redirect to `/app/bundles/order-demo` |
 | 7    | Complete Telegram setup                 | PARTIAL  | UI wizard works; no real API calls |
-| 8    | Launch Run                              | PARTIAL  | Button shows toast; no real run creation |
+| 8    | Launch Run                              | PARTIAL  | Bundle page POSTs to the mock run API and redirects into the created run detail page |
 | 9    | View Run status/logs/results            | PARTIAL  | Implemented with mock data; no polling or real backend state yet |
-| 10   | Download package/artifacts              | PARTIAL  | Button shows toast; no real download |
+| 10   | Download package/artifacts              | PARTIAL  | Bundle downloads link directly to mock install-package URLs; artifact delivery is still mock-only |
 
 ---
 
@@ -193,7 +193,7 @@ The API routes reference fields that don't exist on the PRD types:
 | Purchased bundle detail state       | PARTIAL  | Uses mock data directly; no API fetch |
 | Telegram token validate state       | PARTIAL  | Local component state; no API |
 | Pairing state                       | PARTIAL  | Local component state; no API |
-| Run launch readiness                | PARTIAL  | Bundle page gating is fixed, but run creation is still mock-only |
+| Run launch readiness                | PARTIAL  | Bundle page gating is fixed and launch now redirects into a created mock run, but there is no real orchestration backend |
 | Run status/logs/results state       | PARTIAL  | Mock data only; no polling or real state |
 
 ---
