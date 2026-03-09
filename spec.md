@@ -67,6 +67,7 @@ Implemented in the current mock app:
 - Route smoke coverage now exists for orders list/detail/download route behavior
 - Route smoke coverage now exists for run list/detail/logs/result routes plus retry/cancel actions
 - Route smoke coverage now exists for legacy bundle wrappers and the deprecated Telegram verify compatibility route
+- Route smoke coverage now exists for legacy run wrappers, including list/create/detail/logs/result and retry/cancel actions
 
 Still not implemented:
 - Production auth provider setup, production Stripe/Telegram operations, provider abstraction, and a real run backend

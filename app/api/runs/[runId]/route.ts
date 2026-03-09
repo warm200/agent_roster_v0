@@ -3,8 +3,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import type { Agent, Order, Run, RunLog } from '@/lib/types'
 import { HttpError } from '@/server/lib/http'
 import { getRequestUserId } from '@/server/lib/request-user'
-import { getOrderByIdForUser } from '@/server/services/order.service'
-import { RunService } from '@/server/services/run.service'
+import { getOrderService } from '@/server/services/order.service'
+import { getRunService } from '@/server/services/run.service'
 
 interface RunDetailResponse extends Run {
   agents: Agent[]
@@ -14,12 +14,10 @@ interface RunDetailResponse extends Run {
   order: Order | undefined
 }
 
-const runService = new RunService()
-
 async function buildRunDetail(userId: string, run: Run): Promise<RunDetailResponse> {
   const [order, logs] = await Promise.all([
-    getOrderByIdForUser({ orderId: run.orderId, userId }),
-    runService.getRunLogs(userId, run.id),
+    getOrderService().getOrderByIdForUser({ orderId: run.orderId, userId }),
+    getRunService().getRunLogs(userId, run.id),
   ])
 
   return {
@@ -39,7 +37,7 @@ export async function GET(
   try {
     const { runId } = await params
     const userId = await getRequestUserId(request)
-    const run = await runService.getRun(userId, runId)
+    const run = await getRunService().getRun(userId, runId)
     return NextResponse.json(await buildRunDetail(userId, run))
   } catch (error) {
     if (error instanceof HttpError) {
@@ -61,12 +59,12 @@ export async function PATCH(
     const { action } = body
 
     if (action === 'cancel') {
-      const run = await runService.stopRun(userId, runId)
+      const run = await getRunService().stopRun(userId, runId)
       return NextResponse.json(await buildRunDetail(userId, run))
     }
 
     if (action === 'retry') {
-      const run = await runService.retryRun(userId, runId)
+      const run = await getRunService().retryRun(userId, runId)
       return NextResponse.json(await buildRunDetail(userId, run))
     }
 

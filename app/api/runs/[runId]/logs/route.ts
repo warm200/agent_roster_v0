@@ -2,9 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 
 import { HttpError } from '@/server/lib/http'
 import { getRequestUserId } from '@/server/lib/request-user'
-import { RunService } from '@/server/services/run.service'
-
-const runService = new RunService()
+import { getRunService } from '@/server/services/run.service'
 
 export async function GET(
   request: NextRequest,
@@ -16,7 +14,7 @@ export async function GET(
 
     return NextResponse.json({
       runId,
-      logs: await runService.getRunLogs(userId, runId),
+      logs: await getRunService().getRunLogs(userId, runId),
     })
   } catch (error) {
     if (error instanceof HttpError) {
