@@ -62,6 +62,7 @@ Implemented in the current mock app:
 - `npm test` now runs smoke regression coverage for the preview route and auth proxy
 - Browser smoke coverage now exists for catalog-to-cart, protected-app redirect, signed-in dashboard access, authenticated bundle/run page-access flows, and protected app navigation flows
 - Browser smoke coverage now exists for checkout-success handoff and its post-purchase CTA paths
+- `scripts/db-setup.sh` now exists to start local Postgres, run migrations, and seed the database
 - Route smoke coverage now exists for run launch creation and the deprecated manual-step compatibility endpoint
 - Route smoke coverage now exists for Telegram validate, pairing-start, and webhook route behavior
 - Route smoke coverage now exists for checkout session creation, checkout-session reconciliation, and Stripe webhook handling
@@ -317,7 +318,7 @@ The initial API routes were broken. Most read/write mock routes have now been re
 
 ### 6.2 Frontend API Service Layer
 
-Partially added. `services/api.ts` now exists as the shared Axios entrypoint, but per-domain client modules are still future work.
+Implemented. `services/api.ts` now exists as the shared Axios entrypoint, and the per-domain client modules are in place.
 
 ```
 services/
@@ -339,7 +340,7 @@ services/
 | `RunResultsPanel` | Summary + artifacts download list | `components/run-results-panel.tsx` |
 | `RuntimeDisclosure` | Shows usesRealWorkspace/usesTools/networkEnabled | inline in Run Detail |
 
-These are implemented already. Still missing: the run-status polling hook for live backend state.
+These are implemented already. The polling hooks are now in place for both Telegram pairing and active run status.
 
 ### 6.4 Polling Hooks
 
