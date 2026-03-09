@@ -3,6 +3,20 @@
 Merges: current v0_version UI + agent_roster backend architecture.
 Strategy: single Next.js 16 full-stack app. Port backend services into this project.
 
+## Current Progress Snapshot
+
+Implemented in the current mock app:
+- Catalog, agent detail, dashboard, bundles list/detail, runs list/detail now fetch through app API routes
+- Bundle detail can launch mock runs and redirect into run detail
+- Run detail now shows runtime disclosure, combined risk, logs, results, artifacts, retry, and cancel
+- Cart now persists in `localStorage` and syncs against mock cart endpoints
+- Checkout creates a mock purchased bundle and redirects to the returned order ID
+- Telegram setup wizard now uses bundle-scoped mock validate/pairing APIs
+
+Still not implemented:
+- Real auth, database, Stripe, Telegram webhook/pairing worker, signed downloads, provider abstraction, real run backend
+- PRD endpoint path normalization (`/api/me/orders`, `/api/me/runs`) and production service contracts
+
 ---
 
 ## 1. Architecture Decision
@@ -103,15 +117,15 @@ v0_version/                        # Next.js 16 full-stack
 | Page | File | Notes |
 |------|------|-------|
 | Home | `app/page.tsx` | No changes needed |
-| Catalog | `app/agents/page.tsx` | Replace mock import → API fetch |
-| Agent Detail | `app/agents/[slug]/page.tsx` | Replace mock import → API fetch |
-| Cart | `app/cart/page.tsx` | Already uses CartContext; wire context to API |
-| Checkout | `app/checkout/page.tsx` | Replace simulated payment → real Stripe redirect |
-| Dashboard | `app/app/page.tsx` | Replace mock import → API fetch |
-| Bundles List | `app/app/bundles/page.tsx` | Replace mock import → API fetch |
-| Bundle Detail | `app/app/bundles/[orderId]/page.tsx` | Replace mock import → API fetch; wire Telegram wizard |
-| Runs List | `app/app/runs/page.tsx` | Fix type refs; replace mock → API fetch |
-| Run Detail | `app/app/runs/[runId]/page.tsx` | Fix broken types; add logs/results panels; API fetch |
+| Catalog | `app/agents/page.tsx` | Done: API-backed catalog with loading/error states |
+| Agent Detail | `app/agents/[slug]/page.tsx` | Done: API-backed detail page |
+| Cart | `app/cart/page.tsx` | Done: CartContext persists locally and syncs with mock cart APIs |
+| Checkout | `app/checkout/page.tsx` | Partial: still mock checkout, but now creates a mock bundle via API and redirects to returned `orderId` |
+| Dashboard | `app/app/page.tsx` | Done: API-backed stats and recent activity |
+| Bundles List | `app/app/bundles/page.tsx` | Done: API-backed bundles list |
+| Bundle Detail | `app/app/bundles/[orderId]/page.tsx` | Partial: API-backed bundle detail, Telegram setup, downloads, and mock run launch |
+| Runs List | `app/app/runs/page.tsx` | Done: API-backed runs list with filters/loading/error states |
+| Run Detail | `app/app/runs/[runId]/page.tsx` | Done: API-backed detail with logs/results/artifacts/runtime disclosure/risk/retry/cancel |
 
 ### Components — ALL KEPT
 
@@ -121,8 +135,8 @@ v0_version/                        # Next.js 16 full-stack
 | `agent-card.tsx` | Keep | None |
 | `risk-badge.tsx` | Keep | None |
 | `bundle-risk-summary.tsx` | Keep | None |
-| `preview-chat.tsx` | Keep | Wire to `POST /api/interviews/preview` |
-| `telegram-setup-wizard.tsx` | Keep | Wire to real Telegram API endpoints |
+| `preview-chat.tsx` | Keep | Still client-side mock; backend preview endpoint remains missing |
+| `telegram-setup-wizard.tsx` | Keep | Done for mock flow; wired to bundle-scoped validate/pairing APIs |
 | `theme-provider.tsx` | Keep | None |
 | `ui/*` (50+ shadcn) | Keep | None |
 
@@ -130,9 +144,9 @@ v0_version/                        # Next.js 16 full-stack
 
 | File | Status | Changes |
 |------|--------|---------|
-| `lib/types.ts` | Keep | Add `RunStep`, `StepStatus` if needed; align with Drizzle schema output |
-| `lib/mock-data.ts` | Keep | Becomes fallback/dev-only; pages stop importing directly |
-| `lib/cart-context.tsx` | Keep | Add API sync (POST/DELETE cart items to backend) |
+| `lib/types.ts` | Keep | Run/order shape is now aligned with the mock routes; future work is DB/service alignment, not restoring `RunStep` |
+| `lib/mock-data.ts` | Keep | Now mostly fallback/mock API backing data; most pages no longer import it directly |
+| `lib/cart-context.tsx` | Keep | Done for mock flow: local persistence plus mock cart API sync/reconciliation |
 | `lib/utils.ts` | Keep | None |
 
 ---
@@ -189,37 +203,37 @@ Port `agent_roster/packages/shared/src/constants/enums.ts` → `v0_version/lib/c
 
 ---
 
-## 5. What to REWRITE (broken API routes)
+## 5. API Route Progress
 
-Current API routes are broken (wrong field names, missing exports). Replace entirely with routes backed by real services.
+The initial API routes were broken. Most read/write mock routes have now been rewritten to PRD-aligned shapes, but they are still mock-only and still use simplified path contracts.
 
 ### Public Endpoints
 
 | Endpoint | Current Status | Action |
 |----------|---------------|--------|
-| `GET /api/agents` | Broken (wrong fields) | Rewrite → `catalogService.listAgents()` |
-| `GET /api/agents/[slug]` | Partial | Rewrite → `catalogService.getAgentBySlug()` |
+| `GET /api/agents` | Rewritten | Currently returns PRD-aligned mock catalog data |
+| `GET /api/agents/[slug]` | Rewritten | Currently returns PRD-aligned mock agent detail |
 | `POST /api/interviews/preview` | Missing | New → `catalogService.previewInterview()` |
-| `GET /api/cart` | Missing (client-only) | New → `cartService.getActiveCart()` |
-| `POST /api/cart/items` | Missing | New → `cartService.addItemToCart()` |
-| `DELETE /api/cart/items/[cartItemId]` | Missing | New → `cartService.removeCartItem()` |
-| `POST /api/checkout/session` | Broken (no Stripe) | Rewrite → `checkoutService.createCheckoutSession()` |
+| `GET /api/cart` | Implemented (mock) | Returns mock cart state |
+| `POST /api/cart/items` | Implemented (mock) | Adds cart item by `agentId` |
+| `DELETE /api/cart/items/[cartItemId]` | Implemented (mock) | Removes cart item |
+| `POST /api/checkout/session` | Not matched exactly | Current equivalent is `POST /api/checkout` with mock bundle creation; no Stripe session |
 
 ### Authenticated Endpoints
 
 | Endpoint | Current Status | Action |
 |----------|---------------|--------|
-| `GET /api/me/orders` | Wrong path (`/api/bundles`) | New at correct path → `orderService.listOrders()` |
-| `GET /api/me/orders/[orderId]` | Missing | New → `orderService.getOrderById()` |
-| `POST /api/me/orders/[orderId]/run-channel/telegram/validate` | Wrong contract | New → `telegramService.validateToken()` |
-| `POST /api/me/orders/[orderId]/run-channel/telegram/pairing/start` | Missing | New → `telegramService.startPairing()` |
-| `GET /api/me/orders/[orderId]/run-channel` | Missing | New → `telegramService.getChannelConfig()` |
-| `POST /api/me/orders/[orderId]/runs` | Wrong path/schema | New → `runService.createRun()` |
+| `GET /api/me/orders` | Implemented on alternate path | Current equivalent is `GET /api/bundles` |
+| `GET /api/me/orders/[orderId]` | Implemented on alternate path | Current equivalent is `GET /api/bundles/[orderId]` |
+| `POST /api/me/orders/[orderId]/run-channel/telegram/validate` | Implemented on alternate path | Current equivalent is `POST /api/bundles/[orderId]/channel/telegram/validate` |
+| `POST /api/me/orders/[orderId]/run-channel/telegram/pairing/start` | Implemented on alternate path | Current equivalent is `POST /api/bundles/[orderId]/channel/telegram/pairing/start` |
+| `GET /api/me/orders/[orderId]/run-channel` | Implemented on alternate path | Current equivalent is `GET /api/bundles/[orderId]/channel` |
+| `POST /api/me/orders/[orderId]/runs` | Implemented on alternate path | Current equivalent is `POST /api/runs` with `orderId` payload |
 | `GET /api/me/orders/[orderId]/download` | Missing | New → `orderService.getSignedDownloads()` |
-| `GET /api/me/runs` | Wrong schema | Rewrite → `runService.listRuns()` |
-| `GET /api/me/runs/[runId]` | Wrong schema | Rewrite → `runService.getRun()` |
-| `GET /api/me/runs/[runId]/logs` | Missing | New → `runService.getRunLogs()` |
-| `GET /api/me/runs/[runId]/result` | Missing | New → `runService.getRunResult()` |
+| `GET /api/me/runs` | Implemented on alternate path | Current equivalent is `GET /api/runs` |
+| `GET /api/me/runs/[runId]` | Implemented on alternate path | Current equivalent is `GET /api/runs/[runId]` |
+| `GET /api/me/runs/[runId]/logs` | Implemented on alternate path | Current equivalent is `GET /api/runs/[runId]/logs` |
+| `GET /api/me/runs/[runId]/result` | Implemented on alternate path | Current equivalent is `GET /api/runs/[runId]/result` |
 
 ### Webhook / Internal Endpoints
 
@@ -245,7 +259,7 @@ Current API routes are broken (wrong field names, missing exports). Replace enti
 
 ### 6.2 Frontend API Service Layer
 
-New `services/` directory with Axios-based API clients. Each page replaces direct mock-data import with a service call.
+Still not added. Current pages mostly call app routes directly; a dedicated `services/` client layer remains future work.
 
 ```
 services/
@@ -259,13 +273,15 @@ services/
 └── preview.api.ts       # sendPreviewMessage(slug, messages)
 ```
 
-### 6.3 Missing UI Components
+### 6.3 UI Components Added
 
 | Component | Purpose | Location |
 |-----------|---------|----------|
 | `RunLogsPanel` | Timestamped log entries (level, step, message) | `components/run-logs-panel.tsx` |
 | `RunResultsPanel` | Summary + artifacts download list | `components/run-results-panel.tsx` |
 | `RuntimeDisclosure` | Shows usesRealWorkspace/usesTools/networkEnabled | inline in Run Detail |
+
+These are implemented already. Still missing: polling hooks for live backend state rather than static/mock fetches.
 
 ### 6.4 Polling Hooks
 
@@ -287,23 +303,23 @@ services/
 
 ## 7. Type Alignment Plan
 
-The current `lib/types.ts` is 95% aligned with the PRD. Needed fixes:
+Most of the original run-surface type drift is now fixed. Remaining work is mainly backend/schema alignment rather than page-level field mismatches.
 
-| Issue | Action |
+| Issue | Status |
 |-------|--------|
-| Run Detail page imports `RunStep`, `StepStatus` — not in types.ts | Either add these types or remove step-based UI (PRD doesn't specify steps, only logs) |
-| Run Detail uses `agent.name` | Change to `agent.title` (match types.ts) |
-| Run Detail uses `run.agentId`, `run.bundleId` | Change to `run.orderId` (match PRD) |
-| Run Detail uses `Date` objects | Standardize on ISO strings (match types.ts) |
-| Run Detail uses `run.triggerType`, `run.cost` | Remove (not in PRD); or keep as UI-only extras |
+| Remove `RunStep` / `StepStatus` dependence from run pages | Done |
+| Change run UI from `agent.name` to `agent.title` | Done |
+| Change run UI from `run.agentId` / `run.bundleId` to `run.orderId` | Done |
+| Standardize run dates on ISO strings | Done |
+| Remove non-PRD run extras from active run UI | Done in current mock run surface |
 
 **Recommendation:** The step-by-step execution UI in Run Detail is good UX even though PRD only specifies logs. Keep the UI but derive steps from log entries rather than a separate `RunStep` model. The logs endpoint returns `{ timestamp, level, step, message }` — group by `step` to render the timeline.
 
 ---
 
-## 8. Page Migration Checklist
+## 8. Page Integration Snapshot
 
-For each page, the migration is: `import from mock-data` → `fetch from API via services/`.
+Most page migrations are now done at the app-route level. The remaining gap is service-layer normalization and real backend contracts, not raw mock-data imports.
 
 ### Pattern
 
@@ -319,18 +335,18 @@ const { data: agents } = useSWR('/api/agents', getAgents)
 
 Or use React Server Components where appropriate (catalog pages are good candidates).
 
-| Page | Data Source (current) | Data Source (target) | Server/Client |
-|------|----------------------|---------------------|---------------|
+| Page | Current Data Source | Remaining Gap | Server/Client |
+|------|---------------------|---------------|---------------|
 | Home | Static | Static (no API needed) | Server |
-| Catalog | `mockAgents` directly | `GET /api/agents` | Client (has filters) |
-| Agent Detail | `getAgentBySlug()` from mock | `GET /api/agents/:slug` | Server (static data) |
-| Cart | CartContext (client-only) | CartContext + `GET/POST/DELETE /api/cart` | Client |
-| Checkout | CartContext | CartContext + `POST /api/checkout/session` → Stripe redirect | Client |
-| Dashboard | `mockOrders`, `mockRuns` | `GET /api/me/orders` + `GET /api/me/runs` | Client |
-| Bundles List | `mockOrders` | `GET /api/me/orders` | Client |
-| Bundle Detail | `mockOrders`, `mockRuns` | `GET /api/me/orders/:id` + channel status | Client |
-| Runs List | `mockRuns` | `GET /api/me/runs` | Client |
-| Run Detail | `mockRuns`, `mockAgents` | `GET /api/me/runs/:id` + logs + result | Client (polling) |
+| Catalog | `GET /api/agents` | Service layer / real backend | Client (has filters) |
+| Agent Detail | `GET /api/agents/:slug` | Service layer / real backend | Server + client UI |
+| Cart | CartContext + `/api/cart*` mock routes | Durable server cart / auth claim | Client |
+| Checkout | CartContext + `POST /api/checkout` | Real Stripe redirect/session | Client |
+| Dashboard | `GET /api/bundles` + `GET /api/runs` | PRD path normalization / auth | Client |
+| Bundles List | `GET /api/bundles` | PRD path normalization / auth | Client |
+| Bundle Detail | `GET /api/bundles/:id` + channel routes | Signed downloads / real Telegram backend | Client |
+| Runs List | `GET /api/runs` | PRD path normalization / polling | Client |
+| Run Detail | `GET /api/runs/:id` + logs + result | Real orchestration / polling | Client |
 
 ---
 
@@ -371,7 +387,7 @@ Port all services from agent_roster. Adapt imports. Test with curl/httpie.
 
 ### Phase 2: Rewrite API Routes (~20 route files)
 
-Delete broken routes. Write new ones backed by services.
+Normalize current mock routes into final service-backed PRD routes. Several functional equivalents already exist on `/api/agents`, `/api/bundles`, `/api/cart`, and `/api/runs`.
 
 1. [ ] `GET /api/agents` → catalogService
 2. [ ] `GET /api/agents/[slug]` → catalogService
@@ -393,7 +409,7 @@ Delete broken routes. Write new ones backed by services.
 18. [ ] `GET /api/me/runs/[runId]/logs` → runService
 19. [ ] `GET /api/me/runs/[runId]/result` → runService
 20. [ ] `POST /api/webhooks/telegram` → telegramService
-21. [ ] Delete old broken routes (`/api/bundles`, `/api/telegram/verify`, `/api/runs/[runId]/steps/`)
+21. [ ] Normalize or remove legacy/alternate routes (`/api/bundles`, `/api/telegram/verify`, `/api/runs/[runId]/steps/`)
 
 ### Phase 3: Frontend API Integration (~10 files)
 
@@ -402,26 +418,26 @@ Wire pages to real API. Keep all existing UI.
 1. [ ] Create `services/*.api.ts` files (7 service clients)
 2. [ ] Add `lib/auth-context.tsx` + `AuthProvider` in `providers.tsx`
 3. [ ] Add `middleware.ts` for `/app/*` route protection
-4. [ ] Wire CartContext to API (`addItem` → `POST /api/cart/items`, etc.)
-5. [ ] Wire Catalog page to `GET /api/agents`
-6. [ ] Wire Agent Detail to `GET /api/agents/:slug`
+4. [x] Wire CartContext to API (`addItem` → `POST /api/cart/items`, etc.) for the mock flow
+5. [x] Wire Catalog page to `GET /api/agents`
+6. [x] Wire Agent Detail to `GET /api/agents/:slug`
 7. [ ] Wire Preview Chat to `POST /api/interviews/preview`
 8. [ ] Wire Checkout to `POST /api/checkout/session` → Stripe redirect
-9. [ ] Wire Dashboard to `GET /api/me/orders` + `GET /api/me/runs`
-10. [ ] Wire Bundle Detail to `GET /api/me/orders/:id` + channel endpoints
+9. [x] Wire Dashboard to current mock orders/runs endpoints
+10. [x] Wire Bundle Detail to current mock bundle/channel endpoints
 11. [ ] Wire Telegram wizard to real validate/pairing endpoints
-12. [ ] Wire Run launch to `POST /api/me/orders/:id/runs` → redirect to run detail
-13. [ ] Wire Run Detail to `GET /api/me/runs/:id` + logs + result
+12. [x] Wire Run launch to current mock run creation endpoint → redirect to run detail
+13. [x] Wire Run Detail to current mock run detail/logs/result endpoints
 14. [ ] Wire Downloads to `GET /api/me/orders/:id/download` (signed URLs)
 15. [ ] Add polling hooks: `usePairingStatus`, `useRunStatus`
-16. [ ] Fix Run Detail types (`RunStep` → derive from logs; `agent.name` → `agent.title`)
+16. [x] Fix Run Detail types (`RunStep` → derive from logs; `agent.name` → `agent.title`)
 
 ### Phase 4: Missing UI + Polish
 
-1. [ ] Add `RunLogsPanel` component (timestamped log entries)
-2. [ ] Add `RunResultsPanel` component (summary + artifacts download)
-3. [ ] Add runtime disclosure to Run Detail (usesRealWorkspace, usesTools, networkEnabled)
-4. [ ] Add combined risk display to Run Detail
+1. [x] Add `RunLogsPanel` component (timestamped log entries)
+2. [x] Add `RunResultsPanel` component (summary + artifacts download)
+3. [x] Add runtime disclosure to Run Detail (usesRealWorkspace, usesTools, networkEnabled)
+4. [x] Add combined risk display to Run Detail
 5. [ ] Add login page (`app/login/page.tsx`)
 6. [ ] Add auth-aware header (show user name, login/logout)
 7. [ ] Add loading skeletons to all data-fetching pages
@@ -475,7 +491,7 @@ INTERNAL_API_TOKEN=<random-token>
 | File | Reason |
 |------|--------|
 | `app/api/bundles/route.ts` | Wrong path; replaced by `/api/me/orders` |
-| `app/api/telegram/verify/route.ts` | Wrong contract; replaced by `/api/me/orders/:id/run-channel/telegram/validate` |
+| `app/api/telegram/verify/route.ts` | Legacy compatibility wrapper; optional cleanup once bundle-scoped contract fully replaces it |
 | `app/api/runs/[runId]/steps/[stepId]/route.ts` | Steps not in PRD; logs-based approach instead |
 
 Old API routes under `app/api/agents/`, `app/api/checkout/`, `app/api/runs/` will be rewritten in-place, not deleted.
@@ -486,7 +502,7 @@ Old API routes under `app/api/agents/`, `app/api/checkout/`, `app/api/runs/` wil
 
 ### Cart: Server-synced with anonymous fallback
 
-Current cart is client-only (React Context, lost on refresh). The old backend has anonymous cart support via cookies that gets claimed on login. Keep CartContext for instant UI updates, but sync mutations to the server:
+Current cart now persists locally and syncs to mock cart endpoints. The remaining backend goal is anonymous/auth-claimed durable carts via cookies or auth identity:
 
 ```
 addItem(agent) → optimistic UI update → POST /api/cart/items
@@ -510,11 +526,11 @@ Current Run Detail has a `RunStep`-based timeline UI that's good UX. But the PRD
 
 ### Preview Chat: Backend LLM call (not hardcoded)
 
-Current preview chat has category-based hardcoded responses. The old backend calls OpenAI with the agent's `preview_prompt_snapshot`. Port that — the UI stays the same, just wire to `POST /api/interviews/preview`.
+Current preview chat is still category-based hardcoded UI. The remaining backend goal is an API-backed preview using the agent's prompt snapshot.
 
-### Download: Signed URLs (not toast stubs)
+### Download: Signed URLs (not mock URLs)
 
-Current download buttons show a toast. The old backend generates HMAC-signed, time-limited (15 min) URLs per agent package. Wire the download buttons to `GET /api/me/orders/:id/download` → open signed URLs.
+Current bundle download buttons now open mock install-package URLs from bundle data. The remaining backend goal is signed, time-limited artifact/download URLs.
 
 ---
 
@@ -524,19 +540,19 @@ All items from PRD §18, mapped to implementation:
 
 | Criterion | Phase | How |
 |-----------|-------|-----|
-| User can browse, select, purchase agents | Phase 2-3 | Catalog API + Cart API + Stripe checkout |
-| User enters bundle detail post-purchase | Phase 3 | Stripe success_url redirect |
-| User completes Telegram setup | Phase 2-3 | Real token validate + pairing endpoints |
-| User launches Run | Phase 2-3 | `POST /api/me/orders/:id/runs` + mock provider |
+| User can browse, select, purchase agents | Current + future Phase 2-3 | Done in mock flow; real completion needs Stripe checkout |
+| User enters bundle detail post-purchase | Current + future Phase 3 | Done in mock flow via API-created order redirect; real completion needs Stripe success flow |
+| User completes Telegram setup | Current + future Phase 2-3 | Done in mock flow; real completion needs backend validation + pairing worker |
+| User launches Run | Current + future Phase 2-3 | Done in mock flow via `POST /api/runs`; real completion needs provider backend |
 | Order + entitlement persistence | Phase 0-1 | PostgreSQL + Drizzle |
 | Download access-controlled | Phase 2-3 | Signed URLs, paid-only check |
-| Run create/query/logs/results endpoints | Phase 2 | All 5 run endpoints |
+| Run create/query/logs/results endpoints | Current + future Phase 2 | Done on current mock `/api/runs*` routes; PRD path normalization still pending |
 | Telegram pairing via backend webhook | Phase 2 | `POST /api/webhooks/telegram` |
 | All pages accessible | Phase 3 | Already done (UI exists) |
 | Preview vs Run boundary clear | Current | Already done |
-| Risk visible at all levels | Phase 4 | Add to Run Detail; rest already done |
-| Telegram wizard functional | Phase 3 | Wire to real endpoints |
-| Run status/logs/results displayed | Phase 4 | RunLogsPanel + RunResultsPanel |
+| Risk visible at all levels | Current | Done in the mock UI, including run detail |
+| Telegram wizard functional | Current + Phase 3 | Functional in mock flow; real endpoints still pending |
+| Run status/logs/results displayed | Current | RunLogsPanel + RunResultsPanel shipped |
 | Every agent version has risk | Phase 1 | Risk engine + seed data |
 | Cart/order/run show bundle risk | Phase 3-4 | Already done in UI; wire to real data |
 | Run is post-purchase only | Phase 3 | Auth middleware + order check |

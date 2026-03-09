@@ -11,14 +11,14 @@
 
 ## 1. Data Model Alignment (PRD §10)
 
-### Critical Issue: Two Diverging Data Schemas
+### Current State: Core Schema Drift Mostly Reduced
 
-The codebase has **two separate data models** that don't align:
+The earlier codebase had **two separate data models** that did not align. Most of the active catalog/bundle/run/cart surfaces now use the shared PRD-aligned types, but backend contracts are still mock-only and not yet normalized to the final PRD paths/contracts:
 
 1. **PRD-aligned types** (`lib/types.ts`) — used by `lib/mock-data.ts`, cart context, catalog page, bundle detail page, checkout page, dashboard
 2. **V0-generated API schema** — used by API route handlers (`app/api/**`), runs list page, run detail page
 
-The API routes reference fields that don't exist on the PRD types:
+Older API route/page scaffolds referenced fields that don't exist on the PRD types:
 - `agent.name` (should be `agent.title`)
 - `agent.shortDescription` (should be `agent.summary`)
 - `agent.capabilities` (doesn't exist)
@@ -30,20 +30,20 @@ The API routes reference fields that don't exist on the PRD types:
 - older V0 scaffolds also referenced `run.triggerType` / `run.triggerMessage` / `run.durationSeconds` / `run.cost`, which are not part of the PRD model
 - some routes previously imported `mockCategories` / `mockUserBundles`, but those compile-time mismatches have now been removed
 
-**Action required:** Unify data models. Pages that import from mock-data directly work; API routes are broken/disconnected.
+**Action required:** Finish backend normalization. The active frontend now mostly uses PRD-aligned mock APIs, but there is still no real backend persistence/service layer.
 
 | Entity             | PRD Fields                    | types.ts | mock-data.ts | API Routes | Status   |
 |--------------------|-------------------------------|----------|--------------|------------|----------|
 | User               | §10.1                         | DONE     | —            | —          | PARTIAL  |
-| Agent              | §10.2                         | DONE     | DONE         | BROKEN     | PARTIAL  |
+| Agent              | §10.2                         | DONE     | DONE         | PARTIAL    | PARTIAL  |
 | AgentVersion       | §10.3                         | DONE     | DONE         | —          | DONE     |
 | RiskProfile        | §10.4                         | DONE     | DONE         | —          | DONE     |
 | Cart               | §10.5                         | DONE     | DONE         | —          | DONE     |
 | CartItem           | §10.6                         | DONE     | —            | —          | DONE     |
-| Order              | §10.7                         | DONE     | DONE         | BROKEN     | PARTIAL  |
+| Order              | §10.7                         | DONE     | DONE         | PARTIAL    | PARTIAL  |
 | OrderItem          | §10.8                         | DONE     | DONE         | —          | DONE     |
 | RunChannelConfig   | §10.9                         | DONE     | DONE         | —          | DONE     |
-| Run                | §10.10                        | DONE     | DONE         | BROKEN     | PARTIAL  |
+| Run                | §10.10                        | DONE     | DONE         | PARTIAL    | PARTIAL  |
 
 ---
 
@@ -293,15 +293,17 @@ The API routes reference fields that don't exist on the PRD types:
 - Full page structure matching PRD §5
 - Complete shopping flow UI (browse → detail → cart → checkout → bundle → run)
 - PRD-aligned TypeScript types and mock data for core entities
+- API-backed catalog, agent detail, dashboard, bundles, bundle detail, and run surfaces
 - Telegram Setup Wizard with 3-step UX
+- Mock Telegram validation and pairing APIs wired into bundle setup
 - Risk Badge + Bundle Risk Summary components
 - Preview Chat component
-- Cart context with bundle risk calculation
+- Cart context with bundle risk calculation, local persistence, and mock API sync
 - Dark mode + responsive layout
 
 **What's critically missing:**
 - No real backend (no DB, no auth, no payment, no Telegram, no run execution)
-- API routes are still mock-only and still unused by frontend pages, but the run/catalog surface now matches the shared types
+- APIs are still mock-only; no durable persistence or external integrations
 - No provider abstraction
 - No risk scanning engine
-- Frontend pages import mock data directly; zero API integration
+- Checkout, cart, and Telegram flows still sit on mock contracts/state transitions, not production services
