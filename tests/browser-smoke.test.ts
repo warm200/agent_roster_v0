@@ -225,4 +225,31 @@ if (!chromePath) {
       }
     },
   )
+
+  test(
+    'browser smoke covers signed-in bundle and run page access',
+    { timeout: 120_000 },
+    async () => {
+      assert.ok(browser, 'Browser failed to launch')
+      const page = await browser.newPage()
+
+      try {
+        await authenticatePage(page, {
+          sub: 'browser-empty-user',
+          email: 'browser-empty-user@example.com',
+          name: 'Browser Empty User',
+        })
+
+        await page.goto(`${BASE_URL}/app/bundles`, { waitUntil: 'domcontentloaded' })
+        await waitForText(page, 'My Bundles')
+        assert.equal(page.url(), `${BASE_URL}/app/bundles`)
+
+        await page.goto(`${BASE_URL}/app/runs`, { waitUntil: 'domcontentloaded' })
+        await waitForText(page, 'Run History')
+        assert.equal(page.url(), `${BASE_URL}/app/runs`)
+      } finally {
+        await page.close()
+      }
+    },
+  )
 }

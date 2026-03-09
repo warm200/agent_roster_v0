@@ -60,7 +60,7 @@ Implemented in the current mock app:
 - Route-level error boundaries now exist for the public shell and the authenticated app shell
 - Route-level loading skeletons now exist for catalog, agent detail, dashboard, bundles, bundle detail, runs, and run detail
 - `npm test` now runs smoke regression coverage for the preview route and auth proxy
-- Browser smoke coverage now exists for catalog-to-cart, protected-app redirect, and signed-in dashboard access flows
+- Browser smoke coverage now exists for catalog-to-cart, protected-app redirect, signed-in dashboard access, and authenticated bundle/run page-access flows
 
 Still not implemented:
 - Production auth provider setup, production Stripe/Telegram operations, provider abstraction, and a real run backend
