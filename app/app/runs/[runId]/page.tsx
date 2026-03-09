@@ -2,6 +2,7 @@
 
 import { use, useEffect, useState, type ReactNode } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { RiskBadge } from '@/components/risk-badge'
 import { RunLogsPanel } from '@/components/run-logs-panel'
 import { RunResultsPanel } from '@/components/run-results-panel'
@@ -11,9 +12,11 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Spinner } from '@/components/ui/spinner'
 import type { Agent, Order, Run, RunLog } from '@/lib/types'
 import { formatDateTime } from '@/lib/utils'
-import { AlertTriangle, ArrowLeft, CheckCircle2, Globe, Package, Wrench, XCircle } from 'lucide-react'
+import { toast } from 'sonner'
+import { AlertTriangle, ArrowLeft, CheckCircle2, Globe, Package, RefreshCw, Wrench, XCircle } from 'lucide-react'
 
 interface RunDetailPageProps {
   params: Promise<{ runId: string }>
@@ -29,9 +32,12 @@ interface RunDetailResponse extends Run {
 
 export default function RunDetailPage({ params }: RunDetailPageProps) {
   const { runId } = use(params)
+  const router = useRouter()
   const [run, setRun] = useState<RunDetailResponse | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [isCancelling, setIsCancelling] = useState(false)
+  const [isRetrying, setIsRetrying] = useState(false)
 
   useEffect(() => {
     let isMounted = true
@@ -100,6 +106,64 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
 
   const isActive = run.status === 'provisioning' || run.status === 'running'
 
+  const handleCancel = async () => {
+    if (!run || isCancelling) {
+      return
+    }
+
+    setIsCancelling(true)
+
+    try {
+      const response = await fetch(`/api/runs/${run.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'cancel' }),
+      })
+      const payload = await response.json()
+
+      if (!response.ok) {
+        toast.error(payload.error || 'Unable to cancel run')
+        return
+      }
+
+      setRun(payload)
+      toast.success('Run cancelled')
+    } catch {
+      toast.error('Network error while cancelling run')
+    } finally {
+      setIsCancelling(false)
+    }
+  }
+
+  const handleRetry = async () => {
+    if (!run || isRetrying) {
+      return
+    }
+
+    setIsRetrying(true)
+
+    try {
+      const response = await fetch(`/api/runs/${run.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'retry' }),
+      })
+      const payload = await response.json()
+
+      if (!response.ok) {
+        toast.error(payload.error || 'Unable to retry run')
+        return
+      }
+
+      toast.success('Retry started. Redirecting to new run...')
+      router.push(`/app/runs/${payload.id}`)
+    } catch {
+      toast.error('Network error while retrying run')
+    } finally {
+      setIsRetrying(false)
+    }
+  }
+
   return (
     <div className="space-y-6 p-6 lg:p-8">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -120,12 +184,42 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
           </p>
         </div>
 
-        <Button variant="outline" asChild>
-          <Link href={`/app/bundles/${run.order.id}`}>
-            <Package className="mr-2 h-4 w-4" />
-            View Bundle
-          </Link>
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" asChild>
+            <Link href={`/app/bundles/${run.order.id}`}>
+              <Package className="mr-2 h-4 w-4" />
+              View Bundle
+            </Link>
+          </Button>
+          <Button variant="outline" onClick={handleRetry} disabled={isRetrying}>
+            {isRetrying ? (
+              <>
+                <Spinner className="mr-2 h-4 w-4" />
+                Retrying...
+              </>
+            ) : (
+              <>
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Retry Run
+              </>
+            )}
+          </Button>
+          {isActive && (
+            <Button variant="outline" onClick={handleCancel} disabled={isCancelling}>
+              {isCancelling ? (
+                <>
+                  <Spinner className="mr-2 h-4 w-4" />
+                  Cancelling...
+                </>
+              ) : (
+                <>
+                  <XCircle className="mr-2 h-4 w-4" />
+                  Cancel Run
+                </>
+              )}
+            </Button>
+          )}
+        </div>
       </div>
 
       {isActive && (

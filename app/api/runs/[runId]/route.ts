@@ -41,13 +41,24 @@ export async function PATCH(
     
     // Handle actions
     if (action === "cancel") {
-      return NextResponse.json({
+      const now = new Date().toISOString()
+      run.status = "failed"
+      run.resultSummary = "Run cancelled before completion."
+      run.updatedAt = now
+      run.completedAt = now
+      mockRunLogs[run.id] = [
+        ...(mockRunLogs[run.id] ?? []),
+        {
+          timestamp: now,
+          level: "warn",
+          step: "cancel",
+          message: "Run cancelled from the run detail workbench.",
+        },
+      ]
+
+      return NextResponse.json(getRunSummary({
         ...run,
-        status: "failed",
-        resultSummary: "Run cancelled before completion.",
-        updatedAt: new Date().toISOString(),
-        completedAt: new Date().toISOString()
-      })
+      }))
     }
     
     if (action === "retry") {

@@ -60,7 +60,7 @@ The API routes reference fields that don't exist on the PRD types:
 | Purchased Bundles List        | `/app/bundles`                | §5.8    | DONE     | API-backed bundles list with loading/error states |
 | Purchased Bundle Detail       | `/app/bundles/:orderId`       | §5.8    | DONE     | Agents tab, Telegram wizard, downloads, run history |
 | Run History List              | `/app/runs`                   | §5.9    | DONE     | API-backed page using `/api/runs` with loading/error/filter states |
-| Run Detail                    | `/app/runs/:runId`            | §5.9    | DONE     | API-backed detail page showing timeline, runtime disclosure, logs, results, artifacts, and combined risk |
+| Run Detail                    | `/app/runs/:runId`            | §5.9    | DONE     | API-backed detail page showing timeline, runtime disclosure, logs, results, artifacts, combined risk, and retry/cancel actions |
 
 ---
 
