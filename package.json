@@ -7,6 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
+    "docs:list": "tsx scripts/docs-list.ts",
+    "typecheck": "tsc --noEmit",
+    "gate": "bash scripts/gate.sh",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
@@ -76,11 +79,14 @@
     "@types/pg": "^8.18.0",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
+    "commander": "^14.0.3",
     "drizzle-kit": "^0.31.9",
     "postcss": "^8.5",
+    "puppeteer-core": "^24.38.0",
     "tailwindcss": "^4.2.0",
     "tsx": "^4.21.0",
     "tw-animate-css": "1.3.3",
     "typescript": "5.7.3"
-  }
+  },
+  "packageManager": "pnpm@10.29.1+sha512.48dae233635a645768a3028d19545cacc1688639eeb1f3734e42d6d6b971afbf22aa1ac9af52a173d9c3a20c15857cfa400f19994d79a2f626fcc73fccda9bbc"
 }

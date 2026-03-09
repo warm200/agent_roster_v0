@@ -122,10 +122,5 @@ Read `~/Projects/agent-scripts/tools.md` for the full tool catalog if it exists.
 Avoid “AI slop” UI. Be opinionated + distinctive.
 
 Do:
-- Typography: pick a real font; avoid Inter/Roboto/Arial/system defaults.
-- Theme: commit to a palette; use CSS vars; bold accents > timid gradients.
-- Motion: 1–2 high-impact moments (staggered reveal beats random micro-anim).
-- Background: add depth (gradients/patterns), not flat default.
-
-Avoid: purple-on-white clichés, generic component grids, predictable layouts.
+- follow the existing Theme, css, taste, do not create something that's not corresponding to the current theme
 </frontend_aesthetics>
