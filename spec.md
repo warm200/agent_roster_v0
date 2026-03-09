@@ -31,6 +31,7 @@ Implemented in the current mock app:
 - Backend run repository/service now exist in `server/services/run.repository.ts` and `server/services/run.service.ts` with provider-backed run sync against the current DB shape
 - `GET /api/agents` and `GET /api/agents/[slug]` now route through `server/services/catalog.service.ts`
 - `/api/cart`, `/api/cart/items`, and `/api/cart/items/[id]` now route through `server/services/cart.service.ts` using the cart cookie
+- `POST /api/checkout/session` now routes through `server/services/checkout.service.ts`
 
 Still not implemented:
 - Real auth flows, Stripe checkout/webhooks, Telegram webhook/pairing worker, signed downloads, provider abstraction, real run backend
@@ -236,7 +237,7 @@ The initial API routes were broken. Most read/write mock routes have now been re
 | `GET /api/cart` | Service-backed | Uses `cart.service.ts` and cart cookie state |
 | `POST /api/cart/items` | Service-backed | Uses `cart.service.ts` and cart cookie state |
 | `DELETE /api/cart/items/[cartItemId]` | Service-backed | Uses `cart.service.ts` and cart cookie state |
-| `POST /api/checkout/session` | Not matched exactly | Current equivalent is `POST /api/checkout` with mock bundle creation; no Stripe session |
+| `POST /api/checkout/session` | Service-backed | Uses `checkout.service.ts` to create a Stripe checkout session |
 
 ### Authenticated Endpoints
 
@@ -416,7 +417,7 @@ Normalize current mock routes into final service-backed PRD routes. Several func
 4. [x] `GET /api/cart` → cartService
 5. [x] `POST /api/cart/items` → cartService
 6. [x] `DELETE /api/cart/items/[cartItemId]` → cartService
-7. [ ] `POST /api/checkout/session` → checkoutService
+7. [x] `POST /api/checkout/session` → checkoutService
 8. [ ] `POST /api/webhooks/stripe` → checkoutService
 9. [ ] `GET /api/me/orders` → orderService
 10. [ ] `GET /api/me/orders/[orderId]` → orderService
