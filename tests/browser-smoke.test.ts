@@ -495,4 +495,31 @@ if (!chromePath) {
       }
     },
   )
+
+  test(
+    'browser smoke covers seeded telegram-ready bundle listing',
+    { timeout: 120_000, skip: !dockerAvailable ? 'Docker not available' : undefined },
+    async () => {
+      assert.ok(browser, 'Browser failed to launch')
+      assert.equal(hasSeededBrowserDatabase, true, 'Seeded browser database was not prepared')
+      const page = await browser.newPage()
+
+      try {
+        await authenticatePage(page, {
+          sub: 'user-1',
+          email: 'user-1@demo.local',
+          name: 'Demo User',
+        })
+
+        await page.goto(`${BASE_URL}/app/bundles`, {
+          waitUntil: 'domcontentloaded',
+        })
+        await waitForText(page, 'Telegram Connected')
+        await waitForText(page, 'Bundle (2 Agents)')
+        assert.equal(page.url(), `${BASE_URL}/app/bundles`)
+      } finally {
+        await page.close()
+      }
+    },
+  )
 }
