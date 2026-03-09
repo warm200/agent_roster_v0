@@ -22,6 +22,7 @@ Implemented in the current mock app:
 - Fresh local Postgres verification now passes: migrate + seed succeed against a clean database
 - Run provider scaffolding now exists under `server/providers/` with mock and openclaw stubs
 - Initial backend risk-engine utility now exists in `server/lib/risk-engine.ts`
+- Backend commerce snapshot/mapping utilities now exist in `server/services/commerce.utils.ts`
 
 Still not implemented:
 - Real auth flows, Stripe checkout/webhooks, Telegram webhook/pairing worker, signed downloads, provider abstraction, real run backend
@@ -393,7 +394,7 @@ Port all services from agent_roster. Adapt imports. Test with curl/httpie.
 4. [ ] Port `server/services/order.service.ts`
 5. [ ] Port `server/services/telegram.service.ts`
 6. [ ] Port `server/services/run.service.ts` + `run.repository.ts`
-7. [ ] Port `server/services/commerce.utils.ts`
+7. [x] Port `server/services/commerce.utils.ts`
 8. [x] Port `server/providers/` (interface + mock + openclaw stub)
 9. [x] Port `server/lib/risk-engine.ts`
 
