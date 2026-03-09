@@ -32,6 +32,7 @@ Implemented in the current mock app:
 - `GET /api/agents` and `GET /api/agents/[slug]` now route through `server/services/catalog.service.ts`
 - `/api/cart`, `/api/cart/items`, and `/api/cart/items/[id]` now route through `server/services/cart.service.ts` using the cart cookie
 - `POST /api/checkout/session` now routes through `server/services/checkout.service.ts`
+- Checkout now creates Stripe checkout sessions and the success page reconciles `session_id` values back into orders
 - `POST /api/webhooks/telegram` now routes through `server/services/telegram.service.ts`
 - `POST /api/webhooks/stripe` now routes through `server/services/checkout.service.ts`
 - Legacy `/api/bundles*` and `/api/runs*` routes now route through backend services with a request-user fallback
@@ -41,8 +42,8 @@ Implemented in the current mock app:
 - Authenticated dashboard, bundles, runs, Telegram setup, run launch, and signed downloads now use the final `/api/me/*` API surface
 
 Still not implemented:
-- Real auth flows, Stripe checkout/webhooks, Telegram webhook/pairing worker, signed downloads, provider abstraction, real run backend
-- PRD endpoint path normalization (`/api/me/orders`, `/api/me/runs`) and production service contracts
+- Real auth UX/session enforcement, production Stripe/Telegram operations, provider abstraction, and a real run backend
+- Remaining frontend service-layer modules, preview endpoint, polling hooks, and hardened production contracts
 
 ---
 
@@ -147,7 +148,7 @@ v0_version/                        # Next.js 16 full-stack
 | Catalog | `app/agents/page.tsx` | Done: API-backed catalog with loading/error states |
 | Agent Detail | `app/agents/[slug]/page.tsx` | Done: API-backed detail page |
 | Cart | `app/cart/page.tsx` | Done: CartContext persists locally and syncs with mock cart APIs |
-| Checkout | `app/checkout/page.tsx` | Partial: still mock checkout, but now creates a mock bundle via API and redirects to returned `orderId` |
+| Checkout | `app/checkout/page.tsx` | Partial: now creates a Stripe checkout session via API and success reconciles the returned `session_id` into an order |
 | Dashboard | `app/app/page.tsx` | Done: API-backed stats and recent activity |
 | Bundles List | `app/app/bundles/page.tsx` | Done: API-backed bundles list |
 | Bundle Detail | `app/app/bundles/[orderId]/page.tsx` | Partial: API-backed bundle detail, Telegram setup, downloads, and mock run launch |
@@ -368,7 +369,7 @@ Or use React Server Components where appropriate (catalog pages are good candida
 | Catalog | `GET /api/agents` | Service layer / real backend | Client (has filters) |
 | Agent Detail | `GET /api/agents/:slug` | Service layer / real backend | Server + client UI |
 | Cart | CartContext + `/api/cart*` mock routes | Durable server cart / auth claim | Client |
-| Checkout | CartContext + `POST /api/checkout` | Real Stripe redirect/session | Client |
+| Checkout | CartContext + `POST /api/checkout/session` | Auth enforcement / production Stripe config | Client |
 | Dashboard | `GET /api/bundles` + `GET /api/runs` | PRD path normalization / auth | Client |
 | Bundles List | `GET /api/bundles` | PRD path normalization / auth | Client |
 | Bundle Detail | `GET /api/bundles/:id` + channel routes | Signed downloads / real Telegram backend | Client |
@@ -451,7 +452,7 @@ Wire pages to real API. Keep all existing UI.
 5. [x] Wire Catalog page to `GET /api/agents`
 6. [x] Wire Agent Detail to `GET /api/agents/:slug`
 7. [ ] Wire Preview Chat to `POST /api/interviews/preview`
-8. [ ] Wire Checkout to `POST /api/checkout/session` → Stripe redirect
+8. [x] Wire Checkout to `POST /api/checkout/session` → Stripe redirect
 9. [x] Wire Dashboard to final `/api/me/orders` + `/api/me/runs`
 10. [x] Wire Bundle Detail to final `/api/me/orders/*` endpoints
 11. [x] Wire Telegram wizard to real validate/pairing endpoints

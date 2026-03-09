@@ -1,7 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Header } from '@/components/header'
 import { RiskBadge } from '@/components/risk-badge'
@@ -14,9 +13,9 @@ import { Label } from '@/components/ui/label'
 import { Spinner } from '@/components/ui/spinner'
 import { useCart } from '@/lib/cart-context'
 import { formatPrice } from '@/lib/mock-data'
-import { 
-  ChevronLeft, 
-  CreditCard, 
+import {
+  ChevronLeft,
+  CreditCard,
   ShieldCheck,
   Send,
   Play,
@@ -26,8 +25,7 @@ import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTi
 import { toast } from 'sonner'
 
 export default function CheckoutPage() {
-  const router = useRouter()
-  const { items, bundleRisk, totalCents, clearCart } = useCart()
+  const { items, bundleRisk, totalCents } = useCart()
   const [acceptedTerms, setAcceptedTerms] = useState(false)
   const [acceptedRisk, setAcceptedRisk] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
@@ -40,28 +38,27 @@ export default function CheckoutPage() {
     setIsProcessing(true)
 
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1200))
-
-      const response = await fetch('/api/bundles', {
+      const response = await fetch('/api/checkout/session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          agentIds: items.map((item) => item.agent.id),
-        }),
       })
 
       const payload = await response.json()
 
       if (!response.ok) {
-        toast.error(payload.error || 'Unable to complete checkout')
+        toast.error(payload.error || 'Unable to create checkout session')
         return
       }
 
-      clearCart()
-      toast.success('Purchase successful! Redirecting to your bundle...')
-      router.push(`/app/bundles/${payload.id}`)
+      if (!payload.sessionUrl) {
+        toast.error('Checkout session did not return a redirect URL')
+        return
+      }
+
+      toast.success('Redirecting to Stripe checkout...')
+      window.location.assign(payload.sessionUrl)
     } catch {
-      toast.error('Network error while creating your bundle')
+      toast.error('Network error while creating checkout session')
     } finally {
       setIsProcessing(false)
     }
@@ -123,7 +120,7 @@ export default function CheckoutPage() {
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
                           <span className="font-medium">{item.agent.title}</span>
-                          <RiskBadge 
+                          <RiskBadge
                             level={item.agentVersion.riskProfile.riskLevel}
                             size="sm"
                             showLabel={false}
@@ -190,8 +187,8 @@ export default function CheckoutPage() {
             <Card>
               <CardContent className="pt-6 space-y-4">
                 <div className="flex items-start gap-3">
-                  <Checkbox 
-                    id="terms" 
+                  <Checkbox
+                    id="terms"
                     checked={acceptedTerms}
                     onCheckedChange={(checked) => setAcceptedTerms(checked === true)}
                   />
@@ -200,8 +197,8 @@ export default function CheckoutPage() {
                   </Label>
                 </div>
                 <div className="flex items-start gap-3">
-                  <Checkbox 
-                    id="risk" 
+                  <Checkbox
+                    id="risk"
                     checked={acceptedRisk}
                     onCheckedChange={(checked) => setAcceptedRisk(checked === true)}
                   />
@@ -239,8 +236,8 @@ export default function CheckoutPage() {
                 </div>
               </CardContent>
               <CardFooter className="flex-col gap-4">
-                <Button 
-                  className="w-full" 
+                <Button
+                  className="w-full"
                   size="lg"
                   disabled={!canCheckout || isProcessing}
                   onClick={handleCheckout}
