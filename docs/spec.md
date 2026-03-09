@@ -74,7 +74,7 @@ The API routes reference fields that don't exist on the PRD types:
 | 4    | Add agents to cart                      | DONE     | Client-side cart (no persistence across refresh) |
 | 5    | Checkout & payment                      | PARTIAL  | Simulated 2s delay; no Stripe integration |
 | 6    | Redirect to purchased bundle detail     | PARTIAL  | Checkout now creates a mock bundle via API and redirects to the returned order ID |
-| 7    | Complete Telegram setup                 | PARTIAL  | UI wizard works; no real API calls |
+| 7    | Complete Telegram setup                 | PARTIAL  | Bundle page now calls mock Telegram validate/pairing APIs; no real Telegram backend/webhook yet |
 | 8    | Launch Run                              | PARTIAL  | Bundle page POSTs to the mock run API and redirects into the created run detail page |
 | 9    | View Run status/logs/results            | PARTIAL  | Implemented with mock data; no polling or real backend state yet |
 | 10   | Download package/artifacts              | PARTIAL  | Bundle downloads link directly to mock install-package URLs; artifact delivery is still mock-only |
@@ -101,9 +101,9 @@ The API routes reference fields that don't exist on the PRD types:
 |-------------------------------------------------------|-----------|----------|-------|
 | `GET /api/me/orders`                                  | Yes       | PARTIAL  | Exists at `/api/bundles` GET; now returns PRD-aligned mock bundle/order data |
 | `GET /api/me/orders/:orderId`                         | Yes       | PARTIAL  | Exists at `/api/bundles/:orderId`; returns PRD-aligned mock bundle/order detail |
-| `POST /api/me/orders/:orderId/run-channel/telegram/validate` | Yes | PARTIAL | Exists at `/api/telegram/verify`; different contract (uses `code` not `botToken`) |
-| `POST /api/me/orders/:orderId/run-channel/telegram/pairing/start` | Yes | MISSING | Pairing simulated in frontend only |
-| `GET /api/me/orders/:orderId/run-channel`             | Yes       | MISSING  | |
+| `POST /api/me/orders/:orderId/run-channel/telegram/validate` | Yes | PARTIAL | Exists at `/api/bundles/:orderId/channel/telegram/validate`; accepts mock `botToken` and persists validated channel state |
+| `POST /api/me/orders/:orderId/run-channel/telegram/pairing/start` | Yes | PARTIAL | Exists at `/api/bundles/:orderId/channel/telegram/pairing/start`; mock-pairs the channel after token validation |
+| `GET /api/me/orders/:orderId/run-channel`             | Yes       | PARTIAL  | Exists at `/api/bundles/:orderId/channel`; returns current mock channel state |
 | `POST /api/me/orders/:orderId/runs`                   | Yes       | PARTIAL  | Exists at `/api/runs` POST; accepts `orderId` and enforces mock paid + Telegram-ready state |
 | `GET /api/me/orders/:orderId/download`                | Yes       | MISSING  | |
 | `GET /api/me/runs`                                    | Yes       | PARTIAL  | Exists at `/api/runs` GET; returns PRD-aligned mock runs enriched with order/agent/log metadata |
@@ -126,9 +126,9 @@ The API routes reference fields that don't exist on the PRD types:
 | Requirement                              | Status   | Notes |
 |------------------------------------------|----------|-------|
 | Step 1: Connect — input bot token        | DONE     | UI built with validation UX |
-| Step 1: Backend validates token          | PARTIAL  | Simulated with `setTimeout`; accepts any token with `:` |
+| Step 1: Backend validates token          | PARTIAL  | Wizard now calls a mock bundle-scoped validation API; validation logic is still format-only |
 | Step 2: Pair — show instructions         | DONE     | Instructions to send `/start` |
-| Step 2: Backend pairing flow             | PARTIAL  | Simulated with `setTimeout` (3s); no real webhook |
+| Step 2: Backend pairing flow             | PARTIAL  | Wizard now calls a mock bundle-scoped pairing-start API; no real webhook/worker |
 | Step 3: Ready — show confirmation        | DONE     | Shows bot username, connected status |
 | Run-level shared config messaging        | DONE     | "This configuration applies to all agents in this bundle" |
 | No manual Telegram ID input              | DONE     | |
@@ -190,9 +190,9 @@ The API routes reference fields that don't exist on the PRD types:
 | State Area                          | Status   | Notes |
 |-------------------------------------|----------|-------|
 | Cart state                          | DONE     | React Context; no persistence across refresh |
-| Purchased bundle detail state       | PARTIAL  | Bundle detail now fetches mock order data from `/api/bundles/:orderId`; Telegram/run state is still local |
-| Telegram token validate state       | PARTIAL  | Local component state; no API |
-| Pairing state                       | PARTIAL  | Local component state; no API |
+| Purchased bundle detail state       | PARTIAL  | Bundle detail now fetches mock order data from `/api/bundles/:orderId`; Telegram setup still uses local step UI on top of mock API responses |
+| Telegram token validate state       | PARTIAL  | Uses mock API-backed validation, but no real secret storage or external Telegram check |
+| Pairing state                       | PARTIAL  | Uses mock API-backed pairing start, but no webhook/polling worker |
 | Run launch readiness                | PARTIAL  | Bundle page gating is fixed and launch now redirects into a created mock run, but there is no real orchestration backend |
 | Run status/logs/results state       | PARTIAL  | Runs pages now fetch from mock APIs; still no polling or real backend state |
 
@@ -253,8 +253,8 @@ The API routes reference fields that don't exist on the PRD types:
 9. [ ] Implement download endpoint with signed URLs
 
 ### Phase 2: Telegram Setup & Run
-10. [ ] Implement Telegram bot token validation endpoint
-11. [ ] Implement Telegram pairing start endpoint
+10. [x] Implement Telegram bot token validation endpoint
+11. [x] Implement Telegram pairing start endpoint
 12. [ ] Implement Telegram webhook/worker for pairing completion
 13. [ ] Implement channel config query endpoint
 14. [ ] Define `RunProvider` interface (provider abstraction)

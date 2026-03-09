@@ -1,12 +1,12 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Spinner } from '@/components/ui/spinner'
-import { CheckCircle2, Send, AlertCircle, ArrowRight, Copy, ExternalLink } from 'lucide-react'
+import { CheckCircle2, Send, ArrowRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 
@@ -33,7 +33,10 @@ export function TelegramSetupWizard({ orderId, initialStatus, onComplete }: Tele
   const [botUsername, setBotUsername] = useState(initialStatus?.botUsername || '')
   const [isValidating, setIsValidating] = useState(false)
   const [isPairing, setIsPairing] = useState(false)
-  const [pairingCode, setPairingCode] = useState('')
+
+  useEffect(() => {
+    setBotUsername(initialStatus?.botUsername || '')
+  }, [initialStatus?.botUsername])
 
   const handleValidateToken = async () => {
     if (!botToken.trim()) {
@@ -42,41 +45,55 @@ export function TelegramSetupWizard({ orderId, initialStatus, onComplete }: Tele
     }
 
     setIsValidating(true)
-    
-    // Simulate API call to validate token
-    await new Promise((resolve) => setTimeout(resolve, 1500))
-    
-    // In real implementation, this would call the API
-    // For demo, accept any token that looks valid
-    if (botToken.includes(':')) {
-      setBotUsername('YourAgentBot')
+
+    try {
+      const response = await fetch(`/api/bundles/${orderId}/channel/telegram/validate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ botToken }),
+      })
+      const payload = await response.json()
+
+      if (!response.ok) {
+        toast.error(payload.error || 'Unable to validate bot token')
+        return
+      }
+
+      setBotUsername(payload.botUsername || 'YourAgentBot')
       setStep('pair')
       toast.success('Bot token validated!')
-    } else {
-      toast.error('Invalid bot token format')
+    } catch {
+      toast.error('Network error while validating bot token')
+    } finally {
+      setIsValidating(false)
     }
-    
-    setIsValidating(false)
   }
 
   const handleStartPairing = async () => {
     setIsPairing(true)
-    // Generate a pairing code
-    setPairingCode('AR-' + Math.random().toString(36).substring(2, 8).toUpperCase())
-    
-    // Simulate waiting for pairing (in real app, this would poll the API)
-    await new Promise((resolve) => setTimeout(resolve, 3000))
-    
-    // Simulate successful pairing
-    setStep('ready')
-    setIsPairing(false)
-    toast.success('Telegram paired successfully!')
-    onComplete?.()
-  }
 
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text)
-    toast.success('Copied to clipboard')
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 1200))
+
+      const response = await fetch(`/api/bundles/${orderId}/channel/telegram/pairing/start`, {
+        method: 'POST',
+      })
+      const payload = await response.json()
+
+      if (!response.ok) {
+        toast.error(payload.error || 'Unable to start pairing')
+        return
+      }
+
+      setBotUsername(payload.botUsername || botUsername || 'YourAgentBot')
+      setStep('ready')
+      toast.success('Telegram paired successfully!')
+      onComplete?.()
+    } catch {
+      toast.error('Network error while pairing Telegram')
+    } finally {
+      setIsPairing(false)
+    }
   }
 
   return (
