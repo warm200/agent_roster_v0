@@ -26,6 +26,7 @@ Implemented in the current mock app:
 - Backend catalog service now exists in `server/services/catalog.service.ts` with DB + mock fallback logic
 - Backend cart service now exists in `server/services/cart.service.ts` with DB-backed cart summary recalculation
 - Backend order service now exists in `server/services/order.service.ts` with paid-order creation and signed-download helpers
+- Backend checkout service now exists in `server/services/checkout.service.ts` with Stripe session creation and paid-session reconciliation helpers
 
 Still not implemented:
 - Real auth flows, Stripe checkout/webhooks, Telegram webhook/pairing worker, signed downloads, provider abstraction, real run backend
@@ -393,7 +394,7 @@ Port all services from agent_roster. Adapt imports. Test with curl/httpie.
 
 1. [x] Port `server/services/catalog.service.ts`
 2. [x] Port `server/services/cart.service.ts`
-3. [ ] Port `server/services/checkout.service.ts`
+3. [x] Port `server/services/checkout.service.ts`
 4. [x] Port `server/services/order.service.ts`
 5. [ ] Port `server/services/telegram.service.ts`
 6. [ ] Port `server/services/run.service.ts` + `run.repository.ts`
