@@ -1,68 +1,41 @@
-import { NextRequest, NextResponse } from "next/server"
-import { mockOrders } from "@/lib/mock-data"
+import { NextRequest, NextResponse } from 'next/server'
+
+import { HttpError } from '@/server/lib/http'
+import { getRequestUserId } from '@/server/lib/request-user'
+import { getTelegramService } from '@/server/services/telegram.service'
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const orderId = body.orderId || body.bundleId
     const botToken = body.botToken || body.code
+    const userId = await getRequestUserId(request)
 
     if (!orderId) {
-      return NextResponse.json(
-        { error: "orderId is required" },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'orderId is required' }, { status: 400 })
     }
 
     if (!botToken) {
-      return NextResponse.json(
-        { error: "botToken is required" },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'botToken is required' }, { status: 400 })
     }
 
-    const order = mockOrders.find((item) => item.id === orderId)
-
-    if (!order) {
-      return NextResponse.json(
-        { error: "Bundle not found" },
-        { status: 404 }
-      )
-    }
-
-    if (!String(botToken).includes(":")) {
-      return NextResponse.json(
-        { error: "Invalid bot token format" },
-        { status: 400 }
-      )
-    }
-
-    const now = new Date().toISOString()
-
-    order.channelConfig = {
-      id: order.channelConfig?.id ?? `channel-${orderId}`,
+    const result = await getTelegramService().validateToken({
       orderId,
-      channelType: "telegram",
-      botTokenSecretRef: `encrypted:${String(botToken).slice(0, 6)}`,
-      tokenStatus: "validated",
-      recipientBindingStatus: order.channelConfig?.recipientBindingStatus ?? "pending",
-      recipientExternalId: order.channelConfig?.recipientExternalId ?? null,
-      appliesToScope: "run",
-      createdAt: order.channelConfig?.createdAt ?? now,
-      updatedAt: now,
-    }
-    order.updatedAt = now
+      userId,
+      botToken: String(botToken),
+    })
 
     return NextResponse.json({
-      botUsername: "YourAgentBot",
-      channelConfig: order.channelConfig,
+      botUsername: result.bot.username ?? 'YourAgentBot',
+      channelConfig: result.config,
       deprecated: true,
       orderId,
     })
-  } catch {
-    return NextResponse.json(
-      { error: "Invalid request body" },
-      { status: 400 }
-    )
+  } catch (error) {
+    if (error instanceof HttpError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
+
+    return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
   }
 }

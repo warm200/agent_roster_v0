@@ -37,6 +37,7 @@ Implemented in the current mock app:
 - Legacy `/api/bundles*` and `/api/runs*` routes now route through backend services with a request-user fallback
 - Final `/api/me/orders*` routes now exist for orders, Telegram run-channel setup, run creation, and signed-download grants
 - Final `/api/me/runs*` routes now exist for run list, detail, logs, and result
+- Legacy `/api/telegram/verify` is now a compatibility wrapper onto `telegram.service.ts`, and `/api/runs/[runId]/steps/[stepId]` is an explicit deprecated compatibility endpoint
 
 Still not implemented:
 - Real auth flows, Stripe checkout/webhooks, Telegram webhook/pairing worker, signed downloads, provider abstraction, real run backend
@@ -436,7 +437,7 @@ Normalize current mock routes into final service-backed PRD routes. Several func
 18. [x] `GET /api/me/runs/[runId]/logs` → runService
 19. [x] `GET /api/me/runs/[runId]/result` → runService
 20. [x] `POST /api/webhooks/telegram` → telegramService
-21. [ ] Normalize or remove legacy/alternate routes (`/api/bundles`, `/api/telegram/verify`, `/api/runs/[runId]/steps/`)
+21. [x] Normalize or remove legacy/alternate routes (`/api/bundles`, `/api/telegram/verify`, `/api/runs/[runId]/steps/`)
 
 ### Phase 3: Frontend API Integration (~10 files)
 

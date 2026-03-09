@@ -1,34 +1,34 @@
-import { NextRequest, NextResponse } from "next/server"
-import { getRunById } from "@/lib/mock-selectors"
+import { NextRequest, NextResponse } from 'next/server'
+
+import { HttpError } from '@/server/lib/http'
+import { getRequestUserId } from '@/server/lib/request-user'
+import { RunService } from '@/server/services/run.service'
+
+const runService = new RunService()
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: Promise<{ runId: string; stepId: string }> }
+  { params }: { params: Promise<{ runId: string; stepId: string }> },
 ) {
-  const { runId, stepId } = await params
-  
   try {
-    const run = getRunById(runId)
-    
-    if (!run) {
-      return NextResponse.json(
-        { error: "Run not found" },
-        { status: 404 }
-      )
-    }
+    const { runId, stepId } = await params
+    const userId = await getRequestUserId(request)
+    const run = await runService.getRun(userId, runId)
 
     return NextResponse.json(
       {
+        deprecated: true,
         error: `Manual step approvals are not supported for run ${run.id}. Current run details are surfaced through logs and artifacts instead.`,
         runId,
         stepId,
       },
       { status: 409 }
     )
-  } catch {
-    return NextResponse.json(
-      { error: "Invalid request body" },
-      { status: 400 }
-    )
+  } catch (error) {
+    if (error instanceof HttpError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
+
+    return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
   }
 }
