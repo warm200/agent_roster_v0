@@ -1,19 +1,27 @@
-import { NextResponse } from 'next/server'
-import { mockOrders } from '@/lib/mock-data'
+import { NextRequest, NextResponse } from 'next/server'
+
+import { HttpError } from '@/server/lib/http'
+import { getRequestUserId } from '@/server/lib/request-user'
+import { getOrderByIdForUser } from '@/server/services/order.service'
 
 export async function GET(
-  request: Request,
-  { params }: { params: Promise<{ orderId: string }> }
+  request: NextRequest,
+  { params }: { params: Promise<{ orderId: string }> },
 ) {
-  const { orderId } = await params
-  const order = mockOrders.find((item) => item.id === orderId)
+  try {
+    const { orderId } = await params
+    const userId = await getRequestUserId(request)
+    const order = await getOrderByIdForUser({ orderId, userId })
 
-  if (!order) {
+    return NextResponse.json({
+      ...order,
+      agents: order.items.map((item) => item.agent),
+    })
+  } catch (error) {
+    if (error instanceof HttpError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
+
     return NextResponse.json({ error: 'Bundle not found' }, { status: 404 })
   }
-
-  return NextResponse.json({
-    ...order,
-    agents: order.items.map((item) => item.agent),
-  })
 }

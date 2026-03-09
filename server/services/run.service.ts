@@ -79,7 +79,7 @@ export class RunService {
       return run
     }
 
-    return this.repository.updateRun(run.id, stopped)
+    return (await this.repository.updateRun(run.id, stopped)) ?? stopped
   }
 
   async retryRun(userId: string, runId: string) {

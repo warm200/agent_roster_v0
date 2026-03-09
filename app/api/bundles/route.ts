@@ -1,78 +1,68 @@
-import { NextRequest, NextResponse } from "next/server"
-import { calculateBundleRisk, mockAgents, mockOrders } from "@/lib/mock-data"
-import type { Agent } from "@/lib/types"
+import { cookies } from 'next/headers'
+import { NextRequest, NextResponse } from 'next/server'
 
-export async function GET() {
-  const bundles = mockOrders.map((order) => ({
-    ...order,
-    agents: order.items.map((item) => item.agent),
-  }))
-  
-  return NextResponse.json({
-    bundles,
-    total: bundles.length
-  })
+import { HttpError } from '@/server/lib/http'
+import { getRequestUserId } from '@/server/lib/request-user'
+import { CART_COOKIE_NAME, replaceCartItems } from '@/server/services/cart.service'
+import { createPaidOrderFromCart, listOrdersForUser } from '@/server/services/order.service'
+
+export async function GET(request: NextRequest) {
+  try {
+    const userId = await getRequestUserId(request)
+    const bundles = await listOrdersForUser(userId)
+
+    return NextResponse.json({
+      bundles: bundles.map((order) => ({
+        ...order,
+        agents: order.items.map((item) => item.agent),
+      })),
+      total: bundles.length,
+    })
+  } catch (error) {
+    if (error instanceof HttpError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
+
+    return NextResponse.json({ error: 'Unable to load bundles' }, { status: 500 })
+  }
 }
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const { agentIds } = body
-    
+
     if (!agentIds || !Array.isArray(agentIds) || agentIds.length === 0) {
-      return NextResponse.json(
-        { error: "At least one agent is required" },
-        { status: 400 }
-      )
-    }
-    
-    // Validate all agents exist
-    const agents = agentIds
-      .map((id: string) => mockAgents.find((agent) => agent.id === id))
-      .filter((agent): agent is Agent => Boolean(agent))
-
-    if (agents.length !== agentIds.length) {
-      return NextResponse.json(
-        { error: "One or more agents not found" },
-        { status: 400 }
-      )
-    }
-    
-    const now = new Date().toISOString()
-    const amountCents = agents.reduce((sum, agent) => sum + agent.priceCents, 0)
-    
-    const orderId = `order-${Date.now()}`
-    const newBundle = {
-      id: orderId,
-      userId: "user-1",
-      cartId: "cart-generated",
-      paymentProvider: "stripe",
-      paymentReference: null,
-      amountCents,
-      currency: "USD",
-      status: "paid" as const,
-      items: agents.map((agent) => ({
-        id: `oi-${agent.id}`,
-        orderId,
-        agent,
-        agentVersion: agent.currentVersion,
-        priceCents: agent.priceCents,
-        createdAt: now,
-      })),
-      channelConfig: null,
-      bundleRisk: calculateBundleRisk(agents),
-      createdAt: now,
-      updatedAt: now,
-      paidAt: now,
+      return NextResponse.json({ error: 'At least one agent is required' }, { status: 400 })
     }
 
-    mockOrders.unshift(newBundle)
-    
-    return NextResponse.json(newBundle, { status: 201 })
-  } catch {
-    return NextResponse.json(
-      { error: "Invalid request body" },
-      { status: 400 }
-    )
+    const userId = await getRequestUserId(request)
+    const cookieStore = await cookies()
+    const { cart, cookieCartId } = await replaceCartItems({
+      cartId: cookieStore.get(CART_COOKIE_NAME)?.value ?? null,
+      userId,
+      agentIds,
+    })
+
+    const order = await createPaidOrderFromCart({
+      cartId: cart.id,
+      payment: {
+        amountCents: cart.totalCents,
+        currency: cart.currency,
+        paymentProvider: 'stripe',
+        paymentReference: `mock_${Date.now()}`,
+      },
+      userId,
+    })
+
+    const response = NextResponse.json(order, { status: 201 })
+    response.cookies.set(CART_COOKIE_NAME, cookieCartId, { path: '/' })
+    return response
+  } catch (error) {
+    if (error instanceof HttpError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
+
+    return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
   }
 }

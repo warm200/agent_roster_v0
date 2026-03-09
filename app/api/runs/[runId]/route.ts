@@ -1,98 +1,81 @@
-import { NextRequest, NextResponse } from "next/server"
-import { mockRunLogs, mockRuns } from "@/lib/mock-data"
-import { createMockRun, getOrderById, getRunById, getRunSummary } from "@/lib/mock-selectors"
+import { NextRequest, NextResponse } from 'next/server'
+
+import type { Agent, Order, Run, RunLog } from '@/lib/types'
+import { HttpError } from '@/server/lib/http'
+import { getRequestUserId } from '@/server/lib/request-user'
+import { getOrderByIdForUser } from '@/server/services/order.service'
+import { RunService } from '@/server/services/run.service'
+
+interface RunDetailResponse extends Run {
+  agents: Agent[]
+  artifactsCount: number
+  logs: RunLog[]
+  logsCount: number
+  order: Order | undefined
+}
+
+const runService = new RunService()
+
+async function buildRunDetail(userId: string, run: Run): Promise<RunDetailResponse> {
+  const [order, logs] = await Promise.all([
+    getOrderByIdForUser({ orderId: run.orderId, userId }),
+    runService.getRunLogs(userId, run.id),
+  ])
+
+  return {
+    ...run,
+    agents: order.items.map((item) => item.agent),
+    artifactsCount: run.resultArtifacts.length,
+    logs,
+    logsCount: logs.length,
+    order,
+  }
+}
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ runId: string }> }
+  { params }: { params: Promise<{ runId: string }> },
 ) {
-  const { runId } = await params
-  
-  const run = getRunById(runId)
-  
-  if (!run) {
-    return NextResponse.json(
-      { error: "Run not found" },
-      { status: 404 }
-    )
+  try {
+    const { runId } = await params
+    const userId = await getRequestUserId(request)
+    const run = await runService.getRun(userId, runId)
+    return NextResponse.json(await buildRunDetail(userId, run))
+  } catch (error) {
+    if (error instanceof HttpError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
+
+    return NextResponse.json({ error: 'Run not found' }, { status: 404 })
   }
-  
-  return NextResponse.json(getRunSummary(run))
 }
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: Promise<{ runId: string }> }
+  { params }: { params: Promise<{ runId: string }> },
 ) {
-  const { runId } = await params
-  
   try {
+    const { runId } = await params
+    const userId = await getRequestUserId(request)
     const body = await request.json()
     const { action } = body
-    
-    const run = getRunById(runId)
-    
-    if (!run) {
-      return NextResponse.json(
-        { error: "Run not found" },
-        { status: 404 }
-      )
+
+    if (action === 'cancel') {
+      const run = await runService.stopRun(userId, runId)
+      return NextResponse.json(await buildRunDetail(userId, run))
     }
-    
-    // Handle actions
-    if (action === "cancel") {
-      const now = new Date().toISOString()
-      run.status = "failed"
-      run.resultSummary = "Run cancelled before completion."
-      run.updatedAt = now
-      run.completedAt = now
-      mockRunLogs[run.id] = [
-        ...(mockRunLogs[run.id] ?? []),
-        {
-          timestamp: now,
-          level: "warn",
-          step: "cancel",
-          message: "Run cancelled from the run detail workbench.",
-        },
-      ]
 
-      return NextResponse.json(getRunSummary({
-        ...run,
-      }))
+    if (action === 'retry') {
+      const run = await runService.retryRun(userId, runId)
+      return NextResponse.json(await buildRunDetail(userId, run))
     }
-    
-    if (action === "retry") {
-      const order = getOrderById(run.orderId)
 
-      if (!order) {
-        return NextResponse.json(
-          { error: "Order not found for this run" },
-          { status: 404 }
-        )
-      }
-
-      const retriedRun = createMockRun(order)
-      mockRuns.unshift(retriedRun)
-      mockRunLogs[retriedRun.id] = [
-        {
-          timestamp: retriedRun.createdAt,
-          level: "info",
-          step: "retry",
-          message: `Retry requested from run ${run.id}. Provisioning managed workspace.`,
-        },
-      ]
-
-      return NextResponse.json(getRunSummary(retriedRun))
+    return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
+  } catch (error) {
+    if (error instanceof HttpError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
     }
-    
-    return NextResponse.json(
-      { error: "Unknown action" },
-      { status: 400 }
-    )
-  } catch {
-    return NextResponse.json(
-      { error: "Invalid request body" },
-      { status: 400 }
-    )
+
+    return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
   }
 }

@@ -33,6 +33,7 @@ Implemented in the current mock app:
 - `/api/cart`, `/api/cart/items`, and `/api/cart/items/[id]` now route through `server/services/cart.service.ts` using the cart cookie
 - `POST /api/checkout/session` now routes through `server/services/checkout.service.ts`
 - `POST /api/webhooks/telegram` now routes through `server/services/telegram.service.ts`
+- Legacy `/api/bundles*` and `/api/runs*` routes now route through backend services with a request-user fallback
 
 Still not implemented:
 - Real auth flows, Stripe checkout/webhooks, Telegram webhook/pairing worker, signed downloads, provider abstraction, real run backend
@@ -244,17 +245,17 @@ The initial API routes were broken. Most read/write mock routes have now been re
 
 | Endpoint | Current Status | Action |
 |----------|---------------|--------|
-| `GET /api/me/orders` | Implemented on alternate path | Current equivalent is `GET /api/bundles` |
-| `GET /api/me/orders/[orderId]` | Implemented on alternate path | Current equivalent is `GET /api/bundles/[orderId]` |
-| `POST /api/me/orders/[orderId]/run-channel/telegram/validate` | Implemented on alternate path | Current equivalent is `POST /api/bundles/[orderId]/channel/telegram/validate` |
-| `POST /api/me/orders/[orderId]/run-channel/telegram/pairing/start` | Implemented on alternate path | Current equivalent is `POST /api/bundles/[orderId]/channel/telegram/pairing/start` |
-| `GET /api/me/orders/[orderId]/run-channel` | Implemented on alternate path | Current equivalent is `GET /api/bundles/[orderId]/channel` |
-| `POST /api/me/orders/[orderId]/runs` | Implemented on alternate path | Current equivalent is `POST /api/runs` with `orderId` payload |
+| `GET /api/me/orders` | Implemented on alternate path | Current equivalent is service-backed `GET /api/bundles` |
+| `GET /api/me/orders/[orderId]` | Implemented on alternate path | Current equivalent is service-backed `GET /api/bundles/[orderId]` |
+| `POST /api/me/orders/[orderId]/run-channel/telegram/validate` | Implemented on alternate path | Current equivalent is service-backed `POST /api/bundles/[orderId]/channel/telegram/validate` |
+| `POST /api/me/orders/[orderId]/run-channel/telegram/pairing/start` | Implemented on alternate path | Current equivalent is service-backed `POST /api/bundles/[orderId]/channel/telegram/pairing/start` |
+| `GET /api/me/orders/[orderId]/run-channel` | Implemented on alternate path | Current equivalent is service-backed `GET /api/bundles/[orderId]/channel` |
+| `POST /api/me/orders/[orderId]/runs` | Implemented on alternate path | Current equivalent is service-backed `POST /api/runs` with `orderId` payload |
 | `GET /api/me/orders/[orderId]/download` | Missing | New → `orderService.getSignedDownloads()` |
-| `GET /api/me/runs` | Implemented on alternate path | Current equivalent is `GET /api/runs` |
-| `GET /api/me/runs/[runId]` | Implemented on alternate path | Current equivalent is `GET /api/runs/[runId]` |
-| `GET /api/me/runs/[runId]/logs` | Implemented on alternate path | Current equivalent is `GET /api/runs/[runId]/logs` |
-| `GET /api/me/runs/[runId]/result` | Implemented on alternate path | Current equivalent is `GET /api/runs/[runId]/result` |
+| `GET /api/me/runs` | Implemented on alternate path | Current equivalent is service-backed `GET /api/runs` |
+| `GET /api/me/runs/[runId]` | Implemented on alternate path | Current equivalent is service-backed `GET /api/runs/[runId]` |
+| `GET /api/me/runs/[runId]/logs` | Implemented on alternate path | Current equivalent is service-backed `GET /api/runs/[runId]/logs` |
+| `GET /api/me/runs/[runId]/result` | Implemented on alternate path | Current equivalent is service-backed `GET /api/runs/[runId]/result` |
 
 ### Webhook / Internal Endpoints
 

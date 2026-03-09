@@ -1,97 +1,92 @@
-import { NextRequest, NextResponse } from "next/server"
-import { mockRunLogs, mockRuns } from "@/lib/mock-data"
-import { createMockRun, getOrderById, getRunSummary } from "@/lib/mock-selectors"
+import { NextRequest, NextResponse } from 'next/server'
+
+import type { Agent, Order, Run, RunLog } from '@/lib/types'
+import { HttpError } from '@/server/lib/http'
+import { getRequestUserId } from '@/server/lib/request-user'
+import { getOrderByIdForUser } from '@/server/services/order.service'
+import { RunService } from '@/server/services/run.service'
+
+interface RunSummary extends Run {
+  agents: Agent[]
+  artifactsCount: number
+  logs: RunLog[]
+  logsCount: number
+  order: Order | undefined
+}
+
+const runService = new RunService()
+
+async function buildRunSummary(userId: string, run: Run): Promise<RunSummary> {
+  const [order, logs] = await Promise.all([
+    getOrderByIdForUser({ orderId: run.orderId, userId }),
+    runService.getRunLogs(userId, run.id),
+  ])
+
+  return {
+    ...run,
+    agents: order.items.map((item) => item.agent),
+    artifactsCount: run.resultArtifacts.length,
+    logs,
+    logsCount: logs.length,
+    order,
+  }
+}
 
 export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url)
-  
-  const status = searchParams.get("status")
-  const orderId = searchParams.get("orderId")
-  const limit = parseInt(searchParams.get("limit") || "50")
-  const offset = parseInt(searchParams.get("offset") || "0")
-  
-  let runs = [...mockRuns]
-  
-  // Filter by status
-  if (status && status !== "all") {
-    runs = runs.filter(run => run.status === status)
+  try {
+    const userId = await getRequestUserId(request)
+    const { searchParams } = new URL(request.url)
+    const status = searchParams.get('status')
+    const orderId = searchParams.get('orderId')
+    const limit = parseInt(searchParams.get('limit') || '50')
+    const offset = parseInt(searchParams.get('offset') || '0')
+
+    let runs = await runService.listRuns(userId)
+
+    if (status && status !== 'all') {
+      runs = runs.filter((run) => run.status === status)
+    }
+
+    if (orderId) {
+      runs = runs.filter((run) => run.orderId === orderId)
+    }
+
+    const total = runs.length
+    runs = runs.slice(offset, offset + limit)
+
+    return NextResponse.json({
+      runs: await Promise.all(runs.map((run) => buildRunSummary(userId, run))),
+      total,
+      limit,
+      offset,
+      hasMore: offset + runs.length < total,
+    })
+  } catch (error) {
+    if (error instanceof HttpError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
+
+    return NextResponse.json({ error: 'Unable to load runs' }, { status: 500 })
   }
-  
-  // Filter by agent
-  if (orderId) {
-    runs = runs.filter(run => run.orderId === orderId)
-  }
-  
-  // Sort by date (newest first)
-  runs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-  
-  // Paginate
-  const total = runs.length
-  runs = runs.slice(offset, offset + limit)
-  
-  return NextResponse.json({
-    runs: runs.map(getRunSummary),
-    total,
-    limit,
-    offset,
-    hasMore: offset + runs.length < total
-  })
 }
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const { orderId } = body
-    
+
     if (!orderId) {
-      return NextResponse.json(
-        { error: "orderId is required" },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'orderId is required' }, { status: 400 })
     }
 
-    const order = getOrderById(orderId)
-
-    if (!order) {
-      return NextResponse.json(
-        { error: "Order not found" },
-        { status: 404 }
-      )
+    const userId = await getRequestUserId(request)
+    const run = await runService.createRun(userId, orderId)
+    return NextResponse.json(await buildRunSummary(userId, run), { status: 201 })
+  } catch (error) {
+    if (error instanceof HttpError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
     }
 
-    if (order.status !== "paid") {
-      return NextResponse.json(
-        { error: "Only paid bundles can launch runs" },
-        { status: 400 }
-      )
-    }
-
-    if (
-      order.channelConfig?.tokenStatus !== "validated" ||
-      order.channelConfig?.recipientBindingStatus !== "paired"
-    ) {
-      return NextResponse.json(
-        { error: "Telegram setup must be completed before launching a run" },
-        { status: 400 }
-      )
-    }
-    
-    const newRun = createMockRun(order)
-    mockRuns.unshift(newRun)
-    mockRunLogs[newRun.id] = [
-      {
-        timestamp: newRun.createdAt,
-        level: "info",
-        step: "init",
-        message: "Run requested from purchased bundle. Provisioning managed workspace.",
-      },
-    ]
-    
-    return NextResponse.json(getRunSummary(newRun), { status: 201 })
-  } catch {
-    return NextResponse.json(
-      { error: "Invalid request body" },
-      { status: 400 }
-    )
+    return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
   }
 }

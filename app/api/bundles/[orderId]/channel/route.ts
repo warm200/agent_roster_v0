@@ -1,20 +1,28 @@
-import { NextResponse } from 'next/server'
-import { mockOrders } from '@/lib/mock-data'
+import { NextRequest, NextResponse } from 'next/server'
+
+import { HttpError } from '@/server/lib/http'
+import { getRequestUserId } from '@/server/lib/request-user'
+import { getTelegramService } from '@/server/services/telegram.service'
 
 export async function GET(
-  request: Request,
-  { params }: { params: Promise<{ orderId: string }> }
+  request: NextRequest,
+  { params }: { params: Promise<{ orderId: string }> },
 ) {
-  const { orderId } = await params
-  const order = mockOrders.find((item) => item.id === orderId)
+  try {
+    const { orderId } = await params
+    const userId = await getRequestUserId(request)
+    const channelConfig = await getTelegramService().getChannelConfig({ orderId, userId })
 
-  if (!order) {
+    return NextResponse.json({
+      botUsername: 'YourAgentBot',
+      channelConfig,
+      orderId,
+    })
+  } catch (error) {
+    if (error instanceof HttpError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
+
     return NextResponse.json({ error: 'Bundle not found' }, { status: 404 })
   }
-
-  return NextResponse.json({
-    botUsername: 'YourAgentBot',
-    channelConfig: order.channelConfig,
-    orderId,
-  })
 }

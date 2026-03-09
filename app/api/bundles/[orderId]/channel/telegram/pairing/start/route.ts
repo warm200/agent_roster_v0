@@ -1,37 +1,33 @@
-import { NextResponse } from 'next/server'
-import { mockOrders } from '@/lib/mock-data'
+import { NextRequest, NextResponse } from 'next/server'
+
+import { HttpError } from '@/server/lib/http'
+import { getRequestUserId } from '@/server/lib/request-user'
+import { getTelegramService } from '@/server/services/telegram.service'
 
 export async function POST(
-  request: Request,
-  { params }: { params: Promise<{ orderId: string }> }
+  request: NextRequest,
+  { params }: { params: Promise<{ orderId: string }> },
 ) {
-  const { orderId } = await params
-  const order = mockOrders.find((item) => item.id === orderId)
+  try {
+    const { orderId } = await params
+    const userId = await getRequestUserId(request)
+    const result = await getTelegramService().startPairing({
+      orderId,
+      userId,
+      origin: request.nextUrl.origin,
+    })
 
-  if (!order) {
-    return NextResponse.json({ error: 'Bundle not found' }, { status: 404 })
+    return NextResponse.json({
+      botUsername: result.botUsername ?? 'YourAgentBot',
+      pairingCommand: result.pairingCommand,
+      channelConfig: result.config,
+      orderId,
+    })
+  } catch (error) {
+    if (error instanceof HttpError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
+
+    return NextResponse.json({ error: 'Unable to start pairing' }, { status: 500 })
   }
-
-  if (order.channelConfig?.tokenStatus !== 'validated') {
-    return NextResponse.json(
-      { error: 'Validate the bot token before starting pairing' },
-      { status: 400 }
-    )
-  }
-
-  const now = new Date().toISOString()
-
-  order.channelConfig = {
-    ...order.channelConfig,
-    recipientBindingStatus: 'paired',
-    recipientExternalId: order.channelConfig.recipientExternalId ?? `telegram-user-${Date.now()}`,
-    updatedAt: now,
-  }
-  order.updatedAt = now
-
-  return NextResponse.json({
-    botUsername: 'YourAgentBot',
-    channelConfig: order.channelConfig,
-    orderId,
-  })
 }
