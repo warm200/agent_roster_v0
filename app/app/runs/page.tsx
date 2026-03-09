@@ -45,7 +45,7 @@ export default function RunsPage() {
       setLoadError(null)
 
       try {
-        const response = await fetch('/api/runs')
+        const response = await fetch('/api/me/runs')
         const payload = await response.json()
 
         if (!response.ok) {

@@ -22,7 +22,7 @@ import {
 } from 'lucide-react'
 
 interface BundleResponse {
-  bundles: Array<Order & { agents: Agent[] }>
+  orders: Array<Order>
   total: number
 }
 
@@ -54,8 +54,8 @@ export default function DashboardPage() {
 
       try {
         const [bundlesResponse, runsResponse] = await Promise.all([
-          fetch('/api/bundles'),
-          fetch('/api/runs'),
+          fetch('/api/me/orders'),
+          fetch('/api/me/runs'),
         ])
 
         const bundlesPayload: BundleResponse | { error?: string } = await bundlesResponse.json()
@@ -70,7 +70,10 @@ export default function DashboardPage() {
         }
 
         if (isMounted) {
-          setOrders('bundles' in bundlesPayload ? bundlesPayload.bundles : [])
+          setOrders('orders' in bundlesPayload ? bundlesPayload.orders.map((order) => ({
+            ...order,
+            agents: order.items.map((item) => item.agent),
+          })) : [])
           setRuns('runs' in runsPayload ? runsPayload.runs : [])
         }
       } catch (error) {

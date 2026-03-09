@@ -47,7 +47,7 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
       setLoadError(null)
 
       try {
-        const response = await fetch(`/api/runs/${runId}`)
+        const response = await fetch(`/api/me/runs/${runId}`)
         const payload = await response.json()
 
         if (!response.ok) {
@@ -114,7 +114,7 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
     setIsCancelling(true)
 
     try {
-      const response = await fetch(`/api/runs/${run.id}`, {
+      const response = await fetch(`/api/me/runs/${run.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'cancel' }),
@@ -143,7 +143,7 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
     setIsRetrying(true)
 
     try {
-      const response = await fetch(`/api/runs/${run.id}`, {
+      const response = await fetch(`/api/me/runs/${run.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'retry' }),

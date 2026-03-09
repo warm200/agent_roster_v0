@@ -35,11 +35,30 @@ async function buildRunSummary(userId: string, run: Run): Promise<RunSummary> {
 export async function GET(request: NextRequest) {
   try {
     const userId = await getRequestUserId(request)
-    const runs = await runService.listRuns(userId)
+    const { searchParams } = new URL(request.url)
+    const status = searchParams.get('status')
+    const orderId = searchParams.get('orderId')
+    const limit = parseInt(searchParams.get('limit') || '50')
+    const offset = parseInt(searchParams.get('offset') || '0')
+    let runs = await runService.listRuns(userId)
+
+    if (status && status !== 'all') {
+      runs = runs.filter((run) => run.status === status)
+    }
+
+    if (orderId) {
+      runs = runs.filter((run) => run.orderId === orderId)
+    }
+
+    const total = runs.length
+    runs = runs.slice(offset, offset + limit)
 
     return NextResponse.json({
       runs: await Promise.all(runs.map((run) => buildRunSummary(userId, run))),
-      total: runs.length,
+      total,
+      limit,
+      offset,
+      hasMore: offset + runs.length < total,
     })
   } catch (error) {
     if (error instanceof HttpError) {

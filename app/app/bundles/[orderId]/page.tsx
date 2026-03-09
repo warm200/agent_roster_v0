@@ -12,8 +12,8 @@ import { Spinner } from '@/components/ui/spinner'
 import { RiskBadge } from '@/components/risk-badge'
 import { BundleRiskSummary } from '@/components/bundle-risk-summary'
 import { TelegramSetupWizard } from '@/components/telegram-setup-wizard'
-import { mockRuns, formatPrice } from '@/lib/mock-data'
-import type { Order } from '@/lib/types'
+import { formatPrice } from '@/lib/mock-data'
+import type { Order, Run } from '@/lib/types'
 import { formatDate, formatDateTime } from '@/lib/utils'
 import { toast } from 'sonner'
 import { 
@@ -34,6 +34,12 @@ export default function BundleDetailPage({ params }: PageProps) {
   const { orderId } = use(params)
   const router = useRouter()
   const [order, setOrder] = useState<Order | null>(null)
+  const [orderRuns, setOrderRuns] = useState<Run[]>([])
+  const [downloads, setDownloads] = useState<Array<{
+    orderItemId: string
+    downloadUrl: string
+    expiresAt: string
+  }>>([])
   const [isLoading, setIsLoading] = useState(true)
   const [telegramSetup, setTelegramSetup] = useState(false)
   const [isLaunching, setIsLaunching] = useState(false)
@@ -45,10 +51,16 @@ export default function BundleDetailPage({ params }: PageProps) {
       setIsLoading(true)
 
       try {
-        const response = await fetch(`/api/bundles/${orderId}`)
-        const payload = await response.json()
+        const [orderResponse, runsResponse, downloadsResponse] = await Promise.all([
+          fetch(`/api/me/orders/${orderId}`),
+          fetch(`/api/me/runs?orderId=${orderId}`),
+          fetch(`/api/me/orders/${orderId}/download`),
+        ])
+        const orderPayload = await orderResponse.json()
+        const runsPayload = await runsResponse.json()
+        const downloadsPayload = await downloadsResponse.json()
 
-        if (!response.ok) {
+        if (!orderResponse.ok) {
           if (isMounted) {
             setOrder(null)
           }
@@ -56,11 +68,15 @@ export default function BundleDetailPage({ params }: PageProps) {
         }
 
         if (isMounted) {
-          setOrder(payload)
+          setOrder(orderPayload)
+          setOrderRuns('runs' in runsPayload ? runsPayload.runs : [])
+          setDownloads('downloads' in downloadsPayload ? downloadsPayload.downloads : [])
         }
       } catch {
         if (isMounted) {
           setOrder(null)
+          setOrderRuns([])
+          setDownloads([])
         }
       } finally {
         if (isMounted) {
@@ -102,7 +118,6 @@ export default function BundleDetailPage({ params }: PageProps) {
     )
   }
 
-  const orderRuns = mockRuns.filter((r) => r.orderId === order.id)
   const hasTelegramSetup =
     telegramSetup ||
     (
@@ -118,10 +133,8 @@ export default function BundleDetailPage({ params }: PageProps) {
     setIsLaunching(true)
 
     try {
-      const response = await fetch('/api/runs', {
+      const response = await fetch(`/api/me/orders/${order.id}/runs`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ orderId: order.id }),
       })
 
       const payload = await response.json()
@@ -283,7 +296,7 @@ export default function BundleDetailPage({ params }: PageProps) {
                       </div>
                     </div>
                     <Button variant="outline" asChild>
-                      <Link href={item.agentVersion.installPackageUrl}>
+                      <Link href={downloads.find((download) => download.orderItemId === item.id)?.downloadUrl ?? item.agentVersion.installPackageUrl}>
                         <Download className="w-4 h-4 mr-2" />
                         Download
                       </Link>

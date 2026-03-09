@@ -47,7 +47,7 @@ export function TelegramSetupWizard({ orderId, initialStatus, onComplete }: Tele
     setIsValidating(true)
 
     try {
-      const response = await fetch(`/api/bundles/${orderId}/channel/telegram/validate`, {
+      const response = await fetch(`/api/me/orders/${orderId}/run-channel/telegram/validate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ botToken }),
@@ -75,7 +75,7 @@ export function TelegramSetupWizard({ orderId, initialStatus, onComplete }: Tele
     try {
       await new Promise((resolve) => setTimeout(resolve, 1200))
 
-      const response = await fetch(`/api/bundles/${orderId}/channel/telegram/pairing/start`, {
+      const response = await fetch(`/api/me/orders/${orderId}/run-channel/telegram/pairing/start`, {
         method: 'POST',
       })
       const payload = await response.json()

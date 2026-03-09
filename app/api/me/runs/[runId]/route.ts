@@ -49,3 +49,33 @@ export async function GET(
     return NextResponse.json({ error: 'Run not found' }, { status: 404 })
   }
 }
+
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ runId: string }> },
+) {
+  try {
+    const { runId } = await params
+    const userId = await getRequestUserId(request)
+    const body = await request.json()
+    const { action } = body as { action?: string }
+
+    if (action === 'cancel') {
+      const run = await runService.stopRun(userId, runId)
+      return NextResponse.json(await buildRunDetail(userId, run))
+    }
+
+    if (action === 'retry') {
+      const run = await runService.retryRun(userId, runId)
+      return NextResponse.json(await buildRunDetail(userId, run))
+    }
+
+    return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
+  } catch (error) {
+    if (error instanceof HttpError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
+
+    return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
+  }
+}

@@ -14,7 +14,7 @@ import type { Agent, Order } from '@/lib/types'
 import { Package, ArrowRight, ShoppingCart, Send, AlertTriangle } from 'lucide-react'
 
 interface BundlesResponse {
-  bundles: Array<Order & { agents: Agent[] }>
+  orders: Order[]
   total: number
 }
 
@@ -31,15 +31,20 @@ export default function BundlesPage() {
       setLoadError(null)
 
       try {
-        const response = await fetch('/api/bundles')
+        const response = await fetch('/api/me/orders')
         const payload: BundlesResponse | { error?: string } = await response.json()
 
         if (!response.ok) {
           throw new Error('error' in payload ? payload.error || 'Unable to load bundles' : 'Unable to load bundles')
         }
 
-        if (isMounted && 'bundles' in payload) {
-          setOrders(payload.bundles)
+        if (isMounted && 'orders' in payload) {
+          setOrders(
+            payload.orders.map((order) => ({
+              ...order,
+              agents: order.items.map((item) => item.agent),
+            })),
+          )
         }
       } catch (error) {
         if (isMounted) {

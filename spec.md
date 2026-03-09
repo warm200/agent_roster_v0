@@ -38,6 +38,7 @@ Implemented in the current mock app:
 - Final `/api/me/orders*` routes now exist for orders, Telegram run-channel setup, run creation, and signed-download grants
 - Final `/api/me/runs*` routes now exist for run list, detail, logs, and result
 - Legacy `/api/telegram/verify` is now a compatibility wrapper onto `telegram.service.ts`, and `/api/runs/[runId]/steps/[stepId]` is an explicit deprecated compatibility endpoint
+- Authenticated dashboard, bundles, runs, Telegram setup, run launch, and signed downloads now use the final `/api/me/*` API surface
 
 Still not implemented:
 - Real auth flows, Stripe checkout/webhooks, Telegram webhook/pairing worker, signed downloads, provider abstraction, real run backend
@@ -451,12 +452,12 @@ Wire pages to real API. Keep all existing UI.
 6. [x] Wire Agent Detail to `GET /api/agents/:slug`
 7. [ ] Wire Preview Chat to `POST /api/interviews/preview`
 8. [ ] Wire Checkout to `POST /api/checkout/session` → Stripe redirect
-9. [x] Wire Dashboard to current mock orders/runs endpoints
-10. [x] Wire Bundle Detail to current mock bundle/channel endpoints
-11. [ ] Wire Telegram wizard to real validate/pairing endpoints
-12. [x] Wire Run launch to current mock run creation endpoint → redirect to run detail
-13. [x] Wire Run Detail to current mock run detail/logs/result endpoints
-14. [ ] Wire Downloads to `GET /api/me/orders/:id/download` (signed URLs)
+9. [x] Wire Dashboard to final `/api/me/orders` + `/api/me/runs`
+10. [x] Wire Bundle Detail to final `/api/me/orders/*` endpoints
+11. [x] Wire Telegram wizard to real validate/pairing endpoints
+12. [x] Wire Run launch to final `/api/me/orders/:id/runs` → redirect to run detail
+13. [x] Wire Run Detail to final `/api/me/runs/*` endpoints
+14. [x] Wire Downloads to `GET /api/me/orders/:id/download` (signed URLs)
 15. [ ] Add polling hooks: `usePairingStatus`, `useRunStatus`
 16. [x] Fix Run Detail types (`RunStep` → derive from logs; `agent.name` → `agent.title`)
 
