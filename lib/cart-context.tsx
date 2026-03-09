@@ -1,7 +1,7 @@
 'use client'
 
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react'
-import type { Agent, CartItem, BundleRisk } from './types'
+import type { Agent, BundleRisk, Cart, CartItem } from './types'
 import { calculateBundleRisk } from './mock-data'
 
 const CART_STORAGE_KEY = 'agent-roster-cart:v1'
@@ -17,6 +17,15 @@ interface CartContextType {
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined)
+
+function isCart(value: unknown): value is Cart {
+  return Boolean(
+    value &&
+      typeof value === 'object' &&
+      'items' in value &&
+      Array.isArray((value as Cart).items)
+  )
+}
 
 function readStoredCartItems(): CartItem[] {
   if (typeof window === 'undefined') {
@@ -58,15 +67,37 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const [hasLoadedStorage, setHasLoadedStorage] = useState(false)
 
   useEffect(() => {
+    let isMounted = true
     const storedItems = readStoredCartItems()
     setItems(storedItems)
     setHasLoadedStorage(true)
 
-    void fetch('/api/cart', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ agentIds: storedItems.map((item) => item.agent.id) }),
-    })
+    async function syncCart() {
+      try {
+        const response = await fetch('/api/cart', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ agentIds: storedItems.map((item) => item.agent.id) }),
+        })
+        const payload = await response.json()
+
+        if (!response.ok || !isCart(payload)) {
+          return
+        }
+
+        if (isMounted) {
+          setItems(payload.items)
+        }
+      } catch {
+        // Keep local cart state if mock API sync fails.
+      }
+    }
+
+    void syncCart()
+
+    return () => {
+      isMounted = false
+    }
   }, [])
 
   useEffect(() => {
@@ -95,27 +126,68 @@ export function CartProvider({ children }: { children: ReactNode }) {
       return [...prev, newItem]
     })
 
-    void fetch('/api/cart/items', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ agentId: agent.id }),
-    })
+    void (async () => {
+      try {
+        const response = await fetch('/api/cart/items', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ agentId: agent.id }),
+        })
+        const payload = await response.json()
+
+        if (!response.ok || !isCart(payload.cart)) {
+          return
+        }
+
+        setItems(payload.cart.items)
+      } catch {
+        // Keep optimistic local state if mock API sync fails.
+      }
+    })()
   }, [])
 
   const removeItem = useCallback((itemId: string) => {
     setItems((prev) => prev.filter((item) => item.id !== itemId))
-    void fetch(`/api/cart/items/${itemId}`, {
-      method: 'DELETE',
-    })
+
+    void (async () => {
+      try {
+        const response = await fetch(`/api/cart/items/${itemId}`, {
+          method: 'DELETE',
+        })
+        const payload = await response.json()
+
+        if (!response.ok || !isCart(payload.cart)) {
+          return
+        }
+
+        setItems(payload.cart.items)
+      } catch {
+        // Keep optimistic local state if mock API sync fails.
+      }
+    })()
   }, [])
 
   const clearCart = useCallback(() => {
     setItems([])
-    void fetch('/api/cart', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ agentIds: [] }),
-    })
+
+    void (async () => {
+      try {
+        const response = await fetch('/api/cart', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ agentIds: [] }),
+        })
+        const payload = await response.json()
+
+        if (!response.ok || !isCart(payload)) {
+          return
+        }
+
+        setItems(payload.items)
+      } catch {
+        // Keep optimistic local state if mock API sync fails.
+      }
+    })()
   }, [])
 
   const isInCart = useCallback(
