@@ -292,4 +292,39 @@ if (!chromePath) {
       }
     },
   )
+
+  test(
+    'browser smoke covers checkout success handoff',
+    { timeout: 120_000 },
+    async () => {
+      assert.ok(browser, 'Browser failed to launch')
+      const page = await browser.newPage()
+
+      try {
+        await authenticatePage(page, {
+          sub: 'user-1',
+          email: 'user-1@demo.local',
+          name: 'Demo User',
+        })
+
+        await page.goto(`${BASE_URL}/checkout/success?orderId=order-1`, {
+          waitUntil: 'domcontentloaded',
+        })
+        await waitForText(page, 'Purchase Complete')
+        await page.waitForFunction(
+          (expectedHref) => {
+            const link = document.querySelector<HTMLAnchorElement>(`a[href="${expectedHref}"]`)
+            return link?.textContent?.includes('Set Up Telegram') ?? false
+          },
+          {},
+          '/app/bundles/order-1',
+        )
+        await clickByHref(page, '/app')
+        await waitForText(page, 'Dashboard')
+        assert.equal(page.url(), `${BASE_URL}/app`)
+      } finally {
+        await page.close()
+      }
+    },
+  )
 }
