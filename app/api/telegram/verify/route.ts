@@ -1,40 +1,63 @@
 import { NextRequest, NextResponse } from "next/server"
+import { mockOrders } from "@/lib/mock-data"
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { code, bundleId } = body
-    
-    if (!code) {
+    const orderId = body.orderId || body.bundleId
+    const botToken = body.botToken || body.code
+
+    if (!orderId) {
       return NextResponse.json(
-        { error: "Verification code is required" },
+        { error: "orderId is required" },
         { status: 400 }
       )
     }
-    
-    if (!bundleId) {
+
+    if (!botToken) {
       return NextResponse.json(
-        { error: "Bundle ID is required" },
+        { error: "botToken is required" },
         { status: 400 }
       )
     }
-    
-    // Mock verification - in production this would validate against Telegram
-    // Simulate a 6-digit code check
-    if (code.length !== 6 || !/^\d+$/.test(code)) {
+
+    const order = mockOrders.find((item) => item.id === orderId)
+
+    if (!order) {
       return NextResponse.json(
-        { error: "Invalid verification code format" },
+        { error: "Bundle not found" },
+        { status: 404 }
+      )
+    }
+
+    if (!String(botToken).includes(":")) {
+      return NextResponse.json(
+        { error: "Invalid bot token format" },
         { status: 400 }
       )
     }
-    
-    // Mock successful verification
+
+    const now = new Date().toISOString()
+
+    order.channelConfig = {
+      id: order.channelConfig?.id ?? `channel-${orderId}`,
+      orderId,
+      channelType: "telegram",
+      botTokenSecretRef: `encrypted:${String(botToken).slice(0, 6)}`,
+      tokenStatus: "validated",
+      recipientBindingStatus: order.channelConfig?.recipientBindingStatus ?? "pending",
+      recipientExternalId: order.channelConfig?.recipientExternalId ?? null,
+      appliesToScope: "run",
+      createdAt: order.channelConfig?.createdAt ?? now,
+      updatedAt: now,
+    }
+    order.updatedAt = now
+
     return NextResponse.json({
-      success: true,
-      chatId: `chat_${Date.now()}`,
-      username: "@user_mock",
-      bundleId,
-      verifiedAt: new Date()
+      botUsername: "YourAgentBot",
+      channelConfig: order.channelConfig,
+      deprecated: true,
+      orderId,
     })
   } catch {
     return NextResponse.json(
