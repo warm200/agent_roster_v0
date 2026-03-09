@@ -522,4 +522,46 @@ if (!chromePath) {
       }
     },
   )
+
+  test(
+    'browser smoke fetches seeded signed download grants',
+    { timeout: 120_000, skip: !dockerAvailable ? 'Docker not available' : undefined },
+    async () => {
+      assert.ok(browser, 'Browser failed to launch')
+      assert.equal(hasSeededBrowserDatabase, true, 'Seeded browser database was not prepared')
+      const page = await browser.newPage()
+
+      try {
+        await authenticatePage(page, {
+          sub: 'user-1',
+          email: 'user-1@demo.local',
+          name: 'Demo User',
+        })
+
+        await page.goto(`${BASE_URL}/app/bundles/order-1`, {
+          waitUntil: 'domcontentloaded',
+        })
+        await waitForText(page, 'Launch Run')
+
+        const payload = await page.evaluate(async () => {
+          const response = await fetch('/api/me/orders/order-1/download')
+          return {
+            body: await response.json(),
+            status: response.status,
+          }
+        })
+
+        assert.equal(payload.status, 200)
+        assert.ok(payload.body.downloads.length >= 1, 'Expected signed download grants')
+        assert.ok(
+          payload.body.downloads.every((download: { downloadUrl: string }) =>
+            download.downloadUrl.includes('/api/downloads/orders/order-1/items/'),
+          ),
+          'Expected signed order download URLs',
+        )
+      } finally {
+        await page.close()
+      }
+    },
+  )
 }

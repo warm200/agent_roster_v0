@@ -67,6 +67,7 @@ Implemented in the current mock app:
 - Browser smoke coverage now exists for seeded bundle detail access and real run launch into run detail
 - Browser smoke coverage now exists for seeded run detail content
 - Browser smoke coverage now exists for seeded Telegram-ready bundle listing
+- Browser smoke coverage now exists for seeded signed download grants
 - `scripts/db-setup.sh` now exists to start local Postgres, run migrations, and seed the database
 - Route smoke coverage now exists for run launch creation and the deprecated manual-step compatibility endpoint
 - Route smoke coverage now exists for Telegram validate, pairing-start, and webhook route behavior
