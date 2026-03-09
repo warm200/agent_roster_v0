@@ -4,12 +4,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { HttpError } from '@/server/lib/http'
 import { getRequestUserId } from '@/server/lib/request-user'
 import { CART_COOKIE_NAME, replaceCartItems } from '@/server/services/cart.service'
-import { createPaidOrderFromCart, listOrdersForUser } from '@/server/services/order.service'
+import { getOrderService } from '@/server/services/order.service'
 
 export async function GET(request: NextRequest) {
   try {
     const userId = await getRequestUserId(request)
-    const bundles = await listOrdersForUser(userId)
+    const bundles = await getOrderService().listOrdersForUser(userId)
 
     return NextResponse.json({
       bundles: bundles.map((order) => ({
@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
       agentIds,
     })
 
-    const order = await createPaidOrderFromCart({
+    const order = await getOrderService().createPaidOrderFromCart({
       cartId: cart.id,
       payment: {
         amountCents: cart.totalCents,
