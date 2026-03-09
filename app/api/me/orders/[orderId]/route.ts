@@ -1,0 +1,23 @@
+import { NextRequest, NextResponse } from 'next/server'
+
+import { HttpError } from '@/server/lib/http'
+import { getRequestUserId } from '@/server/lib/request-user'
+import { getOrderByIdForUser } from '@/server/services/order.service'
+
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ orderId: string }> },
+) {
+  try {
+    const { orderId } = await params
+    const userId = await getRequestUserId(request)
+    const order = await getOrderByIdForUser({ orderId, userId })
+    return NextResponse.json(order)
+  } catch (error) {
+    if (error instanceof HttpError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
+
+    return NextResponse.json({ error: 'Order not found' }, { status: 404 })
+  }
+}

@@ -34,6 +34,7 @@ Implemented in the current mock app:
 - `POST /api/checkout/session` now routes through `server/services/checkout.service.ts`
 - `POST /api/webhooks/telegram` now routes through `server/services/telegram.service.ts`
 - Legacy `/api/bundles*` and `/api/runs*` routes now route through backend services with a request-user fallback
+- Final `/api/me/orders*` routes now exist for orders, Telegram run-channel setup, run creation, and signed-download grants
 
 Still not implemented:
 - Real auth flows, Stripe checkout/webhooks, Telegram webhook/pairing worker, signed downloads, provider abstraction, real run backend
@@ -245,13 +246,13 @@ The initial API routes were broken. Most read/write mock routes have now been re
 
 | Endpoint | Current Status | Action |
 |----------|---------------|--------|
-| `GET /api/me/orders` | Implemented on alternate path | Current equivalent is service-backed `GET /api/bundles` |
-| `GET /api/me/orders/[orderId]` | Implemented on alternate path | Current equivalent is service-backed `GET /api/bundles/[orderId]` |
-| `POST /api/me/orders/[orderId]/run-channel/telegram/validate` | Implemented on alternate path | Current equivalent is service-backed `POST /api/bundles/[orderId]/channel/telegram/validate` |
-| `POST /api/me/orders/[orderId]/run-channel/telegram/pairing/start` | Implemented on alternate path | Current equivalent is service-backed `POST /api/bundles/[orderId]/channel/telegram/pairing/start` |
-| `GET /api/me/orders/[orderId]/run-channel` | Implemented on alternate path | Current equivalent is service-backed `GET /api/bundles/[orderId]/channel` |
-| `POST /api/me/orders/[orderId]/runs` | Implemented on alternate path | Current equivalent is service-backed `POST /api/runs` with `orderId` payload |
-| `GET /api/me/orders/[orderId]/download` | Missing | New → `orderService.getSignedDownloads()` |
+| `GET /api/me/orders` | Implemented | Uses `order.service.ts` |
+| `GET /api/me/orders/[orderId]` | Implemented | Uses `order.service.ts` |
+| `POST /api/me/orders/[orderId]/run-channel/telegram/validate` | Implemented | Uses `telegram.service.ts` |
+| `POST /api/me/orders/[orderId]/run-channel/telegram/pairing/start` | Implemented | Uses `telegram.service.ts` |
+| `GET /api/me/orders/[orderId]/run-channel` | Implemented | Uses `telegram.service.ts` |
+| `POST /api/me/orders/[orderId]/runs` | Implemented | Uses `run.service.ts` |
+| `GET /api/me/orders/[orderId]/download` | Implemented | Uses `order.service.ts` for signed download grants |
 | `GET /api/me/runs` | Implemented on alternate path | Current equivalent is service-backed `GET /api/runs` |
 | `GET /api/me/runs/[runId]` | Implemented on alternate path | Current equivalent is service-backed `GET /api/runs/[runId]` |
 | `GET /api/me/runs/[runId]/logs` | Implemented on alternate path | Current equivalent is service-backed `GET /api/runs/[runId]/logs` |
@@ -421,13 +422,13 @@ Normalize current mock routes into final service-backed PRD routes. Several func
 6. [x] `DELETE /api/cart/items/[cartItemId]` → cartService
 7. [x] `POST /api/checkout/session` → checkoutService
 8. [ ] `POST /api/webhooks/stripe` → checkoutService
-9. [ ] `GET /api/me/orders` → orderService
-10. [ ] `GET /api/me/orders/[orderId]` → orderService
-11. [ ] `POST /api/me/orders/[orderId]/run-channel/telegram/validate` → telegramService
-12. [ ] `POST /api/me/orders/[orderId]/run-channel/telegram/pairing/start` → telegramService
-13. [ ] `GET /api/me/orders/[orderId]/run-channel` → telegramService
-14. [ ] `POST /api/me/orders/[orderId]/runs` → runService
-15. [ ] `GET /api/me/orders/[orderId]/download` → orderService
+9. [x] `GET /api/me/orders` → orderService
+10. [x] `GET /api/me/orders/[orderId]` → orderService
+11. [x] `POST /api/me/orders/[orderId]/run-channel/telegram/validate` → telegramService
+12. [x] `POST /api/me/orders/[orderId]/run-channel/telegram/pairing/start` → telegramService
+13. [x] `GET /api/me/orders/[orderId]/run-channel` → telegramService
+14. [x] `POST /api/me/orders/[orderId]/runs` → runService
+15. [x] `GET /api/me/orders/[orderId]/download` → orderService
 16. [ ] `GET /api/me/runs` → runService
 17. [ ] `GET /api/me/runs/[runId]` → runService
 18. [ ] `GET /api/me/runs/[runId]/logs` → runService
