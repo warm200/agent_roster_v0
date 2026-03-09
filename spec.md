@@ -58,10 +58,11 @@ Implemented in the current mock app:
 - Route-level error boundaries now exist for the public shell and the authenticated app shell
 - Route-level loading skeletons now exist for catalog, agent detail, dashboard, bundles, bundle detail, runs, and run detail
 - `npm test` now runs smoke regression coverage for the preview route and auth proxy
+- Browser smoke coverage now exists for catalog-to-cart and protected-app redirect flows
 
 Still not implemented:
 - Production auth provider setup, production Stripe/Telegram operations, provider abstraction, and a real run backend
-- Full browser-level end-to-end flow coverage, plus hardened production contracts and deeper auth enforcement polish
+- Deeper paid checkout, Telegram pairing, and run-launch browser coverage, plus hardened production contracts and deeper auth enforcement polish
 
 ---
 
@@ -490,7 +491,7 @@ Wire pages to real API. Keep all existing UI.
 6. [x] Add auth-aware header (show user name, login/logout)
 7. [x] Add loading skeletons to all data-fetching pages
 8. [x] Add error boundaries
-9. [ ] End-to-end flow test
+9. [x] End-to-end flow test
 10. [x] Gate pass: lint + typecheck + build green
 
 ---
