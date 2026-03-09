@@ -85,6 +85,9 @@ test('legacy bundles list/detail routes use order service', async () => {
       listedUserId = userId
       return [order]
     },
+    async resolveSignedDownload() {
+      return '/downloads/agent-test.zip'
+    },
   } satisfies OrderService)
 
   const listResponse = await listBundles(new NextRequest('http://localhost/api/bundles'))

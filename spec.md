@@ -50,6 +50,7 @@ Implemented in the current mock app:
 - `POST /api/internal/scan` now routes through `runService.scanAgentVersion()` for deterministic risk rescans
 - Legacy `/api/bundles*` and `/api/runs*` routes now route through backend services with a request-user fallback
 - Final `/api/me/orders*` routes now exist for orders, Telegram run-channel setup, run creation, and signed-download grants
+- `GET /api/downloads/orders/:orderId/items/:orderItemId` now exists to validate signed grants and redirect to install package URLs
 - Final `/api/me/runs*` routes now exist for run list, detail, logs, and result
 - Legacy `/api/telegram/verify` is now a compatibility wrapper onto `telegram.service.ts`, and `/api/runs/[runId]/steps/[stepId]` is an explicit deprecated compatibility endpoint
 - Authenticated dashboard, bundles, runs, Telegram setup, run launch, and signed downloads now use the final `/api/me/*` API surface
@@ -67,6 +68,7 @@ Implemented in the current mock app:
 - Route smoke coverage now exists for Telegram validate, pairing-start, and webhook route behavior
 - Route smoke coverage now exists for checkout session creation, checkout-session reconciliation, and Stripe webhook handling
 - Route smoke coverage now exists for orders list/detail/download route behavior
+- Route smoke coverage now exists for signed download grant resolution
 - Route smoke coverage now exists for run list/detail/logs/result routes plus retry/cancel actions
 - Route smoke coverage now exists for legacy bundle wrappers and the deprecated Telegram verify compatibility route
 - Route smoke coverage now exists for legacy run wrappers, including list/create/detail/logs/result and retry/cancel actions

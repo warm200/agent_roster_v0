@@ -57,6 +57,9 @@ test('orders list route returns service-backed orders', async () => {
       receivedUserId = userId
       return [order]
     },
+    async resolveSignedDownload() {
+      return '/downloads/agent-test.zip'
+    },
   } satisfies OrderService)
 
   const response = await listOrders(new NextRequest('http://localhost/api/me/orders'))
@@ -82,6 +85,9 @@ test('order detail route returns 404 from service http errors', async () => {
     },
     async listOrdersForUser() {
       return [order]
+    },
+    async resolveSignedDownload() {
+      return '/downloads/agent-test.zip'
     },
   } satisfies OrderService)
 
@@ -129,6 +135,9 @@ test('order download route forwards baseUrl and userId', async () => {
     },
     async listOrdersForUser() {
       return [order]
+    },
+    async resolveSignedDownload() {
+      return '/downloads/agent-test.zip'
     },
   } satisfies OrderService)
 

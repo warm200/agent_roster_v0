@@ -324,6 +324,7 @@ export type OrderService = {
   getOrderByIdForUser: typeof getOrderByIdForUser
   getSignedDownloadsForOrder: typeof getSignedDownloadsForOrder
   listOrdersForUser: typeof listOrdersForUser
+  resolveSignedDownload: typeof resolveSignedDownload
 }
 
 let orderServiceOverride: OrderService | null = null
@@ -338,6 +339,7 @@ export function getOrderService(): OrderService {
     getOrderByIdForUser,
     getSignedDownloadsForOrder,
     listOrdersForUser,
+    resolveSignedDownload,
   }
 }
 
