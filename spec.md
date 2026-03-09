@@ -55,6 +55,7 @@ Implemented in the current mock app:
 - `useRunStatus(runId)` now exists and polls `/api/me/runs/:id` until active runs reach a terminal state
 - Cart sync, checkout, and Telegram setup flows now call shared frontend API clients instead of raw `fetch`
 - Catalog, dashboard, bundles, bundle detail, and runs pages now call shared frontend API clients instead of raw `fetch`
+- Route-level error boundaries now exist for the public shell and the authenticated app shell
 
 Still not implemented:
 - Production auth provider setup, production Stripe/Telegram operations, provider abstraction, and a real run backend
@@ -486,7 +487,7 @@ Wire pages to real API. Keep all existing UI.
 5. [x] Add login page (`app/login/page.tsx`)
 6. [x] Add auth-aware header (show user name, login/logout)
 7. [ ] Add loading skeletons to all data-fetching pages
-8. [ ] Add error boundaries
+8. [x] Add error boundaries
 9. [ ] End-to-end flow test
 10. [x] Gate pass: lint + typecheck + build green
 
