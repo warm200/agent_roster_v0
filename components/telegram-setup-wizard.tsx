@@ -1,11 +1,12 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Spinner } from '@/components/ui/spinner'
+import { usePairingStatus } from '@/hooks/use-pairing-status'
 import { CheckCircle2, Send, ArrowRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
@@ -33,10 +34,41 @@ export function TelegramSetupWizard({ orderId, initialStatus, onComplete }: Tele
   const [botUsername, setBotUsername] = useState(initialStatus?.botUsername || '')
   const [isValidating, setIsValidating] = useState(false)
   const [isPairing, setIsPairing] = useState(false)
+  const [pairingCommand, setPairingCommand] = useState<string | null>(null)
+  const hasCompletedRef = useRef(false)
+  const { channelConfig, error: pairingError, isPolling } = usePairingStatus(orderId, isPairing)
 
   useEffect(() => {
     setBotUsername(initialStatus?.botUsername || '')
   }, [initialStatus?.botUsername])
+
+  useEffect(() => {
+    if (channelConfig?.tokenStatus === 'validated') {
+      setStep((currentStep) => (currentStep === 'connect' ? 'pair' : currentStep))
+    }
+
+    if (channelConfig?.recipientBindingStatus === 'paired') {
+      setStep('ready')
+      setIsPairing(false)
+
+      if (!hasCompletedRef.current) {
+        hasCompletedRef.current = true
+        toast.success('Telegram paired successfully!')
+        onComplete?.()
+      }
+    }
+
+    if (channelConfig?.recipientBindingStatus === 'failed' && isPairing) {
+      setIsPairing(false)
+      toast.error('Telegram pairing failed. Please try again.')
+    }
+  }, [channelConfig, isPairing, onComplete])
+
+  useEffect(() => {
+    if (pairingError && step === 'pair') {
+      toast.error(pairingError)
+    }
+  }, [pairingError, step])
 
   const handleValidateToken = async () => {
     if (!botToken.trim()) {
@@ -60,6 +92,7 @@ export function TelegramSetupWizard({ orderId, initialStatus, onComplete }: Tele
       }
 
       setBotUsername(payload.botUsername || 'YourAgentBot')
+      setPairingCommand(null)
       setStep('pair')
       toast.success('Bot token validated!')
     } catch {
@@ -71,10 +104,9 @@ export function TelegramSetupWizard({ orderId, initialStatus, onComplete }: Tele
 
   const handleStartPairing = async () => {
     setIsPairing(true)
+    let pairingStarted = false
 
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1200))
-
       const response = await fetch(`/api/me/orders/${orderId}/run-channel/telegram/pairing/start`, {
         method: 'POST',
       })
@@ -86,13 +118,16 @@ export function TelegramSetupWizard({ orderId, initialStatus, onComplete }: Tele
       }
 
       setBotUsername(payload.botUsername || botUsername || 'YourAgentBot')
-      setStep('ready')
-      toast.success('Telegram paired successfully!')
-      onComplete?.()
+      setPairingCommand(payload.pairingCommand || null)
+      setStep('pair')
+      pairingStarted = true
+      toast.success('Pairing started. Send /start in Telegram to finish setup.')
     } catch {
       toast.error('Network error while pairing Telegram')
     } finally {
-      setIsPairing(false)
+      if (!pairingStarted) {
+        setIsPairing(false)
+      }
     }
   }
 
@@ -196,6 +231,20 @@ export function TelegramSetupWizard({ orderId, initialStatus, onComplete }: Tele
                 Now, open Telegram and send <code className="bg-secondary px-1.5 py-0.5 rounded text-foreground">/start</code> to your bot:
               </p>
 
+              {pairingCommand && (
+                <p className="text-sm text-muted-foreground">
+                  Quick open:{' '}
+                  <a
+                    className="text-foreground underline"
+                    href={pairingCommand}
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    {pairingCommand}
+                  </a>
+                </p>
+              )}
+
               <ol className="space-y-2 text-sm">
                 <li className="flex items-start gap-2">
                   <span className="w-5 h-5 rounded-full bg-secondary flex items-center justify-center text-xs shrink-0">1</span>
@@ -212,19 +261,19 @@ export function TelegramSetupWizard({ orderId, initialStatus, onComplete }: Tele
               </ol>
             </div>
 
-            {isPairing && (
+            {(isPairing || isPolling) && (
               <div className="flex items-center gap-3 p-4 bg-amber-500/10 border border-amber-500/20 rounded-lg">
                 <Spinner className="w-5 h-5 text-amber-400" />
-                <span className="text-sm text-amber-400">Waiting for your message in Telegram...</span>
+                <span className="text-sm text-amber-400">Waiting for your message in Telegram and checking webhook status...</span>
               </div>
             )}
           </CardContent>
           <CardFooter>
-            <Button onClick={handleStartPairing} disabled={isPairing}>
-              {isPairing ? (
+            <Button onClick={handleStartPairing} disabled={isPairing || isPolling}>
+              {isPairing || isPolling ? (
                 <>
                   <Spinner className="w-4 h-4 mr-2" />
-                  Waiting for pairing...
+                  Checking pairing...
                 </>
               ) : (
                 <>
@@ -266,14 +315,14 @@ export function TelegramSetupWizard({ orderId, initialStatus, onComplete }: Tele
   )
 }
 
-function StepIndicator({ 
-  number, 
-  label, 
-  status 
-}: { 
+function StepIndicator({
+  number,
+  label,
+  status
+}: {
   number: number
   label: string
-  status: 'pending' | 'current' | 'complete' 
+  status: 'pending' | 'current' | 'complete'
 }) {
   return (
     <div className="flex items-center gap-2">

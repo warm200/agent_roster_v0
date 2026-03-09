@@ -11,12 +11,13 @@ Implemented in the current mock app:
 - Run detail now shows runtime disclosure, combined risk, logs, results, artifacts, retry, and cancel
 - Cart now persists in `localStorage` and syncs against mock cart endpoints
 - Checkout creates a mock purchased bundle and redirects to the returned order ID
-- Telegram setup wizard now uses bundle-scoped mock validate/pairing APIs
+- Telegram setup wizard now uses final validate/pairing APIs and polls channel status until pairing completes
 - Drizzle/Postgres foundation files now exist: `drizzle.config.ts`, `.env.example`, `server/db/schema.ts`, `server/db/index.ts`, `server/db/seed.ts`
 - Initial Drizzle migration generated under `drizzle/`
 - Shared enums/constants and Zod schemas now exist in `lib/constants.ts` and `lib/schemas.ts`
 - Shared Axios client entrypoint now exists in `services/api.ts`
 - Preview chat client now exists in `services/preview.api.ts`
+- Order client helpers now exist in `services/orders.api.ts`
 - Stripe SDK and shared server bootstrap now exist in `server/lib/stripe.ts`
 - Auth deps, env placeholders, bootstrap config, and auth route now exist for `next-auth`
 - Local PostgreSQL Docker Compose file now exists in `docker-compose.yml`
@@ -42,6 +43,7 @@ Implemented in the current mock app:
 - Final `/api/me/runs*` routes now exist for run list, detail, logs, and result
 - Legacy `/api/telegram/verify` is now a compatibility wrapper onto `telegram.service.ts`, and `/api/runs/[runId]/steps/[stepId]` is an explicit deprecated compatibility endpoint
 - Authenticated dashboard, bundles, runs, Telegram setup, run launch, and signed downloads now use the final `/api/me/*` API surface
+- `usePairingStatus(orderId)` now exists and polls `/api/me/orders/:id/run-channel` until pairing reaches a terminal state
 
 Still not implemented:
 - Real auth UX/session enforcement, production Stripe/Telegram operations, provider abstraction, and a real run backend
@@ -166,7 +168,7 @@ v0_version/                        # Next.js 16 full-stack
 | `risk-badge.tsx` | Keep | None |
 | `bundle-risk-summary.tsx` | Keep | None |
 | `preview-chat.tsx` | Keep | Done: wired to the service-backed preview endpoint |
-| `telegram-setup-wizard.tsx` | Keep | Done for mock flow; wired to bundle-scoped validate/pairing APIs |
+| `telegram-setup-wizard.tsx` | Keep | Done: wired to final Telegram endpoints and polls channel status until pairing completes |
 | `theme-provider.tsx` | Keep | None |
 | `ui/*` (50+ shadcn) | Keep | None |
 
@@ -311,13 +313,13 @@ services/
 | `RunResultsPanel` | Summary + artifacts download list | `components/run-results-panel.tsx` |
 | `RuntimeDisclosure` | Shows usesRealWorkspace/usesTools/networkEnabled | inline in Run Detail |
 
-These are implemented already. Still missing: polling hooks for live backend state rather than static/mock fetches.
+These are implemented already. Still missing: the run-status polling hook for live backend state.
 
 ### 6.4 Polling Hooks
 
 | Hook | Purpose |
 |------|---------|
-| `usePairingStatus(orderId)` | Poll `GET /api/me/orders/:id/run-channel` until `paired` |
+| `usePairingStatus(orderId)` | Implemented: polls `GET /api/me/orders/:id/run-channel` until terminal pairing state |
 | `useRunStatus(runId)` | Poll `GET /api/me/runs/:id` until terminal state |
 
 ### 6.5 Infrastructure
@@ -447,7 +449,7 @@ Normalize current mock routes into final service-backed PRD routes. Several func
 
 Wire pages to real API. Keep all existing UI.
 
-1. [ ] Create `services/*.api.ts` files (7 service clients; `api.ts` and `preview.api.ts` now exist)
+1. [ ] Create `services/*.api.ts` files (7 service clients; `api.ts`, `preview.api.ts`, and `orders.api.ts` now exist)
 2. [ ] Add `lib/auth-context.tsx` + `AuthProvider` in `providers.tsx`
 3. [ ] Add `middleware.ts` for `/app/*` route protection
 4. [x] Wire CartContext to API (`addItem` → `POST /api/cart/items`, etc.) for the mock flow
@@ -461,7 +463,7 @@ Wire pages to real API. Keep all existing UI.
 12. [x] Wire Run launch to final `/api/me/orders/:id/runs` → redirect to run detail
 13. [x] Wire Run Detail to final `/api/me/runs/*` endpoints
 14. [x] Wire Downloads to `GET /api/me/orders/:id/download` (signed URLs)
-15. [ ] Add polling hooks: `usePairingStatus`, `useRunStatus`
+15. [ ] Add polling hooks: `usePairingStatus`, `useRunStatus` (`usePairingStatus` done)
 16. [x] Fix Run Detail types (`RunStep` → derive from logs; `agent.name` → `agent.title`)
 
 ### Phase 4: Missing UI + Polish
