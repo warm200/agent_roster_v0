@@ -14,6 +14,7 @@ Implemented in the current mock app:
 - Telegram setup wizard now uses final validate/pairing APIs and polls channel status until pairing completes
 - Drizzle/Postgres foundation files now exist: `drizzle.config.ts`, `.env.example`, `server/db/schema.ts`, `server/db/index.ts`, `server/db/seed.ts`
 - Initial Drizzle migration generated under `drizzle/`
+- Database seed now includes the demo user plus seeded paid order, Telegram channel config, and demo runs from the mock flow
 - Shared enums/constants and Zod schemas now exist in `lib/constants.ts` and `lib/schemas.ts`
 - Shared Axios client entrypoint now exists in `services/api.ts`
 - Catalog client helpers now exist in `services/catalog.api.ts`
