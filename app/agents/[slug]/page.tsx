@@ -259,7 +259,7 @@ export default function AgentDetailPage({ params }: PageProps) {
               </TabsContent>
             </Tabs>
 
-            <Card>
+            <Card className="overflow-hidden">
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <CardTitle className="flex items-center gap-2 text-lg">
@@ -271,7 +271,7 @@ export default function AgentDetailPage({ params }: PageProps) {
                   </Badge>
                 </div>
               </CardHeader>
-              <CardContent>
+              <CardContent className="min-h-0">
                 {showChat ? (
                   <PreviewChat agent={agent} />
                 ) : (

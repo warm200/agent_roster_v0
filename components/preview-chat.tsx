@@ -1,10 +1,9 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Agent, PreviewMessage } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import { Send, Bot, User } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { sendPreviewInterview } from '@/services/preview.api'
@@ -86,9 +85,12 @@ export function PreviewChat({ agent }: PreviewChatProps) {
   }
 
   return (
-    <div className="flex flex-col h-96">
-      <ScrollArea className="flex-1 pr-4" ref={scrollRef}>
-        <div className="space-y-4">
+    <div className="flex max-h-[min(70vh,32rem)] min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-secondary/15">
+      <div
+        ref={scrollRef}
+        aria-label="Preview conversation"
+        className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 pr-3"
+      >
           {messages.map((msg, i) => (
             <div
               key={i}
@@ -135,10 +137,9 @@ export function PreviewChat({ agent }: PreviewChatProps) {
               </div>
             </div>
           )}
-        </div>
-      </ScrollArea>
+      </div>
 
-      <div className="flex gap-2 mt-4 pt-4 border-t border-border">
+      <div className="flex gap-2 border-t border-border bg-background/80 p-4 backdrop-blur">
         <Input
           placeholder="Ask about this agent..."
           value={input}
@@ -149,6 +150,7 @@ export function PreviewChat({ agent }: PreviewChatProps) {
         />
         <Button
           size="icon"
+          aria-label="Send preview message"
           onClick={() => void handleSend()}
           disabled={!input.trim() || isTyping}
         >
