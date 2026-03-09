@@ -28,6 +28,7 @@ Implemented in the current mock app:
 - Backend order service now exists in `server/services/order.service.ts` with paid-order creation and signed-download helpers
 - Backend checkout service now exists in `server/services/checkout.service.ts` with Stripe session creation and paid-session reconciliation helpers
 - Backend Telegram service now exists in `server/services/telegram.service.ts` with token validation, encrypted secret storage, pairing, and webhook handling
+- Backend run repository/service now exist in `server/services/run.repository.ts` and `server/services/run.service.ts` with provider-backed run sync against the current DB shape
 
 Still not implemented:
 - Real auth flows, Stripe checkout/webhooks, Telegram webhook/pairing worker, signed downloads, provider abstraction, real run backend
@@ -398,7 +399,7 @@ Port all services from agent_roster. Adapt imports. Test with curl/httpie.
 3. [x] Port `server/services/checkout.service.ts`
 4. [x] Port `server/services/order.service.ts`
 5. [x] Port `server/services/telegram.service.ts`
-6. [ ] Port `server/services/run.service.ts` + `run.repository.ts`
+6. [x] Port `server/services/run.service.ts` + `run.repository.ts`
 7. [x] Port `server/services/commerce.utils.ts`
 8. [x] Port `server/providers/` (interface + mock + openclaw stub)
 9. [x] Port `server/lib/risk-engine.ts`
