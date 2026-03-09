@@ -65,6 +65,7 @@ Implemented in the current mock app:
 - Browser smoke coverage now exists for catalog-to-cart, protected-app redirect, signed-in dashboard access, authenticated bundle/run page-access flows, and protected app navigation flows
 - Browser smoke coverage now exists for checkout-success handoff and its post-purchase CTA paths
 - Browser smoke coverage now exists for seeded bundle detail access and real run launch into run detail
+- Browser smoke coverage now exists for seeded run detail content
 - `scripts/db-setup.sh` now exists to start local Postgres, run migrations, and seed the database
 - Route smoke coverage now exists for run launch creation and the deprecated manual-step compatibility endpoint
 - Route smoke coverage now exists for Telegram validate, pairing-start, and webhook route behavior

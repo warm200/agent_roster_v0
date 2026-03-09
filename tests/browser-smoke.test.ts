@@ -467,4 +467,32 @@ if (!chromePath) {
       }
     },
   )
+
+  test(
+    'browser smoke covers seeded run detail content',
+    { timeout: 120_000, skip: !dockerAvailable ? 'Docker not available' : undefined },
+    async () => {
+      assert.ok(browser, 'Browser failed to launch')
+      assert.equal(hasSeededBrowserDatabase, true, 'Seeded browser database was not prepared')
+      const page = await browser.newPage()
+
+      try {
+        await authenticatePage(page, {
+          sub: 'user-1',
+          email: 'user-1@demo.local',
+          name: 'Demo User',
+        })
+
+        await page.goto(`${BASE_URL}/app/runs/run-1`, {
+          waitUntil: 'domcontentloaded',
+        })
+        await waitForText(page, 'Run Information')
+        await waitForText(page, 'Initializing run environment')
+        await waitForText(page, 'Successfully processed 47 emails')
+        assert.equal(page.url(), `${BASE_URL}/app/runs/run-1`)
+      } finally {
+        await page.close()
+      }
+    },
+  )
 }
