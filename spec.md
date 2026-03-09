@@ -57,10 +57,11 @@ Implemented in the current mock app:
 - Catalog, dashboard, bundles, bundle detail, and runs pages now call shared frontend API clients instead of raw `fetch`
 - Route-level error boundaries now exist for the public shell and the authenticated app shell
 - Route-level loading skeletons now exist for catalog, agent detail, dashboard, bundles, bundle detail, runs, and run detail
+- `npm test` now runs smoke regression coverage for the preview route and auth proxy
 
 Still not implemented:
 - Production auth provider setup, production Stripe/Telegram operations, provider abstraction, and a real run backend
-- Hardened production contracts and deeper auth enforcement polish
+- Full browser-level end-to-end flow coverage, plus hardened production contracts and deeper auth enforcement polish
 
 ---
 

@@ -9,6 +9,7 @@
     "lint": "eslint .",
     "docs:list": "tsx scripts/docs-list.ts",
     "typecheck": "tsc --noEmit",
+    "test": "tsx --test tests/**/*.test.ts",
     "gate": "bash scripts/gate.sh",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
