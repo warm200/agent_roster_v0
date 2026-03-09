@@ -368,11 +368,12 @@ Port infrastructure into current project. Current slice landed the DB config/sch
 8. [ ] Port `lib/constants.ts` (enums from shared/)
 9. [x] Install DB deps: `drizzle-orm`, `drizzle-kit`, `pg`, `tsx`
 10. [ ] Install remaining backend deps: `@auth/core`, `@auth/drizzle-adapter`, `stripe`, `axios`
-11. [ ] Add `server/lib/auth.ts` (NextAuth v5 config)
-12. [ ] Add `server/lib/stripe.ts` (Stripe client init)
-13. [ ] Add `app/api/auth/[...nextauth]/route.ts`
-14. [ ] Verify: `docker compose up -d && npm run db:migrate && npm run db:seed` works
-15. [ ] Add `services/api.ts` (Axios shared instance)
+11. [x] Generate initial Drizzle migration under `drizzle/`
+12. [ ] Add `server/lib/auth.ts` (NextAuth v5 config)
+13. [ ] Add `server/lib/stripe.ts` (Stripe client init)
+14. [ ] Add `app/api/auth/[...nextauth]/route.ts`
+15. [ ] Verify: `docker compose up -d && npm run db:migrate && npm run db:seed` works
+16. [ ] Add `services/api.ts` (Axios shared instance)
 
 ### Phase 1: Port Backend Services (~7 files, ~2000 LOC)
 
