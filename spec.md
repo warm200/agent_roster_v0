@@ -17,6 +17,7 @@ Implemented in the current mock app:
 - Shared enums/constants and Zod schemas now exist in `lib/constants.ts` and `lib/schemas.ts`
 - Shared Axios client entrypoint now exists in `services/api.ts`
 - Stripe SDK and shared server bootstrap now exist in `server/lib/stripe.ts`
+- Auth deps, env placeholders, bootstrap config, and auth route now exist for `next-auth`
 - Local PostgreSQL Docker Compose file now exists in `docker-compose.yml`
 
 Still not implemented:
@@ -87,7 +88,7 @@ v0_version/                        # Next.js 16 full-stack
 │   │   ├── openclaw.provider.ts   # Stub for future
 │   │   └── index.ts               # Provider registry
 │   └── lib/
-│       ├── auth.ts                # NextAuth v5 config
+│       ├── auth.ts                # Auth.js / next-auth config
 │       ├── risk-engine.ts         # Deterministic rule scanner
 │       └── stripe.ts              # Stripe client init
 │
@@ -107,7 +108,7 @@ v0_version/                        # Next.js 16 full-stack
 | **ORM** | Drizzle ORM | Old spec | PostgreSQL dialect |
 | **DB** | PostgreSQL 16 | Old spec | Docker Compose for local dev |
 | **Validation** | Zod | Old spec | Request/response schemas in `lib/schemas.ts` |
-| **Auth** | NextAuth v5 (Auth.js) | Old spec | Google/GitHub OAuth; JWT sessions |
+| **Auth** | Auth.js / next-auth | Old spec | Google/GitHub OAuth; JWT sessions |
 | **Payment** | Stripe Checkout | Old spec | Session-based; webhook for completion |
 | **HTTP client** | Axios | Old spec | Shared instance in `services/api.ts` |
 | **State** | React Context | Current | CartContext (wire to API), AuthContext (new) |
@@ -257,7 +258,7 @@ The initial API routes were broken. Most read/write mock routes have now been re
 
 | File | Purpose |
 |------|---------|
-| `server/lib/auth.ts` | NextAuth v5 config (Google + GitHub OAuth, JWT sessions) |
+| `server/lib/auth.ts` | Auth.js / next-auth config (Google + GitHub OAuth, JWT sessions) |
 | `lib/auth-context.tsx` | React AuthContext (user, login, logout) |
 | `app/api/auth/[...nextauth]/route.ts` | NextAuth route handler |
 | `app/login/page.tsx` | Login page (simple OAuth buttons) |
@@ -371,11 +372,11 @@ Port infrastructure into current project. Current slice landed the DB config/sch
 7. [x] Port `lib/schemas.ts` (Zod validation from shared/)
 8. [x] Port `lib/constants.ts` (enums from shared/)
 9. [x] Install DB deps: `drizzle-orm`, `drizzle-kit`, `pg`, `tsx`
-10. [ ] Install remaining backend deps: `@auth/core`, `@auth/drizzle-adapter`
+10. [x] Install remaining backend deps: `@auth/core`, `@auth/drizzle-adapter`
 11. [x] Generate initial Drizzle migration under `drizzle/`
-12. [ ] Add `server/lib/auth.ts` (NextAuth v5 config)
+12. [x] Add `server/lib/auth.ts` (Auth.js / next-auth config)
 13. [x] Add `server/lib/stripe.ts` (Stripe client init)
-14. [ ] Add `app/api/auth/[...nextauth]/route.ts`
+14. [x] Add `app/api/auth/[...nextauth]/route.ts`
 15. [ ] Verify: `docker compose up -d && npm run db:migrate && npm run db:seed` works
 16. [x] Add `services/api.ts` (Axios shared instance)
 
