@@ -17,6 +17,7 @@ Implemented in the current mock app:
 - Shared enums/constants and Zod schemas now exist in `lib/constants.ts` and `lib/schemas.ts`
 - Shared Axios client entrypoint now exists in `services/api.ts`
 - Stripe SDK and shared server bootstrap now exist in `server/lib/stripe.ts`
+- Local PostgreSQL Docker Compose file now exists in `docker-compose.yml`
 
 Still not implemented:
 - Real auth, a running database with applied migrations, Stripe, Telegram webhook/pairing worker, signed downloads, provider abstraction, real run backend
@@ -361,7 +362,7 @@ Or use React Server Components where appropriate (catalog pages are good candida
 
 Port infrastructure into current project. Current slice landed the DB config/schema/bootstrap/seed scaffold, but migrations and a running Postgres instance are still pending.
 
-1. [ ] Add `docker-compose.yml` (PostgreSQL 16)
+1. [x] Add `docker-compose.yml` (PostgreSQL 16)
 2. [x] Add `drizzle.config.ts`
 3. [x] Port `server/db/schema.ts` from agent_roster (adapt imports)
 4. [x] Port `server/db/index.ts` (Drizzle client init)
