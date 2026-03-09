@@ -3,8 +3,10 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
-import { Bot, LayoutDashboard, Package, Play, Settings, User } from 'lucide-react'
+import { Bot, LayoutDashboard, Package, Play, LogIn, LogOut } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { useAuth } from '@/lib/auth-context'
 
 const sidebarLinks = [
   { href: '/app', label: 'Dashboard', icon: LayoutDashboard },
@@ -18,6 +20,15 @@ export default function AppLayout({
   children: React.ReactNode
 }) {
   const pathname = usePathname()
+  const { isAuthenticated, session, signOut } = useAuth()
+  const userName = session?.user?.name || 'Guest Session'
+  const userEmail = session?.user?.email || 'Configure OAuth to enforce login'
+  const initials = userName
+    .split(' ')
+    .map((part) => part[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase()
 
   return (
     <div className="min-h-screen bg-background flex">
@@ -36,7 +47,7 @@ export default function AppLayout({
         {/* Nav */}
         <nav className="flex-1 p-4 space-y-1">
           {sidebarLinks.map((link) => {
-            const isActive = pathname === link.href || 
+            const isActive = pathname === link.href ||
               (link.href !== '/app' && pathname.startsWith(link.href))
             return (
               <Link
@@ -59,13 +70,29 @@ export default function AppLayout({
         {/* User */}
         <div className="p-4 border-t border-sidebar-border">
           <div className="flex items-center gap-3 px-3 py-2">
-            <div className="w-8 h-8 rounded-full bg-sidebar-accent flex items-center justify-center">
-              <User className="w-4 h-4" />
-            </div>
+            <Avatar className="h-8 w-8">
+              <AvatarImage alt={userName} src={session?.user?.image ?? undefined} />
+              <AvatarFallback>{initials || 'AR'}</AvatarFallback>
+            </Avatar>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">Demo User</p>
-              <p className="text-xs text-muted-foreground truncate">demo@example.com</p>
+              <p className="text-sm font-medium truncate">{userName}</p>
+              <p className="text-xs text-muted-foreground truncate">{userEmail}</p>
             </div>
+          </div>
+          <div className="mt-3 px-3">
+            {isAuthenticated ? (
+              <Button className="w-full justify-start" onClick={() => void signOut()} variant="ghost">
+                <LogOut className="mr-2 h-4 w-4" />
+                Sign Out
+              </Button>
+            ) : (
+              <Button asChild className="w-full justify-start" variant="ghost">
+                <Link href="/login">
+                  <LogIn className="mr-2 h-4 w-4" />
+                  Sign In
+                </Link>
+              </Button>
+            )}
           </div>
         </div>
       </aside>

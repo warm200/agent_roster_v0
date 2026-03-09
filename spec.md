@@ -21,6 +21,9 @@ Implemented in the current mock app:
 - Run client helpers now exist in `services/runs.api.ts`
 - Stripe SDK and shared server bootstrap now exist in `server/lib/stripe.ts`
 - Auth deps, env placeholders, bootstrap config, and auth route now exist for `next-auth`
+- Auth client context now exists in `lib/auth-context.tsx` and is mounted in `app/providers.tsx`
+- Login page now exists at `app/login/page.tsx`
+- `proxy.ts` now protects `/app/*` when OAuth providers are configured
 - Local PostgreSQL Docker Compose file now exists in `docker-compose.yml`
 - Fresh local Postgres verification now passes: migrate + seed succeed against a clean database
 - Run provider scaffolding now exists under `server/providers/` with mock and openclaw stubs
@@ -48,7 +51,7 @@ Implemented in the current mock app:
 - `useRunStatus(runId)` now exists and polls `/api/me/runs/:id` until active runs reach a terminal state
 
 Still not implemented:
-- Real auth UX/session enforcement, production Stripe/Telegram operations, provider abstraction, and a real run backend
+- Production auth provider setup, production Stripe/Telegram operations, provider abstraction, and a real run backend
 - Remaining frontend service-layer modules and hardened production contracts
 
 ---
@@ -165,7 +168,7 @@ v0_version/                        # Next.js 16 full-stack
 
 | Component | Status | Changes Needed |
 |-----------|--------|----------------|
-| `header.tsx` | Keep | Add auth-aware state (login/logout) |
+| `header.tsx` | Keep | Done: auth-aware sign-in/sign-out state now renders from `AuthContext` |
 | `agent-card.tsx` | Keep | None |
 | `risk-badge.tsx` | Keep | None |
 | `bundle-risk-summary.tsx` | Keep | None |
@@ -289,7 +292,7 @@ The initial API routes were broken. Most read/write mock routes have now been re
 | `lib/auth-context.tsx` | React AuthContext (user, login, logout) |
 | `app/api/auth/[...nextauth]/route.ts` | NextAuth route handler |
 | `app/login/page.tsx` | Login page (simple OAuth buttons) |
-| `middleware.ts` | Protect `/app/*` routes → redirect to login |
+| `proxy.ts` | Protect `/app/*` routes → redirect to login |
 
 ### 6.2 Frontend API Service Layer
 
@@ -452,8 +455,8 @@ Normalize current mock routes into final service-backed PRD routes. Several func
 Wire pages to real API. Keep all existing UI.
 
 1. [ ] Create `services/*.api.ts` files (7 service clients; `api.ts`, `preview.api.ts`, `orders.api.ts`, and `runs.api.ts` now exist)
-2. [ ] Add `lib/auth-context.tsx` + `AuthProvider` in `providers.tsx`
-3. [ ] Add `middleware.ts` for `/app/*` route protection
+2. [x] Add `lib/auth-context.tsx` + `AuthProvider` in `providers.tsx`
+3. [x] Add `proxy.ts` for `/app/*` route protection
 4. [x] Wire CartContext to API (`addItem` → `POST /api/cart/items`, etc.) for the mock flow
 5. [x] Wire Catalog page to `GET /api/agents`
 6. [x] Wire Agent Detail to `GET /api/agents/:slug`
@@ -474,12 +477,12 @@ Wire pages to real API. Keep all existing UI.
 2. [x] Add `RunResultsPanel` component (summary + artifacts download)
 3. [x] Add runtime disclosure to Run Detail (usesRealWorkspace, usesTools, networkEnabled)
 4. [x] Add combined risk display to Run Detail
-5. [ ] Add login page (`app/login/page.tsx`)
-6. [ ] Add auth-aware header (show user name, login/logout)
+5. [x] Add login page (`app/login/page.tsx`)
+6. [x] Add auth-aware header (show user name, login/logout)
 7. [ ] Add loading skeletons to all data-fetching pages
 8. [ ] Add error boundaries
 9. [ ] End-to-end flow test
-10. [ ] Gate pass: lint + typecheck + build green
+10. [x] Gate pass: lint + typecheck + build green
 
 ---
 
@@ -591,6 +594,6 @@ All items from PRD §18, mapped to implementation:
 | Run status/logs/results displayed | Current | RunLogsPanel + RunResultsPanel shipped |
 | Every agent version has risk | Phase 1 | Risk engine + seed data |
 | Cart/order/run show bundle risk | Phase 3-4 | Already done in UI; wire to real data |
-| Run is post-purchase only | Phase 3 | Auth middleware + order check |
+| Run is post-purchase only | Phase 3 | Auth proxy + order check |
 | Run experience in-product | Current | Already done |
 | Provider stays backend-internal | Phase 2 | API responses exclude `provider_*` fields |

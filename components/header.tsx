@@ -3,9 +3,11 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Button } from '@/components/ui/button'
-import { ShoppingCart, User, Menu, Bot } from 'lucide-react'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { ShoppingCart, User, Menu, Bot, LogIn, LogOut } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useCart } from '@/lib/cart-context'
+import { useAuth } from '@/lib/auth-context'
 import {
   Sheet,
   SheetContent,
@@ -20,7 +22,16 @@ const navLinks = [
 export function Header() {
   const pathname = usePathname()
   const { items } = useCart()
+  const { isAuthenticated, session, signOut, status } = useAuth()
   const cartCount = items.length
+  const userName = session?.user?.name || 'Account'
+  const userEmail = session?.user?.email || ''
+  const initials = userName
+    .split(' ')
+    .map((part) => part[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase()
 
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -65,11 +76,39 @@ export function Header() {
               </Link>
             </Button>
 
-            <Button variant="ghost" size="icon" asChild className="hidden md:flex">
-              <Link href="/app">
+            {status === 'loading' ? (
+              <Button disabled size="icon" variant="ghost" className="hidden md:flex">
                 <User className="w-5 h-5" />
-              </Link>
-            </Button>
+              </Button>
+            ) : isAuthenticated ? (
+              <>
+                <Button variant="ghost" asChild className="hidden md:flex px-2">
+                  <Link href="/app" className="flex items-center gap-2">
+                    <Avatar className="h-8 w-8">
+                      <AvatarImage alt={userName} src={session?.user?.image ?? undefined} />
+                      <AvatarFallback>{initials || 'AR'}</AvatarFallback>
+                    </Avatar>
+                    <span className="max-w-32 truncate text-sm">{userName}</span>
+                  </Link>
+                </Button>
+                <Button
+                  className="hidden md:flex"
+                  onClick={() => void signOut()}
+                  size="sm"
+                  variant="ghost"
+                >
+                  <LogOut className="mr-2 h-4 w-4" />
+                  Sign Out
+                </Button>
+              </>
+            ) : (
+              <Button variant="ghost" asChild className="hidden md:flex">
+                <Link href="/login">
+                  <LogIn className="mr-2 h-4 w-4" />
+                  Sign In
+                </Link>
+              </Button>
+            )}
 
             {/* Mobile menu */}
             <Sheet>
@@ -94,12 +133,41 @@ export function Header() {
                       {link.label}
                     </Link>
                   ))}
-                  <Link
-                    href="/app"
-                    className="px-4 py-3 text-sm rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary/50"
-                  >
-                    Account
-                  </Link>
+                  {isAuthenticated ? (
+                    <div className="mt-4 rounded-lg border border-border bg-secondary/30 p-4">
+                      <div className="flex items-center gap-3">
+                        <Avatar className="h-9 w-9">
+                          <AvatarImage alt={userName} src={session?.user?.image ?? undefined} />
+                          <AvatarFallback>{initials || 'AR'}</AvatarFallback>
+                        </Avatar>
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium">{userName}</p>
+                          {userEmail ? (
+                            <p className="truncate text-xs text-muted-foreground">{userEmail}</p>
+                          ) : null}
+                        </div>
+                      </div>
+                      <div className="mt-3 grid gap-2">
+                        <Link
+                          href="/app"
+                          className="px-4 py-3 text-sm rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary/50"
+                        >
+                          Account
+                        </Link>
+                        <Button onClick={() => void signOut()} variant="outline">
+                          <LogOut className="mr-2 h-4 w-4" />
+                          Sign Out
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <Link
+                      href="/login"
+                      className="px-4 py-3 text-sm rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary/50"
+                    >
+                      Sign In
+                    </Link>
+                  )}
                 </nav>
               </SheetContent>
             </Sheet>

@@ -1,0 +1,34 @@
+import type { NextRequest } from 'next/server'
+import { NextResponse } from 'next/server'
+import { getToken } from 'next-auth/jwt'
+
+function isAuthConfigured() {
+  return Boolean(
+    (process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET) ||
+      (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET),
+  )
+}
+
+export async function proxy(request: NextRequest) {
+  if (!isAuthConfigured()) {
+    return NextResponse.next()
+  }
+
+  const token = await getToken({
+    req: request,
+    secret: process.env.AUTH_SECRET,
+  })
+
+  if (token) {
+    return NextResponse.next()
+  }
+
+  const loginUrl = new URL('/login', request.url)
+  loginUrl.searchParams.set('callbackUrl', `${request.nextUrl.pathname}${request.nextUrl.search}`)
+
+  return NextResponse.redirect(loginUrl)
+}
+
+export const config = {
+  matcher: ['/app/:path*'],
+}
