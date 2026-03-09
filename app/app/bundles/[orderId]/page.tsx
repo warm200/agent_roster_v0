@@ -251,6 +251,17 @@ export default function BundleDetailPage({ params }: PageProps) {
               tokenStatus: order.channelConfig?.tokenStatus || 'pending',
               pairingStatus: order.channelConfig?.recipientBindingStatus || 'pending',
             }}
+            onChannelConfigChange={(channelConfig) => {
+              setOrder((currentOrder) =>
+                currentOrder
+                  ? {
+                      ...currentOrder,
+                      channelConfig,
+                    }
+                  : currentOrder,
+              )
+              setTelegramSetup(channelConfig.recipientBindingStatus === 'paired')
+            }}
             onComplete={() => setTelegramSetup(true)}
           />
         </TabsContent>

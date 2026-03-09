@@ -417,6 +417,30 @@ export function createTelegramService(options: CreateTelegramServiceOptions = {}
       }
     },
 
+    async disconnectChannel(args: { orderId: string; userId: string }) {
+      const context = await repository.ensureOrderChannelForUser(args.orderId, args.userId)
+
+      if (!context) {
+        throw new HttpError(404, 'Order not found.')
+      }
+
+      if (context.config.botTokenSecretRef) {
+        try {
+          const botToken = await secretStore.read(context.config.botTokenSecretRef)
+          await apiClient.deleteWebhook({ token: botToken })
+        } catch {
+          // Best effort only. Users should still be able to unlink a bot even if Telegram cleanup fails.
+        }
+      }
+
+      return repository.updateChannelConfig(args.orderId, {
+        botTokenSecretRef: null,
+        tokenStatus: 'pending',
+        recipientBindingStatus: 'pending',
+        recipientExternalId: null,
+      })
+    },
+
     async startPairing(args: { orderId: string; userId: string; origin: string }): Promise<TelegramPairingResult> {
       const context = await repository.ensureOrderChannelForUser(args.orderId, args.userId)
 

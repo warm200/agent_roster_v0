@@ -48,6 +48,7 @@ Implemented in the current mock app:
 - Checkout now creates Stripe checkout sessions, requires auth when OAuth providers are configured, and the success page reconciles `session_id` values back into orders
 - `POST /api/webhooks/telegram` now routes through `server/services/telegram.service.ts`
 - `POST /api/webhooks/stripe` now routes through `server/services/checkout.service.ts`
+- Telegram channel config now supports explicit disconnect/reset so users can unlink a bot and connect a different one
 - `POST /api/internal/scan` now routes through `runService.scanAgentVersion()` for deterministic risk rescans
 - Legacy `/api/bundles*` and `/api/runs*` routes now route through backend services with a request-user fallback
 - Final `/api/me/orders*` routes now exist for orders, Telegram run-channel setup, run creation, and signed-download grants
@@ -59,6 +60,7 @@ Implemented in the current mock app:
 - `useRunStatus(runId)` now exists and polls `/api/me/runs/:id` until active runs reach a terminal state
 - Cart sync, checkout, and Telegram setup flows now call shared frontend API clients instead of raw `fetch`
 - Telegram pairing now falls back to local polling mode on non-HTTPS local dev origins instead of requiring Telegram webhook registration
+- Telegram setup UI now exposes a disconnect/reset action to swap bots without editing database state manually
 - Catalog, dashboard, bundles, bundle detail, and runs pages now call shared frontend API clients instead of raw `fetch`
 - Route-level error boundaries now exist for the public shell and the authenticated app shell
 - Route-level loading skeletons now exist for catalog, agent detail, dashboard, bundles, bundle detail, runs, and run detail
@@ -190,7 +192,7 @@ v0_version/                        # Next.js 16 full-stack
 | Checkout | `app/checkout/page.tsx` | Partial: creates a Stripe checkout session via API, enforces auth when OAuth is enabled, and success reconciles the returned `session_id` into an order |
 | Dashboard | `app/app/page.tsx` | Done: API-backed stats and recent activity |
 | Bundles List | `app/app/bundles/page.tsx` | Done: API-backed bundles list |
-| Bundle Detail | `app/app/bundles/[orderId]/page.tsx` | Partial: API-backed bundle detail, Telegram setup with local polling fallback, downloads, and mock run launch |
+| Bundle Detail | `app/app/bundles/[orderId]/page.tsx` | Partial: API-backed bundle detail, Telegram setup with local polling fallback and bot reset support, downloads, and mock run launch |
 | Runs List | `app/app/runs/page.tsx` | Done: API-backed runs list with filters/loading/error states |
 | Run Detail | `app/app/runs/[runId]/page.tsx` | Done: API-backed detail with logs/results/artifacts/runtime disclosure/risk/retry/cancel |
 
@@ -295,6 +297,7 @@ The initial API routes were broken. Most read/write mock routes have now been re
 | `POST /api/me/orders/[orderId]/run-channel/telegram/validate` | Implemented | Uses `telegram.service.ts` |
 | `POST /api/me/orders/[orderId]/run-channel/telegram/pairing/start` | Implemented | Uses `telegram.service.ts` |
 | `GET /api/me/orders/[orderId]/run-channel` | Implemented | Uses `telegram.service.ts` |
+| `DELETE /api/me/orders/[orderId]/run-channel` | Implemented | Uses `telegram.service.ts` to unlink/reset the Telegram bot |
 | `POST /api/me/orders/[orderId]/runs` | Implemented | Uses `run.service.ts` |
 | `GET /api/me/orders/[orderId]/download` | Implemented | Uses `order.service.ts` for signed download grants |
 | `GET /api/me/runs` | Implemented | Uses `run.service.ts` |

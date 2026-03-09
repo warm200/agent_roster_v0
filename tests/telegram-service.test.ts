@@ -127,6 +127,53 @@ test('telegram service falls back to polling mode on local http origins', async 
   assert.match(result.pairingCommand, /^https:\/\/t\.me\/ops_bot\?start=/)
 })
 
+test('telegram service disconnects the current bot and resets the channel config', async () => {
+  process.env.NEXTAUTH_URL = 'http://localhost:3000'
+  delete process.env.TELEGRAM_WEBHOOK_URL
+
+  const { repository, context } = createRepository()
+  let deletedWebhook = false
+
+  const service = createTelegramService({
+    apiClient: {
+      async deleteWebhook() {
+        deletedWebhook = true
+      },
+      async getMe() {
+        return {
+          id: 42,
+          username: 'ops_bot',
+        }
+      },
+      async getUpdates() {
+        return []
+      },
+      async setWebhook() {},
+    },
+    repository,
+    secretSeed: 'test-secret',
+    secretStore: {
+      async read() {
+        return 'telegram-token'
+      },
+      async write() {
+        return 'secret-ref'
+      },
+    },
+  })
+
+  const config = await service.disconnectChannel({
+    orderId: context.orderId,
+    userId: context.userId,
+  })
+
+  assert.equal(deletedWebhook, true)
+  assert.equal(config.botTokenSecretRef, null)
+  assert.equal(config.tokenStatus, 'pending')
+  assert.equal(config.recipientBindingStatus, 'pending')
+  assert.equal(config.recipientExternalId, null)
+})
+
 test('telegram service pairs pending local-dev chats by polling getUpdates', async () => {
   process.env.NEXTAUTH_URL = 'http://localhost:3000'
   delete process.env.TELEGRAM_WEBHOOK_URL

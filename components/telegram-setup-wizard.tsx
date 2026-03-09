@@ -7,8 +7,9 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/componen
 import { Label } from '@/components/ui/label'
 import { Spinner } from '@/components/ui/spinner'
 import { usePairingStatus } from '@/hooks/use-pairing-status'
-import { startTelegramPairing, validateTelegramToken } from '@/services/telegram.api'
-import { CheckCircle2, Send, ArrowRight } from 'lucide-react'
+import { disconnectTelegramChannel, startTelegramPairing, validateTelegramToken } from '@/services/telegram.api'
+import type { RunChannelConfig } from '@/lib/types'
+import { CheckCircle2, Send, ArrowRight, RotateCcw } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 
@@ -21,10 +22,16 @@ interface TelegramSetupWizardProps {
     pairingStatus: 'pending' | 'paired' | 'failed'
     botUsername?: string
   }
+  onChannelConfigChange?: (channelConfig: RunChannelConfig) => void
   onComplete?: () => void
 }
 
-export function TelegramSetupWizard({ orderId, initialStatus, onComplete }: TelegramSetupWizardProps) {
+export function TelegramSetupWizard({
+  orderId,
+  initialStatus,
+  onChannelConfigChange,
+  onComplete,
+}: TelegramSetupWizardProps) {
   const [step, setStep] = useState<Step>(() => {
     if (initialStatus?.pairingStatus === 'paired') return 'ready'
     if (initialStatus?.tokenStatus === 'validated') return 'pair'
@@ -35,6 +42,7 @@ export function TelegramSetupWizard({ orderId, initialStatus, onComplete }: Tele
   const [botUsername, setBotUsername] = useState(initialStatus?.botUsername || '')
   const [isValidating, setIsValidating] = useState(false)
   const [isPairing, setIsPairing] = useState(false)
+  const [isDisconnecting, setIsDisconnecting] = useState(false)
   const [pairingCommand, setPairingCommand] = useState<string | null>(null)
   const hasCompletedRef = useRef(false)
   const { channelConfig, error: pairingError, isPolling } = usePairingStatus(orderId, isPairing)
@@ -46,6 +54,10 @@ export function TelegramSetupWizard({ orderId, initialStatus, onComplete }: Tele
   useEffect(() => {
     if (channelConfig?.tokenStatus === 'validated') {
       setStep((currentStep) => (currentStep === 'connect' ? 'pair' : currentStep))
+    }
+
+    if (channelConfig) {
+      onChannelConfigChange?.(channelConfig)
     }
 
     if (channelConfig?.recipientBindingStatus === 'paired') {
@@ -63,7 +75,7 @@ export function TelegramSetupWizard({ orderId, initialStatus, onComplete }: Tele
       setIsPairing(false)
       toast.error('Telegram pairing failed. Please try again.')
     }
-  }, [channelConfig, isPairing, onComplete])
+  }, [channelConfig, isPairing, onChannelConfigChange, onComplete])
 
   useEffect(() => {
     if (pairingError && step === 'pair') {
@@ -111,6 +123,35 @@ export function TelegramSetupWizard({ orderId, initialStatus, onComplete }: Tele
       }
     }
   }
+
+  const handleDisconnect = async () => {
+    setIsDisconnecting(true)
+
+    try {
+      const payload = await disconnectTelegramChannel(orderId)
+      setBotToken('')
+      setBotUsername('')
+      setPairingCommand(null)
+      setIsPairing(false)
+      hasCompletedRef.current = false
+      setStep('connect')
+      onChannelConfigChange?.(payload.channelConfig)
+      toast.success('Telegram bot disconnected. You can connect a different bot now.')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to disconnect Telegram bot')
+    } finally {
+      setIsDisconnecting(false)
+    }
+  }
+
+  const canDisconnect =
+    !isDisconnecting &&
+    !isValidating &&
+    !isPairing &&
+    (channelConfig?.tokenStatus === 'validated' ||
+      channelConfig?.recipientBindingStatus === 'paired' ||
+      initialStatus?.tokenStatus === 'validated' ||
+      initialStatus?.pairingStatus === 'paired')
 
   return (
     <div className="space-y-6">
@@ -250,19 +291,38 @@ export function TelegramSetupWizard({ orderId, initialStatus, onComplete }: Tele
             )}
           </CardContent>
           <CardFooter>
-            <Button onClick={handleStartPairing} disabled={isPairing || isPolling}>
-              {isPairing || isPolling ? (
-                <>
-                  <Spinner className="w-4 h-4 mr-2" />
-                  Checking pairing...
-                </>
-              ) : (
-                <>
-                  Start Pairing
-                  <ArrowRight className="w-4 h-4 ml-2" />
-                </>
-              )}
-            </Button>
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <Button onClick={handleStartPairing} disabled={isPairing || isPolling || isDisconnecting}>
+                {isPairing || isPolling ? (
+                  <>
+                    <Spinner className="w-4 h-4 mr-2" />
+                    Checking pairing...
+                  </>
+                ) : (
+                  <>
+                    Start Pairing
+                    <ArrowRight className="w-4 h-4 ml-2" />
+                  </>
+                )}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={handleDisconnect}
+                disabled={!canDisconnect}
+              >
+                {isDisconnecting ? (
+                  <>
+                    <Spinner className="w-4 h-4 mr-2" />
+                    Disconnecting...
+                  </>
+                ) : (
+                  <>
+                    <RotateCcw className="w-4 h-4 mr-2" />
+                    Disconnect Bot
+                  </>
+                )}
+              </Button>
+            </div>
           </CardFooter>
         </Card>
       )}
@@ -290,6 +350,21 @@ export function TelegramSetupWizard({ orderId, initialStatus, onComplete }: Tele
               <p>This configuration applies to all agents in this bundle.</p>
             </div>
           </CardContent>
+          <CardFooter>
+            <Button variant="outline" onClick={handleDisconnect} disabled={!canDisconnect}>
+              {isDisconnecting ? (
+                <>
+                  <Spinner className="w-4 h-4 mr-2" />
+                  Disconnecting...
+                </>
+              ) : (
+                <>
+                  <RotateCcw className="w-4 h-4 mr-2" />
+                  Connect Different Bot
+                </>
+              )}
+            </Button>
+          </CardFooter>
         </Card>
       )}
     </div>

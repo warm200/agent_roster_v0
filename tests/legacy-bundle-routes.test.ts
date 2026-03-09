@@ -4,7 +4,7 @@ import { afterEach, test } from 'node:test'
 import { NextRequest } from 'next/server'
 
 import { GET as getBundle } from '@/app/api/bundles/[orderId]/route'
-import { GET as getBundleChannel } from '@/app/api/bundles/[orderId]/channel/route'
+import { DELETE as disconnectBundleChannel, GET as getBundleChannel } from '@/app/api/bundles/[orderId]/channel/route'
 import { POST as startBundlePairing } from '@/app/api/bundles/[orderId]/channel/telegram/pairing/start/route'
 import { POST as validateBundleToken } from '@/app/api/bundles/[orderId]/channel/telegram/validate/route'
 import { GET as listBundles } from '@/app/api/bundles/route'
@@ -118,6 +118,12 @@ test('legacy bundle channel routes use telegram service', async () => {
         userId: string
       }
     | undefined
+  let disconnectInput:
+    | {
+        orderId: string
+        userId: string
+      }
+    | undefined
   let pairingInput:
     | {
         orderId: string
@@ -135,6 +141,13 @@ test('legacy bundle channel routes use telegram service', async () => {
 
   setRequestUserIdForTesting(() => 'user-test-1')
   setTelegramServiceForTesting({
+    async disconnectChannel(input: {
+      orderId: string
+      userId: string
+    }) {
+      disconnectInput = input
+      return channelConfig
+    },
     async getChannelConfig(input: {
       orderId: string
       userId: string
@@ -190,6 +203,21 @@ test('legacy bundle channel routes use telegram service', async () => {
     userId: 'user-test-1',
   })
   assert.equal(channelPayload.botUsername, 'YourAgentBot')
+
+  const disconnectResponse = await disconnectBundleChannel(
+    new NextRequest('http://localhost/api/bundles/order-test-1/channel', {
+      method: 'DELETE',
+    }),
+    { params: Promise.resolve({ orderId: 'order-test-1' }) },
+  )
+  const disconnectPayload = await disconnectResponse.json()
+
+  assert.equal(disconnectResponse.status, 200)
+  assert.deepEqual(disconnectInput, {
+    orderId: 'order-test-1',
+    userId: 'user-test-1',
+  })
+  assert.equal(disconnectPayload.channelConfig.id, 'channel-test-1')
 
   const pairingResponse = await startBundlePairing(
     new NextRequest('http://localhost/api/bundles/order-test-1/channel/telegram/pairing/start', {

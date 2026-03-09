@@ -3,6 +3,7 @@ import { afterEach, test } from 'node:test'
 
 import { NextRequest } from 'next/server'
 
+import { DELETE as disconnectChannel } from '@/app/api/me/orders/[orderId]/run-channel/route'
 import { POST as startPairing } from '@/app/api/me/orders/[orderId]/run-channel/telegram/pairing/start/route'
 import { POST as validateToken } from '@/app/api/me/orders/[orderId]/run-channel/telegram/validate/route'
 import { POST as telegramWebhook } from '@/app/api/webhooks/telegram/route'
@@ -77,6 +78,40 @@ test('telegram validate route forwards bot token to service', async () => {
   })
   assert.equal(payload.bot.username, 'ops_bot')
   assert.equal(payload.channelConfig.orderId, 'order-test-1')
+})
+
+test('telegram channel disconnect route forwards order and user to service', async () => {
+  let received:
+    | { orderId: string; userId: string }
+    | undefined
+
+  setRequestUserIdForTesting(() => 'user-test-1')
+  setTelegramServiceForTesting({
+    async disconnectChannel(input: {
+      orderId: string
+      userId: string
+    }) {
+      received = input
+      return channelConfig
+    },
+  } as never)
+
+  const response = await disconnectChannel(
+    new NextRequest('http://localhost/api/me/orders/order-test-1/run-channel', {
+      method: 'DELETE',
+    }),
+    {
+      params: Promise.resolve({ orderId: 'order-test-1' }),
+    },
+  )
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.deepEqual(received, {
+    orderId: 'order-test-1',
+    userId: 'user-test-1',
+  })
+  assert.equal(payload.channelConfig.id, 'channel-test-1')
 })
 
 test('telegram pairing start route returns service payload', async () => {
