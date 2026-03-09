@@ -42,9 +42,20 @@ export async function ensureRequestUser(userId: string, seed: RequestUserSeed = 
       name,
       authProvider,
     })
+    .onConflictDoNothing()
     .returning()
 
-  return created
+  if (created) {
+    return created
+  }
+
+  const [insertedElsewhere] = await db.select().from(users).where(eq(users.id, userId)).limit(1)
+
+  if (!insertedElsewhere) {
+    throw new HttpError(500, `Unable to resolve user "${userId}".`)
+  }
+
+  return insertedElsewhere
 }
 
 export async function getRequestUserId(request: NextRequest) {

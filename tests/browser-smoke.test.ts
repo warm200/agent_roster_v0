@@ -4,6 +4,7 @@ import { existsSync } from 'node:fs'
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import path from 'node:path'
 
+import { encode } from 'next-auth/jwt'
 import puppeteer, { type Browser, type Page } from 'puppeteer-core'
 
 const PORT = 3101
@@ -99,6 +100,30 @@ async function clickByText(page: Page, selector: string, text: string) {
   assert.equal(clicked, true, `Could not find ${selector} with text "${text}"`)
 }
 
+async function createSessionToken(overrides: Record<string, string> = {}) {
+  return encode({
+    secret: process.env.AUTH_SECRET || 'test-auth-secret',
+    token: {
+      sub: 'browser-user',
+      email: 'browser-user@example.com',
+      name: 'Browser User',
+      ...overrides,
+    },
+  })
+}
+
+async function authenticatePage(page: Page, overrides: Record<string, string> = {}) {
+  const token = await createSessionToken(overrides)
+
+  await page.setCookie({
+    name: 'next-auth.session-token',
+    value: token,
+    url: BASE_URL,
+    httpOnly: true,
+    sameSite: 'Lax',
+  })
+}
+
 if (!chromePath) {
   test('browser smoke', { skip: 'Chrome executable not found' }, () => {})
 } else {
@@ -176,6 +201,25 @@ if (!chromePath) {
         await page.goto(`${BASE_URL}/app`, { waitUntil: 'domcontentloaded' })
         await waitForText(page, 'Sign in to AgentRoster')
         assert.ok(page.url().includes('/login?callbackUrl='), page.url())
+      } finally {
+        await page.close()
+      }
+    },
+  )
+
+  test(
+    'browser smoke covers signed-in dashboard access',
+    { timeout: 120_000 },
+    async () => {
+      assert.ok(browser, 'Browser failed to launch')
+      const page = await browser.newPage()
+
+      try {
+        await authenticatePage(page)
+        await page.goto(`${BASE_URL}/app`, { waitUntil: 'domcontentloaded' })
+        await waitForText(page, 'Dashboard')
+        await waitForText(page, 'Recent Bundles')
+        assert.equal(page.url(), `${BASE_URL}/app`)
       } finally {
         await page.close()
       }
