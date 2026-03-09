@@ -56,6 +56,7 @@ Implemented in the current mock app:
 - Cart sync, checkout, and Telegram setup flows now call shared frontend API clients instead of raw `fetch`
 - Catalog, dashboard, bundles, bundle detail, and runs pages now call shared frontend API clients instead of raw `fetch`
 - Route-level error boundaries now exist for the public shell and the authenticated app shell
+- Route-level loading skeletons now exist for catalog, agent detail, dashboard, bundles, bundle detail, runs, and run detail
 
 Still not implemented:
 - Production auth provider setup, production Stripe/Telegram operations, provider abstraction, and a real run backend
@@ -486,7 +487,7 @@ Wire pages to real API. Keep all existing UI.
 4. [x] Add combined risk display to Run Detail
 5. [x] Add login page (`app/login/page.tsx`)
 6. [x] Add auth-aware header (show user name, login/logout)
-7. [ ] Add loading skeletons to all data-fetching pages
+7. [x] Add loading skeletons to all data-fetching pages
 8. [x] Add error boundaries
 9. [ ] End-to-end flow test
 10. [x] Gate pass: lint + typecheck + build green
