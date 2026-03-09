@@ -1,8 +1,10 @@
 'use client'
 
-import { createContext, useContext, useState, useCallback, type ReactNode } from 'react'
+import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react'
 import type { Agent, CartItem, BundleRisk } from './types'
 import { calculateBundleRisk } from './mock-data'
+
+const CART_STORAGE_KEY = 'agent-roster-cart:v1'
 
 interface CartContextType {
   items: CartItem[]
@@ -16,8 +18,57 @@ interface CartContextType {
 
 const CartContext = createContext<CartContextType | undefined>(undefined)
 
+function readStoredCartItems(): CartItem[] {
+  if (typeof window === 'undefined') {
+    return []
+  }
+
+  try {
+    const raw = window.localStorage.getItem(CART_STORAGE_KEY)
+
+    if (!raw) {
+      return []
+    }
+
+    const parsed = JSON.parse(raw)
+
+    if (!Array.isArray(parsed)) {
+      return []
+    }
+
+    return parsed.filter(
+      (item): item is CartItem =>
+        Boolean(
+          item &&
+            typeof item === 'object' &&
+            typeof item.id === 'string' &&
+            item.agent &&
+            typeof item.agent.id === 'string' &&
+            item.agentVersion &&
+            typeof item.agentVersion.id === 'string'
+        )
+    )
+  } catch {
+    return []
+  }
+}
+
 export function CartProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([])
+  const [hasLoadedStorage, setHasLoadedStorage] = useState(false)
+
+  useEffect(() => {
+    setItems(readStoredCartItems())
+    setHasLoadedStorage(true)
+  }, [])
+
+  useEffect(() => {
+    if (!hasLoadedStorage || typeof window === 'undefined') {
+      return
+    }
+
+    window.localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(items))
+  }, [hasLoadedStorage, items])
 
   const addItem = useCallback((agent: Agent) => {
     setItems((prev) => {

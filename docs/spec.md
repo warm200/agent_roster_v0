@@ -71,7 +71,7 @@ The API routes reference fields that don't exist on the PRD types:
 | 1    | User enters homepage                    | DONE     | |
 | 2    | Browse catalog / agent detail           | DONE     | |
 | 3    | Preview Chat to explore agent           | DONE     | Hardcoded responses per category |
-| 4    | Add agents to cart                      | DONE     | Client-side cart (no persistence across refresh) |
+| 4    | Add agents to cart                      | DONE     | Client-side cart with localStorage persistence across refresh |
 | 5    | Checkout & payment                      | PARTIAL  | Simulated 2s delay; no Stripe integration |
 | 6    | Redirect to purchased bundle detail     | PARTIAL  | Checkout now creates a mock bundle via API and redirects to the returned order ID |
 | 7    | Complete Telegram setup                 | PARTIAL  | Bundle page now calls mock Telegram validate/pairing APIs; no real Telegram backend/webhook yet |
@@ -189,7 +189,7 @@ The API routes reference fields that don't exist on the PRD types:
 
 | State Area                          | Status   | Notes |
 |-------------------------------------|----------|-------|
-| Cart state                          | DONE     | React Context; no persistence across refresh |
+| Cart state                          | DONE     | React Context with localStorage persistence across refresh |
 | Purchased bundle detail state       | PARTIAL  | Bundle detail now fetches mock order data from `/api/bundles/:orderId`; Telegram setup still uses local step UI on top of mock API responses |
 | Telegram token validate state       | PARTIAL  | Uses mock API-backed validation, but no real secret storage or external Telegram check |
 | Pairing state                       | PARTIAL  | Uses mock API-backed pairing start, but no webhook/polling worker |
@@ -275,7 +275,7 @@ The API routes reference fields that don't exist on the PRD types:
 27. [x] Build Run Results Panel component (artifacts download)
 28. [x] Add runtime disclosure to Run Detail (usesRealWorkspace, usesTools, networkEnabled)
 29. [x] Add combined risk display to Run Detail
-30. [ ] Cart persistence (localStorage or server-side)
+30. [x] Cart persistence (localStorage or server-side)
 31. [ ] Post-checkout redirect to real order ID (not hardcoded `order-demo`)
 32. [ ] Add loading/error/empty states to all data-fetching pages
 
