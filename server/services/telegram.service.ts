@@ -442,8 +442,19 @@ export function createTelegramService(options: CreateTelegramServiceOptions = {}
 }
 
 let telegramServiceSingleton: ReturnType<typeof createTelegramService> | null = null
+let telegramServiceOverride: ReturnType<typeof createTelegramService> | null = null
 
 export function getTelegramService() {
+  if (telegramServiceOverride) {
+    return telegramServiceOverride
+  }
+
   telegramServiceSingleton ??= createTelegramService()
   return telegramServiceSingleton
+}
+
+export function setTelegramServiceForTesting(
+  service: ReturnType<typeof createTelegramService> | null,
+) {
+  telegramServiceOverride = service
 }
