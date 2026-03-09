@@ -32,6 +32,7 @@ Implemented in the current mock app:
 - `GET /api/agents` and `GET /api/agents/[slug]` now route through `server/services/catalog.service.ts`
 - `/api/cart`, `/api/cart/items`, and `/api/cart/items/[id]` now route through `server/services/cart.service.ts` using the cart cookie
 - `POST /api/checkout/session` now routes through `server/services/checkout.service.ts`
+- `POST /api/webhooks/telegram` now routes through `server/services/telegram.service.ts`
 
 Still not implemented:
 - Real auth flows, Stripe checkout/webhooks, Telegram webhook/pairing worker, signed downloads, provider abstraction, real run backend
@@ -260,7 +261,7 @@ The initial API routes were broken. Most read/write mock routes have now been re
 | Endpoint | Action |
 |----------|--------|
 | `POST /api/webhooks/stripe` | New → `checkoutService.handleStripeEvent()` |
-| `POST /api/webhooks/telegram` | New → `telegramService.handleWebhook()` |
+| `POST /api/webhooks/telegram` | Implemented | Routes Telegram webhook payloads into `telegram.service.ts` |
 | `POST /api/internal/scan` | New → `runService.scanAgentVersion()` |
 
 ---
@@ -430,7 +431,7 @@ Normalize current mock routes into final service-backed PRD routes. Several func
 17. [ ] `GET /api/me/runs/[runId]` → runService
 18. [ ] `GET /api/me/runs/[runId]/logs` → runService
 19. [ ] `GET /api/me/runs/[runId]/result` → runService
-20. [ ] `POST /api/webhooks/telegram` → telegramService
+20. [x] `POST /api/webhooks/telegram` → telegramService
 21. [ ] Normalize or remove legacy/alternate routes (`/api/bundles`, `/api/telegram/verify`, `/api/runs/[runId]/steps/`)
 
 ### Phase 3: Frontend API Integration (~10 files)

@@ -441,4 +441,9 @@ export function createTelegramService(options: CreateTelegramServiceOptions = {}
   }
 }
 
-export const telegramService = createTelegramService()
+let telegramServiceSingleton: ReturnType<typeof createTelegramService> | null = null
+
+export function getTelegramService() {
+  telegramServiceSingleton ??= createTelegramService()
+  return telegramServiceSingleton
+}
