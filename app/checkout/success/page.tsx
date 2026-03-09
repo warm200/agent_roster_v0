@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
 import { CheckCircle2, ArrowRight, Bot, MessageCircle } from 'lucide-react'
 import { useCart } from '@/lib/cart-context'
+import { reconcileCheckoutSession } from '@/services/checkout.api'
 
 export default function CheckoutSuccessPage({
   searchParams,
@@ -41,15 +42,7 @@ export default function CheckoutSuccessPage({
       }
 
       try {
-        const response = await fetch(`/api/checkout/session/${params.session_id}`, {
-          method: 'POST',
-        })
-        const payload = await response.json()
-
-        if (!response.ok) {
-          throw new Error(payload.error || 'Unable to reconcile checkout session')
-        }
-
+        const payload = await reconcileCheckoutSession(params.session_id)
         if (isMounted) {
           setOrderId(payload.id)
         }

@@ -3,6 +3,7 @@
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react'
 import type { Agent, BundleRisk, Cart, CartItem } from './types'
 import { calculateBundleRisk } from './mock-data'
+import { addCartItem, removeCartItem, syncCart as syncCartItems } from '@/services/cart.api'
 
 const CART_STORAGE_KEY = 'agent-roster-cart:v1'
 
@@ -74,14 +75,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
     async function syncCart() {
       try {
-        const response = await fetch('/api/cart', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ agentIds: storedItems.map((item) => item.agent.id) }),
-        })
-        const payload = await response.json()
+        const payload = await syncCartItems(storedItems.map((item) => item.agent.id))
 
-        if (!response.ok || !isCart(payload)) {
+        if (!isCart(payload)) {
           return
         }
 
@@ -128,14 +124,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
     void (async () => {
       try {
-        const response = await fetch('/api/cart/items', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ agentId: agent.id }),
-        })
-        const payload = await response.json()
+        const payload = await addCartItem(agent.id)
 
-        if (!response.ok || !isCart(payload.cart)) {
+        if (!isCart(payload.cart)) {
           return
         }
 
@@ -151,12 +142,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
     void (async () => {
       try {
-        const response = await fetch(`/api/cart/items/${itemId}`, {
-          method: 'DELETE',
-        })
-        const payload = await response.json()
+        const payload = await removeCartItem(itemId)
 
-        if (!response.ok || !isCart(payload.cart)) {
+        if (!isCart(payload.cart)) {
           return
         }
 
@@ -172,14 +160,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
     void (async () => {
       try {
-        const response = await fetch('/api/cart', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ agentIds: [] }),
-        })
-        const payload = await response.json()
+        const payload = await syncCartItems([])
 
-        if (!response.ok || !isCart(payload)) {
+        if (!isCart(payload)) {
           return
         }
 

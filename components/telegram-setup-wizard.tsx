@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/componen
 import { Label } from '@/components/ui/label'
 import { Spinner } from '@/components/ui/spinner'
 import { usePairingStatus } from '@/hooks/use-pairing-status'
+import { startTelegramPairing, validateTelegramToken } from '@/services/telegram.api'
 import { CheckCircle2, Send, ArrowRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
@@ -79,24 +80,13 @@ export function TelegramSetupWizard({ orderId, initialStatus, onComplete }: Tele
     setIsValidating(true)
 
     try {
-      const response = await fetch(`/api/me/orders/${orderId}/run-channel/telegram/validate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ botToken }),
-      })
-      const payload = await response.json()
-
-      if (!response.ok) {
-        toast.error(payload.error || 'Unable to validate bot token')
-        return
-      }
-
+      const payload = await validateTelegramToken(orderId, botToken)
       setBotUsername(payload.botUsername || 'YourAgentBot')
       setPairingCommand(null)
       setStep('pair')
       toast.success('Bot token validated!')
-    } catch {
-      toast.error('Network error while validating bot token')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Network error while validating bot token')
     } finally {
       setIsValidating(false)
     }
@@ -107,23 +97,14 @@ export function TelegramSetupWizard({ orderId, initialStatus, onComplete }: Tele
     let pairingStarted = false
 
     try {
-      const response = await fetch(`/api/me/orders/${orderId}/run-channel/telegram/pairing/start`, {
-        method: 'POST',
-      })
-      const payload = await response.json()
-
-      if (!response.ok) {
-        toast.error(payload.error || 'Unable to start pairing')
-        return
-      }
-
+      const payload = await startTelegramPairing(orderId)
       setBotUsername(payload.botUsername || botUsername || 'YourAgentBot')
       setPairingCommand(payload.pairingCommand || null)
       setStep('pair')
       pairingStarted = true
       toast.success('Pairing started. Send /start in Telegram to finish setup.')
-    } catch {
-      toast.error('Network error while pairing Telegram')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Network error while pairing Telegram')
     } finally {
       if (!pairingStarted) {
         setIsPairing(false)

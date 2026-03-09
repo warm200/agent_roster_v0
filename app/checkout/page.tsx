@@ -13,6 +13,7 @@ import { Label } from '@/components/ui/label'
 import { Spinner } from '@/components/ui/spinner'
 import { useCart } from '@/lib/cart-context'
 import { formatPrice } from '@/lib/mock-data'
+import { createCheckoutSession } from '@/services/checkout.api'
 import {
   ChevronLeft,
   CreditCard,
@@ -38,18 +39,7 @@ export default function CheckoutPage() {
     setIsProcessing(true)
 
     try {
-      const response = await fetch('/api/checkout/session', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-      })
-
-      const payload = await response.json()
-
-      if (!response.ok) {
-        toast.error(payload.error || 'Unable to create checkout session')
-        return
-      }
-
+      const payload = await createCheckoutSession()
       if (!payload.sessionUrl) {
         toast.error('Checkout session did not return a redirect URL')
         return
@@ -57,8 +47,8 @@ export default function CheckoutPage() {
 
       toast.success('Redirecting to Stripe checkout...')
       window.location.assign(payload.sessionUrl)
-    } catch {
-      toast.error('Network error while creating checkout session')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Network error while creating checkout session')
     } finally {
       setIsProcessing(false)
     }
