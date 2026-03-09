@@ -1,23 +1,105 @@
+'use client'
+
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { RiskBadge } from '@/components/risk-badge'
 import { Badge } from '@/components/ui/badge'
-import { mockOrders, mockRuns, formatPrice } from '@/lib/mock-data'
+import { Skeleton } from '@/components/ui/skeleton'
+import { RunStatusBadge } from '@/components/run-status-badge'
+import { formatPrice } from '@/lib/mock-data'
 import { formatDate } from '@/lib/utils'
-import { 
-  Package, 
-  Play, 
-  ArrowRight, 
-  CheckCircle2, 
+import type { Agent, Order, Run, RunLog } from '@/lib/types'
+import {
+  Package,
+  Play,
+  ArrowRight,
+  CheckCircle2,
   Clock,
-  ShoppingCart
+  ShoppingCart,
+  AlertTriangle,
 } from 'lucide-react'
 
+interface BundleResponse {
+  bundles: Array<Order & { agents: Agent[] }>
+  total: number
+}
+
+interface RunSummary extends Run {
+  agents: Agent[]
+  artifactsCount: number
+  logs: RunLog[]
+  logsCount: number
+  order: Order | undefined
+}
+
+interface RunsResponse {
+  runs: RunSummary[]
+  total: number
+}
+
 export default function DashboardPage() {
-  // In real implementation, these would be fetched from API
-  const recentOrders = mockOrders.slice(0, 3)
-  const recentRuns = mockRuns.slice(0, 3)
+  const [orders, setOrders] = useState<Array<Order & { agents: Agent[] }>>([])
+  const [runs, setRuns] = useState<RunSummary[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let isMounted = true
+
+    async function loadDashboard() {
+      setIsLoading(true)
+      setLoadError(null)
+
+      try {
+        const [bundlesResponse, runsResponse] = await Promise.all([
+          fetch('/api/bundles'),
+          fetch('/api/runs'),
+        ])
+
+        const bundlesPayload: BundleResponse | { error?: string } = await bundlesResponse.json()
+        const runsPayload: RunsResponse | { error?: string } = await runsResponse.json()
+
+        if (!bundlesResponse.ok) {
+          throw new Error('error' in bundlesPayload ? bundlesPayload.error || 'Unable to load bundles' : 'Unable to load bundles')
+        }
+
+        if (!runsResponse.ok) {
+          throw new Error('error' in runsPayload ? runsPayload.error || 'Unable to load runs' : 'Unable to load runs')
+        }
+
+        if (isMounted) {
+          setOrders('bundles' in bundlesPayload ? bundlesPayload.bundles : [])
+          setRuns('runs' in runsPayload ? runsPayload.runs : [])
+        }
+      } catch (error) {
+        if (isMounted) {
+          setLoadError(error instanceof Error ? error.message : 'Unable to load dashboard')
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false)
+        }
+      }
+    }
+
+    loadDashboard()
+
+    return () => {
+      isMounted = false
+    }
+  }, [])
+
+  const stats = useMemo(
+    () => ({
+      completedRuns: runs.filter((run) => run.status === 'completed').length,
+      purchasedBundles: orders.length,
+      runningRuns: runs.filter((run) => run.status === 'running').length,
+      totalRuns: runs.length,
+    }),
+    [orders, runs]
+  )
 
   return (
     <div className="p-6 lg:p-8">
@@ -28,71 +110,46 @@ export default function DashboardPage() {
         </p>
       </div>
 
-      {/* Quick Stats */}
+      {loadError && (
+        <div className="mb-6 rounded-lg border border-red-500/30 bg-red-500/5 p-4">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="mt-0.5 h-5 w-5 text-red-400" />
+            <div>
+              <p className="font-medium text-red-400">Unable to load dashboard</p>
+              <p className="text-sm text-muted-foreground">{loadError}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-xl bg-secondary flex items-center justify-center">
-                <Package className="w-6 h-6" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold">{recentOrders.length}</p>
-                <p className="text-sm text-muted-foreground">Purchased Bundles</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-xl bg-secondary flex items-center justify-center">
-                <Play className="w-6 h-6" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold">{recentRuns.length}</p>
-                <p className="text-sm text-muted-foreground">Total Runs</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-xl bg-emerald-500/20 flex items-center justify-center">
-                <CheckCircle2 className="w-6 h-6 text-emerald-400" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold">
-                  {recentRuns.filter((r) => r.status === 'completed').length}
-                </p>
-                <p className="text-sm text-muted-foreground">Completed Runs</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-xl bg-amber-500/20 flex items-center justify-center">
-                <Clock className="w-6 h-6 text-amber-400" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold">
-                  {recentRuns.filter((r) => r.status === 'running').length}
-                </p>
-                <p className="text-sm text-muted-foreground">Running</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        <StatCard
+          icon={<Package className="w-6 h-6" />}
+          label="Purchased Bundles"
+          tone="bg-secondary"
+          value={stats.purchasedBundles}
+        />
+        <StatCard
+          icon={<Play className="w-6 h-6" />}
+          label="Total Runs"
+          tone="bg-secondary"
+          value={stats.totalRuns}
+        />
+        <StatCard
+          icon={<CheckCircle2 className="w-6 h-6 text-emerald-400" />}
+          label="Completed Runs"
+          tone="bg-emerald-500/20"
+          value={stats.completedRuns}
+        />
+        <StatCard
+          icon={<Clock className="w-6 h-6 text-amber-400" />}
+          label="Running"
+          tone="bg-amber-500/20"
+          value={stats.runningRuns}
+        />
       </div>
 
       <div className="grid lg:grid-cols-2 gap-8">
-        {/* Recent Bundles */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle>Recent Bundles</CardTitle>
@@ -104,9 +161,11 @@ export default function DashboardPage() {
             </Button>
           </CardHeader>
           <CardContent>
-            {recentOrders.length > 0 ? (
+            {isLoading ? (
+              <DashboardListSkeleton />
+            ) : orders.length > 0 ? (
               <div className="space-y-4">
-                {recentOrders.map((order) => (
+                {orders.slice(0, 3).map((order) => (
                   <Link
                     key={order.id}
                     href={`/app/bundles/${order.id}`}
@@ -143,7 +202,6 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-        {/* Recent Runs */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle>Recent Runs</CardTitle>
@@ -155,9 +213,11 @@ export default function DashboardPage() {
             </Button>
           </CardHeader>
           <CardContent>
-            {recentRuns.length > 0 ? (
+            {isLoading ? (
+              <DashboardListSkeleton />
+            ) : runs.length > 0 ? (
               <div className="space-y-4">
-                {recentRuns.map((run) => (
+                {runs.slice(0, 3).map((run) => (
                   <Link
                     key={run.id}
                     href={`/app/runs/${run.id}`}
@@ -185,19 +245,46 @@ export default function DashboardPage() {
   )
 }
 
-function RunStatusBadge({ status }: { status: string }) {
-  const variants: Record<string, { className: string; label: string }> = {
-    provisioning: { className: 'bg-blue-500/15 text-blue-400 border-blue-500/30', label: 'Provisioning' },
-    running: { className: 'bg-amber-500/15 text-amber-400 border-amber-500/30', label: 'Running' },
-    completed: { className: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30', label: 'Completed' },
-    failed: { className: 'bg-red-500/15 text-red-400 border-red-500/30', label: 'Failed' },
-  }
-
-  const variant = variants[status] || variants.failed
-
+function StatCard({
+  icon,
+  label,
+  tone,
+  value,
+}: {
+  icon: ReactNode
+  label: string
+  tone: string
+  value: number
+}) {
   return (
-    <span className={`inline-flex items-center px-2 py-1 text-xs font-medium border rounded-full ${variant.className}`}>
-      {variant.label}
-    </span>
+    <Card>
+      <CardContent className="p-6">
+        <div className="flex items-center gap-4">
+          <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${tone}`}>
+            {icon}
+          </div>
+          <div>
+            <p className="text-2xl font-bold">{value}</p>
+            <p className="text-sm text-muted-foreground">{label}</p>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+function DashboardListSkeleton() {
+  return (
+    <div className="space-y-4">
+      {Array.from({ length: 3 }).map((_, index) => (
+        <div key={index} className="flex items-center justify-between rounded-lg bg-secondary p-4">
+          <div className="space-y-2">
+            <Skeleton className="h-4 w-32" />
+            <Skeleton className="h-4 w-24" />
+          </div>
+          <Skeleton className="h-6 w-24 rounded-full" />
+        </div>
+      ))}
+    </div>
   )
 }
