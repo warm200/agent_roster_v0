@@ -73,7 +73,7 @@ The API routes reference fields that don't exist on the PRD types:
 | 3    | Preview Chat to explore agent           | DONE     | Hardcoded responses per category |
 | 4    | Add agents to cart                      | DONE     | Client-side cart (no persistence across refresh) |
 | 5    | Checkout & payment                      | PARTIAL  | Simulated 2s delay; no Stripe integration |
-| 6    | Redirect to purchased bundle detail     | PARTIAL  | Hardcoded redirect to `/app/bundles/order-demo` |
+| 6    | Redirect to purchased bundle detail     | PARTIAL  | Checkout now creates a mock bundle via API and redirects to the returned order ID |
 | 7    | Complete Telegram setup                 | PARTIAL  | UI wizard works; no real API calls |
 | 8    | Launch Run                              | PARTIAL  | Bundle page POSTs to the mock run API and redirects into the created run detail page |
 | 9    | View Run status/logs/results            | PARTIAL  | Implemented with mock data; no polling or real backend state yet |

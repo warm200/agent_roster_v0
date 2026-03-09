@@ -38,17 +38,33 @@ export default function CheckoutPage() {
     if (!canCheckout) return
 
     setIsProcessing(true)
-    
-    // Simulate payment processing
-    await new Promise((resolve) => setTimeout(resolve, 2000))
-    
-    // In real implementation, this would create a Stripe session
-    // For now, we'll simulate a successful purchase
-    clearCart()
-    toast.success('Purchase successful! Redirecting to your bundle...')
-    
-    // Redirect to the purchased bundle page
-    router.push('/app/bundles/order-demo')
+
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 1200))
+
+      const response = await fetch('/api/bundles', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          agentIds: items.map((item) => item.agent.id),
+        }),
+      })
+
+      const payload = await response.json()
+
+      if (!response.ok) {
+        toast.error(payload.error || 'Unable to complete checkout')
+        return
+      }
+
+      clearCart()
+      toast.success('Purchase successful! Redirecting to your bundle...')
+      router.push(`/app/bundles/${payload.id}`)
+    } catch {
+      toast.error('Network error while creating your bundle')
+    } finally {
+      setIsProcessing(false)
+    }
   }
 
   if (items.length === 0) {

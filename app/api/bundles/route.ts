@@ -65,6 +65,8 @@ export async function POST(request: NextRequest) {
       updatedAt: now,
       paidAt: now,
     }
+
+    mockOrders.unshift(newBundle)
     
     return NextResponse.json(newBundle, { status: 201 })
   } catch {
