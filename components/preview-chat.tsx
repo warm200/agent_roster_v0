@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Send, Bot, User } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { sendPreviewInterview } from '@/services/preview.api'
 
 interface PreviewChatProps {
   agent: Agent
@@ -42,7 +43,8 @@ export function PreviewChat({ agent }: PreviewChatProps) {
     if (!message || isTyping) return
 
     const userMessage: PreviewMessage = { role: 'user', content: message }
-    setMessages((prev) => [...prev, userMessage])
+    const nextMessages = [...messages, userMessage]
+    setMessages(nextMessages)
     setInput('')
     setIsTyping(true)
 
@@ -50,30 +52,13 @@ export function PreviewChat({ agent }: PreviewChatProps) {
 
     try {
       const [response] = await Promise.all([
-        fetch('/api/interviews/preview', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            agentId: agent.id,
-            message,
-          }),
+        sendPreviewInterview({
+          slug: agent.slug,
+          messages: nextMessages,
         }),
         new Promise((resolve) => setTimeout(resolve, typingDelayMs)),
       ])
-
-      if (!response.ok) {
-        throw new Error(`Preview request failed with status ${response.status}`)
-      }
-
-      const data = (await response.json()) as { content?: string }
-
-      if (typeof data.content !== 'string' || !data.content) {
-        throw new Error('Preview response was missing content')
-      }
-
-      const assistantContent = data.content
+      const assistantContent = response.reply
 
       setMessages((prev) => [
         ...prev,

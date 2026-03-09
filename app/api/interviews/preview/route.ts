@@ -1,79 +1,58 @@
-import { NextRequest, NextResponse } from "next/server"
-import { mockAgents } from "@/lib/mock-data"
-import type { Agent } from "@/lib/types"
+import { NextRequest, NextResponse } from 'next/server'
 
-const getPreviewResponse = (agent: Agent, message: string): string => {
-  const lower = message.toLowerCase()
+import { previewInterviewRequestSchema } from '@/lib/schemas'
+import { HttpError } from '@/server/lib/http'
+import { AgentNotFoundError, getCatalogService } from '@/server/services/catalog.service'
 
-  if (agent.category === "inbox") {
-    if (lower.includes("how") || lower.includes("work")) {
-      return "I analyze incoming emails and categorize them into four buckets: Urgent (needs immediate attention), Follow-up (requires action within 24-48 hours), FYI (informational, no action needed), and Spam. I look at sender importance, subject line keywords, and content to make these decisions."
-    }
-    if (lower.includes("priorit")) {
-      return "I prioritize based on several factors: sender relationship (VIPs, direct reports, managers), urgency indicators in the subject, deadlines mentioned in the email body, and your historical response patterns. High-priority emails get flagged immediately."
-    }
-    if (lower.includes("summar")) {
-      return "For long threads, I extract the key points: who said what, what decisions were made, what actions are pending, and any deadlines mentioned. You get a 2-3 sentence summary so you can catch up quickly."
-    }
-    return "I help manage your inbox by categorizing, prioritizing, and summarizing emails. What specific aspect would you like to know more about?"
+async function resolveAgentSlug(agentId?: string, slug?: string) {
+  if (slug) {
+    return slug
   }
 
-  if (agent.category === "calendar") {
-    if (lower.includes("focus") || lower.includes("protect")) {
-      return "I analyze your calendar patterns to identify optimal focus time blocks. I'll suggest blocking 2-3 hour chunks in the morning when you're typically most productive, and I'll decline or reschedule meeting requests that would fragment these blocks."
-    }
-    if (lower.includes("conflict") || lower.includes("reschedule")) {
-      return "When conflicts arise, I evaluate meeting importance, attendee availability, and your preferences. I'll suggest alternative times that work for all parties, minimizing back-and-forth. I never reschedule without your approval."
-    }
-    return "I optimize your calendar by protecting focus time and resolving scheduling conflicts. What would you like to know more about?"
+  if (!agentId) {
+    throw new HttpError(400, 'slug or agentId is required')
   }
 
-  if (agent.category === "docs") {
-    if (lower.includes("summar")) {
-      return "I process documents in chunks, extracting key information: main arguments, supporting data, action items, and conclusions. For a 20-page report, I can produce a 1-page executive summary highlighting what matters most."
-    }
-    if (lower.includes("extract") || lower.includes("key point")) {
-      return "I identify action items (tasks assigned to specific people), deadlines, decisions made, and open questions. These are formatted as a structured list you can immediately act on."
-    }
-    return "I summarize documents and extract key information. What type of documents are you working with?"
+  const catalogService = getCatalogService()
+  const agents = await catalogService.listAgents()
+  const agent = agents.find((candidate) => candidate.id === agentId)
+
+  if (!agent) {
+    throw new AgentNotFoundError(agentId)
   }
 
-  if (agent.category === "automation") {
-    if (lower.includes("workflow") || lower.includes("automate")) {
-      return "I can connect multiple services via their APIs. For example: when a new email arrives matching certain criteria, extract data, update a spreadsheet, and notify your team via Slack. All configured through simple rules."
-    }
-    return "I automate workflows across your tools and services. What processes are you looking to automate?"
-  }
-
-  if (agent.category === "analytics") {
-    if (lower.includes("track") || lower.includes("metric")) {
-      return "I track time spent in different applications, meeting frequency and duration, focus time vs. fragmented time, and communication patterns. All data stays local; nothing is shared externally."
-    }
-    return "I provide insights into your productivity patterns. What metrics are you most interested in?"
-  }
-
-  return `As ${agent.title}, I can help you with ${agent.category}-related tasks. Could you be more specific about what you'd like to know?`
+  return agent.slug
 }
 
 export async function POST(request: NextRequest) {
-  const body = await request.json().catch(() => null)
-  const agentId = typeof body?.agentId === "string" ? body.agentId.trim() : ""
-  const message = typeof body?.message === "string" ? body.message.trim() : ""
+  try {
+    const body = await request.json().catch(() => null)
+    const parsed = previewInterviewRequestSchema.safeParse(body)
 
-  if (!agentId || !message) {
-    return NextResponse.json(
-      { error: "agentId and message are required" },
-      { status: 400 }
-    )
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: 'slug or agentId plus messages are required' },
+        { status: 400 },
+      )
+    }
+
+    const agentSlug = await resolveAgentSlug(parsed.data.agentId, parsed.data.slug)
+    const catalogService = getCatalogService()
+    const preview = await catalogService.previewInterview({
+      agentSlug,
+      messages: parsed.data.messages,
+    })
+
+    return NextResponse.json(preview)
+  } catch (error) {
+    if (error instanceof AgentNotFoundError) {
+      return NextResponse.json({ error: error.message }, { status: 404 })
+    }
+
+    if (error instanceof HttpError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
+
+    return NextResponse.json({ error: 'Unable to generate preview reply' }, { status: 500 })
   }
-
-  const agent = mockAgents.find((candidate) => candidate.id === agentId)
-
-  if (!agent) {
-    return NextResponse.json({ error: "Agent not found" }, { status: 404 })
-  }
-
-  return NextResponse.json({
-    content: getPreviewResponse(agent, message),
-  })
 }

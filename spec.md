@@ -16,6 +16,7 @@ Implemented in the current mock app:
 - Initial Drizzle migration generated under `drizzle/`
 - Shared enums/constants and Zod schemas now exist in `lib/constants.ts` and `lib/schemas.ts`
 - Shared Axios client entrypoint now exists in `services/api.ts`
+- Preview chat client now exists in `services/preview.api.ts`
 - Stripe SDK and shared server bootstrap now exist in `server/lib/stripe.ts`
 - Auth deps, env placeholders, bootstrap config, and auth route now exist for `next-auth`
 - Local PostgreSQL Docker Compose file now exists in `docker-compose.yml`
@@ -30,6 +31,7 @@ Implemented in the current mock app:
 - Backend Telegram service now exists in `server/services/telegram.service.ts` with token validation, encrypted secret storage, pairing, and webhook handling
 - Backend run repository/service now exist in `server/services/run.repository.ts` and `server/services/run.service.ts` with provider-backed run sync against the current DB shape
 - `GET /api/agents` and `GET /api/agents/[slug]` now route through `server/services/catalog.service.ts`
+- `POST /api/interviews/preview` now routes through `server/services/catalog.service.ts`
 - `/api/cart`, `/api/cart/items`, and `/api/cart/items/[id]` now route through `server/services/cart.service.ts` using the cart cookie
 - `POST /api/checkout/session` now routes through `server/services/checkout.service.ts`
 - Checkout now creates Stripe checkout sessions and the success page reconciles `session_id` values back into orders
@@ -43,7 +45,7 @@ Implemented in the current mock app:
 
 Still not implemented:
 - Real auth UX/session enforcement, production Stripe/Telegram operations, provider abstraction, and a real run backend
-- Remaining frontend service-layer modules, preview endpoint, polling hooks, and hardened production contracts
+- Remaining frontend service-layer modules, polling hooks, and hardened production contracts
 
 ---
 
@@ -163,7 +165,7 @@ v0_version/                        # Next.js 16 full-stack
 | `agent-card.tsx` | Keep | None |
 | `risk-badge.tsx` | Keep | None |
 | `bundle-risk-summary.tsx` | Keep | None |
-| `preview-chat.tsx` | Keep | Still client-side mock; backend preview endpoint remains missing |
+| `preview-chat.tsx` | Keep | Done: wired to the service-backed preview endpoint |
 | `telegram-setup-wizard.tsx` | Keep | Done for mock flow; wired to bundle-scoped validate/pairing APIs |
 | `theme-provider.tsx` | Keep | None |
 | `ui/*` (50+ shadcn) | Keep | None |
@@ -241,7 +243,7 @@ The initial API routes were broken. Most read/write mock routes have now been re
 |----------|---------------|--------|
 | `GET /api/agents` | Service-backed | Uses `catalog.service.ts` with DB-first + mock fallback |
 | `GET /api/agents/[slug]` | Service-backed | Uses `catalog.service.ts` with DB-first + mock fallback |
-| `POST /api/interviews/preview` | Missing | New → `catalogService.previewInterview()` |
+| `POST /api/interviews/preview` | Implemented | Uses `catalog.service.ts` and preview request schema |
 | `GET /api/cart` | Service-backed | Uses `cart.service.ts` and cart cookie state |
 | `POST /api/cart/items` | Service-backed | Uses `cart.service.ts` and cart cookie state |
 | `DELETE /api/cart/items/[cartItemId]` | Service-backed | Uses `cart.service.ts` and cart cookie state |
@@ -421,7 +423,7 @@ Normalize current mock routes into final service-backed PRD routes. Several func
 
 1. [x] `GET /api/agents` → catalogService
 2. [x] `GET /api/agents/[slug]` → catalogService
-3. [ ] `POST /api/interviews/preview` → catalogService
+3. [x] `POST /api/interviews/preview` → catalogService
 4. [x] `GET /api/cart` → cartService
 5. [x] `POST /api/cart/items` → cartService
 6. [x] `DELETE /api/cart/items/[cartItemId]` → cartService
@@ -445,13 +447,13 @@ Normalize current mock routes into final service-backed PRD routes. Several func
 
 Wire pages to real API. Keep all existing UI.
 
-1. [ ] Create `services/*.api.ts` files (7 service clients)
+1. [ ] Create `services/*.api.ts` files (7 service clients; `api.ts` and `preview.api.ts` now exist)
 2. [ ] Add `lib/auth-context.tsx` + `AuthProvider` in `providers.tsx`
 3. [ ] Add `middleware.ts` for `/app/*` route protection
 4. [x] Wire CartContext to API (`addItem` → `POST /api/cart/items`, etc.) for the mock flow
 5. [x] Wire Catalog page to `GET /api/agents`
 6. [x] Wire Agent Detail to `GET /api/agents/:slug`
-7. [ ] Wire Preview Chat to `POST /api/interviews/preview`
+7. [x] Wire Preview Chat to `POST /api/interviews/preview`
 8. [x] Wire Checkout to `POST /api/checkout/session` → Stripe redirect
 9. [x] Wire Dashboard to final `/api/me/orders` + `/api/me/runs`
 10. [x] Wire Bundle Detail to final `/api/me/orders/*` endpoints
