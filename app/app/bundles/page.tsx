@@ -1,15 +1,63 @@
+'use client'
+
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { RiskBadge } from '@/components/risk-badge'
 import { Badge } from '@/components/ui/badge'
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty'
-import { mockOrders, formatPrice } from '@/lib/mock-data'
+import { Skeleton } from '@/components/ui/skeleton'
+import { formatPrice } from '@/lib/mock-data'
 import { formatDate } from '@/lib/utils'
-import { Package, ArrowRight, ShoppingCart, Send } from 'lucide-react'
+import type { Agent, Order } from '@/lib/types'
+import { Package, ArrowRight, ShoppingCart, Send, AlertTriangle } from 'lucide-react'
+
+interface BundlesResponse {
+  bundles: Array<Order & { agents: Agent[] }>
+  total: number
+}
 
 export default function BundlesPage() {
-  const orders = mockOrders
+  const [orders, setOrders] = useState<Array<Order & { agents: Agent[] }>>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let isMounted = true
+
+    async function loadBundles() {
+      setIsLoading(true)
+      setLoadError(null)
+
+      try {
+        const response = await fetch('/api/bundles')
+        const payload: BundlesResponse | { error?: string } = await response.json()
+
+        if (!response.ok) {
+          throw new Error('error' in payload ? payload.error || 'Unable to load bundles' : 'Unable to load bundles')
+        }
+
+        if (isMounted && 'bundles' in payload) {
+          setOrders(payload.bundles)
+        }
+      } catch (error) {
+        if (isMounted) {
+          setLoadError(error instanceof Error ? error.message : 'Unable to load bundles')
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false)
+        }
+      }
+    }
+
+    loadBundles()
+
+    return () => {
+      isMounted = false
+    }
+  }, [])
 
   return (
     <div className="p-6 lg:p-8">
@@ -20,7 +68,21 @@ export default function BundlesPage() {
         </p>
       </div>
 
-      {orders.length > 0 ? (
+      {loadError && (
+        <div className="mb-6 rounded-lg border border-red-500/30 bg-red-500/5 p-4">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="mt-0.5 h-5 w-5 text-red-400" />
+            <div>
+              <p className="font-medium text-red-400">Unable to load bundles</p>
+              <p className="text-sm text-muted-foreground">{loadError}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isLoading ? (
+        <BundlesSkeleton />
+      ) : orders.length > 0 ? (
         <div className="space-y-4">
           {orders.map((order) => (
             <Card key={order.id} className="hover:border-muted-foreground/30 transition-colors">
@@ -94,6 +156,37 @@ export default function BundlesPage() {
           </EmptyContent>
         </Empty>
       )}
+    </div>
+  )
+}
+
+function BundlesSkeleton() {
+  return (
+    <div className="space-y-4">
+      {Array.from({ length: 3 }).map((_, index) => (
+        <div key={index} className="rounded-xl border border-border p-6">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex items-start gap-4">
+              <Skeleton className="h-12 w-12 rounded-xl" />
+              <div className="space-y-3">
+                <div className="flex gap-3">
+                  <Skeleton className="h-5 w-40" />
+                  <Skeleton className="h-5 w-16 rounded-full" />
+                </div>
+                <Skeleton className="h-4 w-52" />
+                <div className="flex gap-2">
+                  <Skeleton className="h-5 w-20 rounded-full" />
+                  <Skeleton className="h-5 w-20 rounded-full" />
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-4">
+              <Skeleton className="h-6 w-24 rounded-full" />
+              <Skeleton className="h-9 w-24" />
+            </div>
+          </div>
+        </div>
+      ))}
     </div>
   )
 }
