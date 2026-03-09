@@ -14,6 +14,7 @@ Implemented in the current mock app:
 - Telegram setup wizard now uses bundle-scoped mock validate/pairing APIs
 - Drizzle/Postgres foundation files now exist: `drizzle.config.ts`, `.env.example`, `server/db/schema.ts`, `server/db/index.ts`, `server/db/seed.ts`
 - Initial Drizzle migration generated under `drizzle/`
+- Shared enums/constants and Zod schemas now exist in `lib/constants.ts` and `lib/schemas.ts`
 
 Still not implemented:
 - Real auth, a running database with applied migrations, Stripe, Telegram webhook/pairing worker, signed downloads, provider abstraction, real run backend
@@ -364,8 +365,8 @@ Port infrastructure into current project. Current slice landed the DB config/sch
 4. [x] Port `server/db/index.ts` (Drizzle client init)
 5. [x] Port `server/db/seed.ts` + merge 5 current agents as seed data
 6. [x] Add `.env.example` with all vars
-7. [ ] Port `lib/schemas.ts` (Zod validation from shared/)
-8. [ ] Port `lib/constants.ts` (enums from shared/)
+7. [x] Port `lib/schemas.ts` (Zod validation from shared/)
+8. [x] Port `lib/constants.ts` (enums from shared/)
 9. [x] Install DB deps: `drizzle-orm`, `drizzle-kit`, `pg`, `tsx`
 10. [ ] Install remaining backend deps: `@auth/core`, `@auth/drizzle-adapter`, `stripe`, `axios`
 11. [x] Generate initial Drizzle migration under `drizzle/`
