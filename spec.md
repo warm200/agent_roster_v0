@@ -19,9 +19,10 @@ Implemented in the current mock app:
 - Stripe SDK and shared server bootstrap now exist in `server/lib/stripe.ts`
 - Auth deps, env placeholders, bootstrap config, and auth route now exist for `next-auth`
 - Local PostgreSQL Docker Compose file now exists in `docker-compose.yml`
+- Fresh local Postgres verification now passes: migrate + seed succeed against a clean database
 
 Still not implemented:
-- Real auth, a running database with applied migrations, Stripe, Telegram webhook/pairing worker, signed downloads, provider abstraction, real run backend
+- Real auth flows, Stripe checkout/webhooks, Telegram webhook/pairing worker, signed downloads, provider abstraction, real run backend
 - PRD endpoint path normalization (`/api/me/orders`, `/api/me/runs`) and production service contracts
 
 ---
@@ -361,7 +362,7 @@ Or use React Server Components where appropriate (catalog pages are good candida
 
 ### Phase 0: Foundation (~15 files)
 
-Port infrastructure into current project. Current slice landed the DB config/schema/bootstrap/seed scaffold, but migrations and a running Postgres instance are still pending.
+Port infrastructure into current project. The local DB config/schema/bootstrap stack is now in place and verified against a clean Postgres database.
 
 1. [x] Add `docker-compose.yml` (PostgreSQL 16)
 2. [x] Add `drizzle.config.ts`
@@ -377,7 +378,7 @@ Port infrastructure into current project. Current slice landed the DB config/sch
 12. [x] Add `server/lib/auth.ts` (Auth.js / next-auth config)
 13. [x] Add `server/lib/stripe.ts` (Stripe client init)
 14. [x] Add `app/api/auth/[...nextauth]/route.ts`
-15. [ ] Verify: `docker compose up -d && npm run db:migrate && npm run db:seed` works
+15. [x] Verify: `docker compose up -d && npm run db:migrate && npm run db:seed` works
 16. [x] Add `services/api.ts` (Axios shared instance)
 
 ### Phase 1: Port Backend Services (~7 files, ~2000 LOC)
