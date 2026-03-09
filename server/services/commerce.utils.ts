@@ -131,15 +131,7 @@ export function buildAgentSnapshot(row: SaleRow): Agent {
 }
 
 export function buildCartSnapshot(cart: CartRecord, rows: CartItemRow[]): Cart {
-  const items = rows.map((row) =>
-    cartItemSchema.parse({
-      id: row.cartItem.id,
-      cartId: row.cartItem.cartId,
-      agent: buildAgentSnapshot(row),
-      agentVersion: buildAgentVersionSnapshot(row),
-      createdAt: row.cartItem.createdAt.toISOString(),
-    }),
-  ) as CartItem[]
+  const items = rows.map(buildCartItemSnapshot) as CartItem[]
 
   return cartSchema.parse({
     id: cart.id,
@@ -172,6 +164,16 @@ export function buildRunChannelConfigSnapshot(
     appliesToScope: config.appliesToScope,
     createdAt: config.createdAt.toISOString(),
     updatedAt: config.updatedAt.toISOString(),
+  })
+}
+
+export function buildCartItemSnapshot(row: CartItemRow): CartItem {
+  return cartItemSchema.parse({
+    id: row.cartItem.id,
+    cartId: row.cartItem.cartId,
+    agent: buildAgentSnapshot(row),
+    agentVersion: buildAgentVersionSnapshot(row),
+    createdAt: row.cartItem.createdAt.toISOString(),
   })
 }
 

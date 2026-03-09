@@ -24,6 +24,7 @@ Implemented in the current mock app:
 - Initial backend risk-engine utility now exists in `server/lib/risk-engine.ts`
 - Backend commerce snapshot/mapping utilities now exist in `server/services/commerce.utils.ts`
 - Backend catalog service now exists in `server/services/catalog.service.ts` with DB + mock fallback logic
+- Backend cart service now exists in `server/services/cart.service.ts` with DB-backed cart summary recalculation
 
 Still not implemented:
 - Real auth flows, Stripe checkout/webhooks, Telegram webhook/pairing worker, signed downloads, provider abstraction, real run backend
@@ -390,7 +391,7 @@ Port infrastructure into current project. The local DB config/schema/bootstrap s
 Port all services from agent_roster. Adapt imports. Test with curl/httpie.
 
 1. [x] Port `server/services/catalog.service.ts`
-2. [ ] Port `server/services/cart.service.ts`
+2. [x] Port `server/services/cart.service.ts`
 3. [ ] Port `server/services/checkout.service.ts`
 4. [ ] Port `server/services/order.service.ts`
 5. [ ] Port `server/services/telegram.service.ts`
