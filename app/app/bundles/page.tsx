@@ -3,10 +3,10 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { RiskBadge } from '@/components/risk-badge'
 import { Badge } from '@/components/ui/badge'
-import { Empty } from '@/components/ui/empty'
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty'
 import { mockOrders, formatPrice } from '@/lib/mock-data'
 import { formatDate } from '@/lib/utils'
-import { Package, ArrowRight, ShoppingCart, CheckCircle2, Send } from 'lucide-react'
+import { Package, ArrowRight, ShoppingCart, Send } from 'lucide-react'
 
 export default function BundlesPage() {
   const orders = mockOrders
@@ -76,17 +76,22 @@ export default function BundlesPage() {
           ))}
         </div>
       ) : (
-        <Empty
-          icon={Package}
-          title="No bundles yet"
-          description="Purchase agents to see them here."
-        >
-          <Button asChild>
-            <Link href="/agents">
-              <ShoppingCart className="w-4 h-4 mr-2" />
-              Browse Agents
-            </Link>
-          </Button>
+        <Empty>
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <Package className="w-6 h-6" />
+            </EmptyMedia>
+            <EmptyTitle>No bundles yet</EmptyTitle>
+            <EmptyDescription>Purchase agents to see them here.</EmptyDescription>
+          </EmptyHeader>
+          <EmptyContent>
+            <Button asChild>
+              <Link href="/agents">
+                <ShoppingCart className="w-4 h-4 mr-2" />
+                Browse Agents
+              </Link>
+            </Button>
+          </EmptyContent>
         </Empty>
       )}
     </div>

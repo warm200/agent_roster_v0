@@ -10,7 +10,7 @@ import { Separator } from '@/components/ui/separator'
 import { useCart } from '@/lib/cart-context'
 import { formatPrice } from '@/lib/mock-data'
 import { Trash2, ShoppingCart, ArrowRight, Package } from 'lucide-react'
-import { Empty } from '@/components/ui/empty'
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty'
 
 export default function CartPage() {
   const { items, bundleRisk, totalCents, removeItem } = useCart()
@@ -23,14 +23,21 @@ export default function CartPage() {
         <h1 className="text-3xl font-bold text-foreground mb-8">Shopping Cart</h1>
 
         {items.length === 0 ? (
-          <Empty
-            icon={ShoppingCart}
-            title="Your cart is empty"
-            description="Browse our agent catalog to find the perfect tools for your workflows."
-          >
-            <Button asChild>
-              <Link href="/agents">Browse Agents</Link>
-            </Button>
+          <Empty>
+            <EmptyHeader>
+              <EmptyMedia variant="icon">
+                <ShoppingCart className="w-6 h-6" />
+              </EmptyMedia>
+              <EmptyTitle>Your cart is empty</EmptyTitle>
+              <EmptyDescription>
+                Browse our agent catalog to find the perfect tools for your workflows.
+              </EmptyDescription>
+            </EmptyHeader>
+            <EmptyContent>
+              <Button asChild>
+                <Link href="/agents">Browse Agents</Link>
+              </Button>
+            </EmptyContent>
           </Empty>
         ) : (
           <div className="grid lg:grid-cols-3 gap-8">

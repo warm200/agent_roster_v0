@@ -41,13 +41,17 @@ export default function BundleDetailPage({ params }: PageProps) {
   }
 
   const orderRuns = mockRuns.filter((r) => r.orderId === order.id)
+  const hasTelegramSetup =
+    telegramSetup ||
+    (
+      order.channelConfig?.tokenStatus === 'validated' &&
+      order.channelConfig?.recipientBindingStatus === 'paired'
+    )
   
-  const canLaunchRun = order.status === 'paid' && 
-    (order.channelConfig?.tokenStatus === 'validated' && 
-     order.channelConfig?.recipientBindingStatus === 'paired') || telegramSetup
+  const canLaunchRun = order.status === 'paid' && hasTelegramSetup
 
   const handleLaunchRun = () => {
-    toast.success('Run started! Redirecting to run details...')
+    toast.success('Run launch request accepted. Run history uses mock data in this prototype.')
     // In real implementation, this would create a run via API
   }
 

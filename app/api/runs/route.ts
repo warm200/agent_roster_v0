@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server"
-import { mockRuns, mockAgents } from "@/lib/mock-data"
+import { mockRuns } from "@/lib/mock-data"
+import { createMockRun, getOrderById, getRunSummary } from "@/lib/mock-selectors"
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   
   const status = searchParams.get("status")
-  const agentId = searchParams.get("agentId")
-  const bundleId = searchParams.get("bundleId")
+  const orderId = searchParams.get("orderId")
   const limit = parseInt(searchParams.get("limit") || "50")
   const offset = parseInt(searchParams.get("offset") || "0")
   
@@ -18,30 +18,19 @@ export async function GET(request: NextRequest) {
   }
   
   // Filter by agent
-  if (agentId) {
-    runs = runs.filter(run => run.agentId === agentId)
-  }
-  
-  // Filter by bundle
-  if (bundleId) {
-    runs = runs.filter(run => run.bundleId === bundleId)
+  if (orderId) {
+    runs = runs.filter(run => run.orderId === orderId)
   }
   
   // Sort by date (newest first)
-  runs.sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime())
+  runs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
   
   // Paginate
   const total = runs.length
   runs = runs.slice(offset, offset + limit)
   
-  // Enrich with agent data
-  const enrichedRuns = runs.map(run => ({
-    ...run,
-    agent: mockAgents.find(a => a.id === run.agentId)
-  }))
-  
   return NextResponse.json({
-    runs: enrichedRuns,
+    runs: runs.map(getRunSummary),
     total,
     limit,
     offset,
@@ -52,31 +41,44 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { agentId, bundleId, triggerMessage } = body
+    const { orderId } = body
     
-    if (!agentId || !bundleId) {
+    if (!orderId) {
       return NextResponse.json(
-        { error: "agentId and bundleId are required" },
+        { error: "orderId is required" },
+        { status: 400 }
+      )
+    }
+
+    const order = getOrderById(orderId)
+
+    if (!order) {
+      return NextResponse.json(
+        { error: "Order not found" },
+        { status: 404 }
+      )
+    }
+
+    if (order.status !== "paid") {
+      return NextResponse.json(
+        { error: "Only paid bundles can launch runs" },
+        { status: 400 }
+      )
+    }
+
+    if (
+      order.channelConfig?.tokenStatus !== "validated" ||
+      order.channelConfig?.recipientBindingStatus !== "paired"
+    ) {
+      return NextResponse.json(
+        { error: "Telegram setup must be completed before launching a run" },
         { status: 400 }
       )
     }
     
-    // Mock run creation
-    const newRun = {
-      id: `run_${Date.now()}`,
-      bundleId,
-      agentId,
-      status: "queued" as const,
-      startedAt: new Date(),
-      completedAt: null,
-      durationSeconds: null,
-      triggerType: "manual" as const,
-      triggerMessage: triggerMessage || null,
-      steps: [],
-      cost: null
-    }
+    const newRun = createMockRun(order)
     
-    return NextResponse.json(newRun, { status: 201 })
+    return NextResponse.json(getRunSummary(newRun), { status: 201 })
   } catch {
     return NextResponse.json(
       { error: "Invalid request body" },

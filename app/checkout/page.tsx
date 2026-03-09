@@ -11,6 +11,7 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/componen
 import { Separator } from '@/components/ui/separator'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
+import { Spinner } from '@/components/ui/spinner'
 import { useCart } from '@/lib/cart-context'
 import { formatPrice } from '@/lib/mock-data'
 import { 
@@ -19,10 +20,9 @@ import {
   ShieldCheck,
   Send,
   Play,
-  Download,
-  Spinner
+  Download
 } from 'lucide-react'
-import { Empty } from '@/components/ui/empty'
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty'
 import { toast } from 'sonner'
 
 export default function CheckoutPage() {
@@ -56,14 +56,21 @@ export default function CheckoutPage() {
       <div className="min-h-screen bg-background">
         <Header />
         <div className="container mx-auto px-4 py-8">
-          <Empty
-            icon={CreditCard}
-            title="Nothing to checkout"
-            description="Your cart is empty. Add some agents before checking out."
-          >
-            <Button asChild>
-              <Link href="/agents">Browse Agents</Link>
-            </Button>
+          <Empty>
+            <EmptyHeader>
+              <EmptyMedia variant="icon">
+                <CreditCard className="w-6 h-6" />
+              </EmptyMedia>
+              <EmptyTitle>Nothing to checkout</EmptyTitle>
+              <EmptyDescription>
+                Your cart is empty. Add some agents before checking out.
+              </EmptyDescription>
+            </EmptyHeader>
+            <EmptyContent>
+              <Button asChild>
+                <Link href="/agents">Browse Agents</Link>
+              </Button>
+            </EmptyContent>
           </Empty>
         </div>
       </div>

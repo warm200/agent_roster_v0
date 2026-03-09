@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
 import { mockAgents } from "@/lib/mock-data"
+import type { Agent } from "@/lib/types"
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { agentIds, email, telegramChatId } = body
+    const { agentIds, email } = body
     
     if (!agentIds || !Array.isArray(agentIds) || agentIds.length === 0) {
       return NextResponse.json(
@@ -21,8 +22,11 @@ export async function POST(request: NextRequest) {
     }
     
     // Validate all agents exist
-    const agents = agentIds.map((id: string) => mockAgents.find(a => a.id === id))
-    if (agents.some(a => !a)) {
+    const agents = agentIds
+      .map((id: string) => mockAgents.find((agent) => agent.id === id))
+      .filter((agent): agent is Agent => Boolean(agent))
+
+    if (agents.length !== agentIds.length) {
       return NextResponse.json(
         { error: "One or more agents not found" },
         { status: 400 }
@@ -30,24 +34,24 @@ export async function POST(request: NextRequest) {
     }
     
     // Calculate total price
-    const subtotal = agents.reduce((sum, agent) => sum + (agent?.pricing.basePrice || 0), 0)
+    const subtotal = agents.reduce((sum, agent) => sum + agent.priceCents, 0)
     const tax = subtotal * 0.08 // 8% tax
     const total = subtotal + tax
+    const orderId = `order_${Date.now()}`
     
     // Mock order creation
     const order = {
-      id: `order_${Date.now()}`,
+      id: orderId,
       status: "pending",
       agentIds,
       email,
-      telegramChatId: telegramChatId || null,
       subtotal,
       tax,
       total,
       currency: "USD",
-      createdAt: new Date(),
+      createdAt: new Date().toISOString(),
       // In a real implementation, this would return a Stripe checkout URL
-      checkoutUrl: `/checkout/success?orderId=order_${Date.now()}`
+      checkoutUrl: `/checkout/success?orderId=${orderId}`
     }
     
     return NextResponse.json(order, { status: 201 })

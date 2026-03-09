@@ -1,23 +1,23 @@
 import { NextRequest, NextResponse } from "next/server"
-import { mockUserBundles, mockAgents } from "@/lib/mock-data"
+import { calculateBundleRisk, mockAgents, mockOrders } from "@/lib/mock-data"
+import type { Agent } from "@/lib/types"
 
 export async function GET() {
-  // Enrich bundles with agent data
-  const enrichedBundles = mockUserBundles.map(bundle => ({
-    ...bundle,
-    agents: bundle.agentIds.map(id => mockAgents.find(a => a.id === id)).filter(Boolean)
+  const bundles = mockOrders.map((order) => ({
+    ...order,
+    agents: order.items.map((item) => item.agent),
   }))
   
   return NextResponse.json({
-    bundles: enrichedBundles,
-    total: enrichedBundles.length
+    bundles,
+    total: bundles.length
   })
 }
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { agentIds, telegramChatId } = body
+    const { agentIds } = body
     
     if (!agentIds || !Array.isArray(agentIds) || agentIds.length === 0) {
       return NextResponse.json(
@@ -27,28 +27,43 @@ export async function POST(request: NextRequest) {
     }
     
     // Validate all agents exist
-    const agents = agentIds.map((id: string) => mockAgents.find(a => a.id === id))
-    if (agents.some(a => !a)) {
+    const agents = agentIds
+      .map((id: string) => mockAgents.find((agent) => agent.id === id))
+      .filter((agent): agent is Agent => Boolean(agent))
+
+    if (agents.length !== agentIds.length) {
       return NextResponse.json(
         { error: "One or more agents not found" },
         { status: 400 }
       )
     }
     
-    // Calculate total price
-    const totalPrice = agents.reduce((sum, agent) => sum + (agent?.pricing.basePrice || 0), 0)
+    const now = new Date().toISOString()
+    const amountCents = agents.reduce((sum, agent) => sum + agent.priceCents, 0)
     
-    // Mock bundle creation
+    const orderId = `order-${Date.now()}`
     const newBundle = {
-      id: `bundle_${Date.now()}`,
-      orderId: `order_${Date.now()}`,
-      userId: "user_mock",
-      agentIds,
-      telegramChatId: telegramChatId || null,
-      status: "active" as const,
-      createdAt: new Date(),
-      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
-      totalPaid: totalPrice
+      id: orderId,
+      userId: "user-1",
+      cartId: "cart-generated",
+      paymentProvider: "stripe",
+      paymentReference: null,
+      amountCents,
+      currency: "USD",
+      status: "paid" as const,
+      items: agents.map((agent) => ({
+        id: `oi-${agent.id}`,
+        orderId,
+        agent,
+        agentVersion: agent.currentVersion,
+        priceCents: agent.priceCents,
+        createdAt: now,
+      })),
+      channelConfig: null,
+      bundleRisk: calculateBundleRisk(agents),
+      createdAt: now,
+      updatedAt: now,
+      paidAt: now,
     }
     
     return NextResponse.json(newBundle, { status: 201 })

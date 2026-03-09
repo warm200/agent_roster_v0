@@ -1,283 +1,173 @@
 "use client"
 
-import { useState, useMemo } from "react"
-import Link from "next/link"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
-import { 
+import { useMemo, useState } from 'react'
+import Link from 'next/link'
+import { RunStatusBadge } from '@/components/run-status-badge'
+import { Badge } from '@/components/ui/badge'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
-import { 
-  Play, 
-  Pause, 
-  CheckCircle2, 
-  XCircle, 
-  Clock, 
-  Search,
-  Filter,
-  ArrowUpDown,
-  ExternalLink,
-  AlertTriangle
-} from "lucide-react"
-import { mockRuns, mockAgents } from "@/lib/mock-data"
-import { Run, RunStatus } from "@/lib/types"
+} from '@/components/ui/select'
+import { getRunAgents } from '@/lib/mock-selectors'
+import { mockRuns } from '@/lib/mock-data'
+import type { RunStatus } from '@/lib/types'
+import { formatDateTime } from '@/lib/utils'
+import { ArrowUpDown, Filter, Play, Search } from 'lucide-react'
 
-const statusConfig: Record<RunStatus, { icon: React.ReactNode; className: string; label: string }> = {
-  queued: {
-    icon: <Clock className="h-3.5 w-3.5" />,
-    className: "bg-muted text-muted-foreground",
-    label: "Queued"
-  },
-  running: {
-    icon: <Play className="h-3.5 w-3.5" />,
-    className: "bg-blue-500/20 text-blue-400",
-    label: "Running"
-  },
-  awaiting_approval: {
-    icon: <Pause className="h-3.5 w-3.5" />,
-    className: "bg-amber-500/20 text-amber-400",
-    label: "Awaiting Approval"
-  },
-  completed: {
-    icon: <CheckCircle2 className="h-3.5 w-3.5" />,
-    className: "bg-emerald-500/20 text-emerald-400",
-    label: "Completed"
-  },
-  failed: {
-    icon: <XCircle className="h-3.5 w-3.5" />,
-    className: "bg-red-500/20 text-red-400",
-    label: "Failed"
-  },
-  cancelled: {
-    icon: <XCircle className="h-3.5 w-3.5" />,
-    className: "bg-muted text-muted-foreground",
-    label: "Cancelled"
-  }
-}
+type RunFilter = 'all' | RunStatus
+type SortKey = 'date' | 'status'
 
-function RunStatusBadge({ status }: { status: RunStatus }) {
-  const config = statusConfig[status]
-  return (
-    <Badge variant="secondary" className={`gap-1 ${config.className}`}>
-      {config.icon}
-      {config.label}
-    </Badge>
-  )
-}
-
-function formatDuration(seconds?: number): string {
-  if (!seconds) return "-"
-  if (seconds < 60) return `${seconds}s`
-  const mins = Math.floor(seconds / 60)
-  const secs = seconds % 60
-  return `${mins}m ${secs}s`
-}
-
-function formatDate(date: Date): string {
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit"
-  }).format(date)
+function getStatusCount(status: RunStatus) {
+  return mockRuns.filter((run) => run.status === status).length
 }
 
 export default function RunsPage() {
-  const [searchQuery, setSearchQuery] = useState("")
-  const [statusFilter, setStatusFilter] = useState<string>("all")
-  const [sortBy, setSortBy] = useState<"date" | "status">("date")
+  const [searchQuery, setSearchQuery] = useState('')
+  const [statusFilter, setStatusFilter] = useState<RunFilter>('all')
+  const [sortBy, setSortBy] = useState<SortKey>('date')
 
   const filteredRuns = useMemo(() => {
-    let runs = [...mockRuns]
+    const query = searchQuery.trim().toLowerCase()
 
-    // Filter by search
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase()
-      runs = runs.filter(run => {
-        const agent = mockAgents.find(a => a.id === run.agentId)
-        return (
-          run.id.toLowerCase().includes(query) ||
-          agent?.name.toLowerCase().includes(query)
-        )
+    return [...mockRuns]
+      .filter((run) => {
+        if (statusFilter !== 'all' && run.status !== statusFilter) {
+          return false
+        }
+
+        if (!query) {
+          return true
+        }
+
+        const searchable = [run.id, run.orderId, ...getRunAgents(run).map((agent) => agent.title)]
+          .join(' ')
+          .toLowerCase()
+
+        return searchable.includes(query)
       })
-    }
+      .sort((left, right) => {
+        if (sortBy === 'status') {
+          return left.status.localeCompare(right.status)
+        }
 
-    // Filter by status
-    if (statusFilter !== "all") {
-      runs = runs.filter(run => run.status === statusFilter)
-    }
-
-    // Sort
-    runs.sort((a, b) => {
-      if (sortBy === "date") {
-        return b.startedAt.getTime() - a.startedAt.getTime()
-      }
-      return a.status.localeCompare(b.status)
-    })
-
-    return runs
-  }, [searchQuery, statusFilter, sortBy])
-
-  const runsByStatus = useMemo(() => {
-    return mockRuns.reduce((acc, run) => {
-      acc[run.status] = (acc[run.status] || 0) + 1
-      return acc
-    }, {} as Record<string, number>)
-  }, [])
-
-  const awaitingApprovalCount = runsByStatus.awaiting_approval || 0
+        return new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()
+      })
+  }, [searchQuery, sortBy, statusFilter])
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Agent Runs</h1>
-          <p className="text-muted-foreground mt-1">
-            Monitor and manage your agent execution history
-          </p>
-        </div>
-        {awaitingApprovalCount > 0 && (
-          <Button variant="outline" className="gap-2 border-amber-500/50 text-amber-400 hover:bg-amber-500/10">
-            <AlertTriangle className="h-4 w-4" />
-            {awaitingApprovalCount} Awaiting Approval
-          </Button>
-        )}
+    <div className="space-y-6 p-6 lg:p-8">
+      <div>
+        <h1 className="text-3xl font-bold text-foreground">Run History</h1>
+        <p className="mt-2 text-muted-foreground">
+          Monitor bundle runs, review logs, and inspect generated artifacts.
+        </p>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card className="bg-card border-border">
-          <CardContent className="pt-4">
-            <div className="text-2xl font-bold">{mockRuns.length}</div>
-            <p className="text-sm text-muted-foreground">Total Runs</p>
-          </CardContent>
-        </Card>
-        <Card className="bg-card border-border">
-          <CardContent className="pt-4">
-            <div className="text-2xl font-bold text-emerald-400">
-              {runsByStatus.completed || 0}
-            </div>
-            <p className="text-sm text-muted-foreground">Completed</p>
-          </CardContent>
-        </Card>
-        <Card className="bg-card border-border">
-          <CardContent className="pt-4">
-            <div className="text-2xl font-bold text-blue-400">
-              {runsByStatus.running || 0}
-            </div>
-            <p className="text-sm text-muted-foreground">Running</p>
-          </CardContent>
-        </Card>
-        <Card className="bg-card border-border">
-          <CardContent className="pt-4">
-            <div className="text-2xl font-bold text-red-400">
-              {runsByStatus.failed || 0}
-            </div>
-            <p className="text-sm text-muted-foreground">Failed</p>
-          </CardContent>
-        </Card>
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard label="Total Runs" value={mockRuns.length.toString()} />
+        <StatCard label="Completed" value={getStatusCount('completed').toString()} tone="text-emerald-400" />
+        <StatCard label="Running" value={getStatusCount('running').toString()} tone="text-amber-400" />
+        <StatCard label="Failed" value={getStatusCount('failed').toString()} tone="text-red-400" />
       </div>
 
-      {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-4">
+      <div className="flex flex-col gap-4 lg:flex-row">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Search runs by ID or agent name..."
+            className="pl-10"
+            placeholder="Search by run ID, bundle ID, or agent title"
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10 bg-card"
+            onChange={(event) => setSearchQuery(event.target.value)}
           />
         </div>
         <div className="flex gap-2">
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-[160px] bg-card">
-              <Filter className="h-4 w-4 mr-2" />
+          <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as RunFilter)}>
+            <SelectTrigger className="w-[170px]">
+              <Filter className="mr-2 h-4 w-4" />
               <SelectValue placeholder="Status" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Status</SelectItem>
+              <SelectItem value="provisioning">Provisioning</SelectItem>
               <SelectItem value="running">Running</SelectItem>
-              <SelectItem value="awaiting_approval">Awaiting Approval</SelectItem>
               <SelectItem value="completed">Completed</SelectItem>
               <SelectItem value="failed">Failed</SelectItem>
-              <SelectItem value="queued">Queued</SelectItem>
             </SelectContent>
           </Select>
-          <Select value={sortBy} onValueChange={(v) => setSortBy(v as "date" | "status")}>
-            <SelectTrigger className="w-[140px] bg-card">
-              <ArrowUpDown className="h-4 w-4 mr-2" />
+          <Select value={sortBy} onValueChange={(value) => setSortBy(value as SortKey)}>
+            <SelectTrigger className="w-[150px]">
+              <ArrowUpDown className="mr-2 h-4 w-4" />
               <SelectValue placeholder="Sort" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="date">By Date</SelectItem>
+              <SelectItem value="date">Newest First</SelectItem>
               <SelectItem value="status">By Status</SelectItem>
             </SelectContent>
           </Select>
         </div>
       </div>
 
-      {/* Runs List */}
-      <Card className="bg-card border-border">
+      <Card>
         <CardHeader className="border-b border-border">
-          <CardTitle className="text-base font-medium">
-            {filteredRuns.length} Run{filteredRuns.length !== 1 ? "s" : ""}
+          <CardTitle className="text-base">
+            {filteredRuns.length} Run{filteredRuns.length === 1 ? '' : 's'}
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           {filteredRuns.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-center">
-              <div className="rounded-full bg-muted p-3 mb-4">
+              <div className="mb-4 rounded-full bg-secondary p-3">
                 <Play className="h-6 w-6 text-muted-foreground" />
               </div>
-              <h3 className="font-medium mb-1">No runs found</h3>
-              <p className="text-sm text-muted-foreground">
-                {searchQuery || statusFilter !== "all" 
-                  ? "Try adjusting your filters"
-                  : "Your agent runs will appear here"}
+              <h2 className="font-medium">No runs found</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Adjust your filters or launch a new run from a purchased bundle.
               </p>
             </div>
           ) : (
             <div className="divide-y divide-border">
               {filteredRuns.map((run) => {
-                const agent = mockAgents.find(a => a.id === run.agentId)
+                const agents = getRunAgents(run)
+                const [primaryAgent, ...restAgents] = agents
+
                 return (
                   <Link
                     key={run.id}
                     href={`/app/runs/${run.id}`}
-                    className="flex items-center gap-4 p-4 hover:bg-accent/50 transition-colors"
+                    className="flex flex-col gap-4 p-4 transition-colors hover:bg-secondary/40 lg:flex-row lg:items-center lg:justify-between"
                   >
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="font-mono text-sm text-muted-foreground">
-                          {run.id.slice(0, 8)}
+                    <div className="min-w-0 flex-1">
+                      <div className="mb-2 flex flex-wrap items-center gap-2">
+                        <span className="font-medium">
+                          {primaryAgent?.title ?? 'Bundle run'}
                         </span>
-                        <RunStatusBadge status={run.status} />
+                        {restAgents.length > 0 && (
+                          <Badge variant="secondary">
+                            +{restAgents.length} more
+                          </Badge>
+                        )}
+                        <span className="font-mono text-xs text-muted-foreground">{run.id}</span>
                       </div>
-                      <div className="font-medium truncate">
-                        {agent?.name || "Unknown Agent"}
-                      </div>
-                      {run.triggerMessage && (
-                        <p className="text-sm text-muted-foreground truncate mt-0.5">
-                          {run.triggerMessage}
-                        </p>
-                      )}
+                      <p className="text-sm text-muted-foreground">
+                        Bundle {run.orderId} • Created {formatDateTime(run.createdAt)}
+                      </p>
+                      <p className="mt-2 text-sm text-foreground">
+                        {run.resultSummary ?? 'Run in progress. Logs and results will update when steps complete.'}
+                      </p>
                     </div>
-                    <div className="text-right shrink-0">
-                      <div className="text-sm text-muted-foreground">
-                        {formatDate(run.startedAt)}
+
+                    <div className="flex items-center gap-4 lg:shrink-0">
+                      <div className="text-right text-sm text-muted-foreground">
+                        <div>{run.resultArtifacts.length} artifact{run.resultArtifacts.length === 1 ? '' : 's'}</div>
+                        <div>{agents.length} agent{agents.length === 1 ? '' : 's'} in bundle</div>
                       </div>
-                      <div className="text-sm text-muted-foreground">
-                        {formatDuration(run.durationSeconds)}
-                      </div>
+                      <RunStatusBadge status={run.status} />
                     </div>
-                    <ExternalLink className="h-4 w-4 text-muted-foreground shrink-0" />
                   </Link>
                 )
               })}
@@ -286,5 +176,24 @@ export default function RunsPage() {
         </CardContent>
       </Card>
     </div>
+  )
+}
+
+function StatCard({
+  label,
+  tone,
+  value,
+}: {
+  label: string
+  tone?: string
+  value: string
+}) {
+  return (
+    <Card>
+      <CardContent className="p-6">
+        <div className={`text-2xl font-bold ${tone ?? ''}`}>{value}</div>
+        <p className="text-sm text-muted-foreground">{label}</p>
+      </CardContent>
+    </Card>
   )
 }

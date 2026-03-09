@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { mockAgents, mockCategories } from "@/lib/mock-data"
+import { mockAgents } from "@/lib/mock-data"
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
@@ -9,7 +9,7 @@ export async function GET(request: NextRequest) {
   const search = searchParams.get("search")
   const featured = searchParams.get("featured")
   
-  let agents = [...mockAgents]
+  let agents = mockAgents.filter((agent) => agent.status === "active")
   
   // Filter by category
   if (category && category !== "all") {
@@ -18,27 +18,30 @@ export async function GET(request: NextRequest) {
   
   // Filter by risk level
   if (riskLevel && riskLevel !== "all") {
-    agents = agents.filter(agent => agent.riskLevel === riskLevel)
+    agents = agents.filter(agent => agent.currentVersion.riskProfile.riskLevel === riskLevel)
   }
   
   // Filter by search query
   if (search) {
     const query = search.toLowerCase()
     agents = agents.filter(agent => 
-      agent.name.toLowerCase().includes(query) ||
-      agent.shortDescription.toLowerCase().includes(query) ||
-      agent.capabilities.some(cap => cap.toLowerCase().includes(query))
+      agent.title.toLowerCase().includes(query) ||
+      agent.summary.toLowerCase().includes(query) ||
+      agent.category.toLowerCase().includes(query)
     )
   }
   
-  // Filter featured
+  // Mock "featured" as the first three active catalog items.
   if (featured === "true") {
-    agents = agents.filter(agent => agent.featured)
+    const featuredIds = new Set(mockAgents.slice(0, 3).map((agent) => agent.id))
+    agents = agents.filter((agent) => featuredIds.has(agent.id))
   }
+
+  const categories = [...new Set(mockAgents.map((agent) => agent.category))]
   
   return NextResponse.json({
     agents,
-    categories: mockCategories,
+    categories,
     total: agents.length
   })
 }

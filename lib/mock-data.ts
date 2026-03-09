@@ -390,6 +390,40 @@ export const mockRuns: Run[] = [
     updatedAt: now,
     completedAt: now,
   },
+  {
+    id: 'run-2',
+    userId: 'user-1',
+    orderId: 'order-1',
+    channelConfigId: 'channel-1',
+    status: 'running',
+    combinedRiskLevel: 'low',
+    usesRealWorkspace: true,
+    usesTools: true,
+    networkEnabled: true,
+    resultSummary: null,
+    resultArtifacts: [],
+    createdAt: now,
+    startedAt: now,
+    updatedAt: now,
+    completedAt: null,
+  },
+  {
+    id: 'run-3',
+    userId: 'user-1',
+    orderId: 'order-1',
+    channelConfigId: 'channel-1',
+    status: 'failed',
+    combinedRiskLevel: 'low',
+    usesRealWorkspace: true,
+    usesTools: true,
+    networkEnabled: true,
+    resultSummary: 'Run stopped after the calendar API returned a temporary authorization error.',
+    resultArtifacts: [],
+    createdAt: lastWeek,
+    startedAt: lastWeek,
+    updatedAt: yesterday,
+    completedAt: yesterday,
+  },
 ]
 
 // Mock Run Logs
@@ -402,6 +436,17 @@ export const mockRunLogs: Record<string, RunLog[]> = {
     { timestamp: yesterday, level: 'info', step: 'calendar', message: 'Connecting to calendar service' },
     { timestamp: yesterday, level: 'info', step: 'optimize', message: 'Found 12 scheduling opportunities' },
     { timestamp: yesterday, level: 'info', step: 'complete', message: 'Run completed successfully' },
+  ],
+  'run-2': [
+    { timestamp: now, level: 'info', step: 'init', message: 'Provisioning managed workspace and loading bundle configuration' },
+    { timestamp: now, level: 'info', step: 'inbox', message: 'Scanning inbox for new priority messages' },
+    { timestamp: now, level: 'debug', step: 'calendar', message: 'Comparing calendar conflicts against focus-time rules' },
+  ],
+  'run-3': [
+    { timestamp: lastWeek, level: 'info', step: 'init', message: 'Run started with shared Telegram channel config' },
+    { timestamp: lastWeek, level: 'info', step: 'calendar', message: 'Attempting to open calendar provider session' },
+    { timestamp: yesterday, level: 'error', step: 'calendar', message: 'Authorization expired while requesting calendar availability' },
+    { timestamp: yesterday, level: 'warn', step: 'teardown', message: 'Run terminated before any artifacts were produced' },
   ],
 }
 
