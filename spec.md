@@ -29,6 +29,7 @@ Implemented in the current mock app:
 - Backend checkout service now exists in `server/services/checkout.service.ts` with Stripe session creation and paid-session reconciliation helpers
 - Backend Telegram service now exists in `server/services/telegram.service.ts` with token validation, encrypted secret storage, pairing, and webhook handling
 - Backend run repository/service now exist in `server/services/run.repository.ts` and `server/services/run.service.ts` with provider-backed run sync against the current DB shape
+- `GET /api/agents` and `GET /api/agents/[slug]` now route through `server/services/catalog.service.ts`
 
 Still not implemented:
 - Real auth flows, Stripe checkout/webhooks, Telegram webhook/pairing worker, signed downloads, provider abstraction, real run backend
@@ -228,8 +229,8 @@ The initial API routes were broken. Most read/write mock routes have now been re
 
 | Endpoint | Current Status | Action |
 |----------|---------------|--------|
-| `GET /api/agents` | Rewritten | Currently returns PRD-aligned mock catalog data |
-| `GET /api/agents/[slug]` | Rewritten | Currently returns PRD-aligned mock agent detail |
+| `GET /api/agents` | Service-backed | Uses `catalog.service.ts` with DB-first + mock fallback |
+| `GET /api/agents/[slug]` | Service-backed | Uses `catalog.service.ts` with DB-first + mock fallback |
 | `POST /api/interviews/preview` | Missing | New → `catalogService.previewInterview()` |
 | `GET /api/cart` | Implemented (mock) | Returns mock cart state |
 | `POST /api/cart/items` | Implemented (mock) | Adds cart item by `agentId` |
@@ -408,8 +409,8 @@ Port all services from agent_roster. Adapt imports. Test with curl/httpie.
 
 Normalize current mock routes into final service-backed PRD routes. Several functional equivalents already exist on `/api/agents`, `/api/bundles`, `/api/cart`, and `/api/runs`.
 
-1. [ ] `GET /api/agents` → catalogService
-2. [ ] `GET /api/agents/[slug]` → catalogService
+1. [x] `GET /api/agents` → catalogService
+2. [x] `GET /api/agents/[slug]` → catalogService
 3. [ ] `POST /api/interviews/preview` → catalogService
 4. [ ] `GET /api/cart` → cartService
 5. [ ] `POST /api/cart/items` → cartService
