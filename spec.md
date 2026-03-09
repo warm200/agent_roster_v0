@@ -15,6 +15,7 @@ Implemented in the current mock app:
 - Drizzle/Postgres foundation files now exist: `drizzle.config.ts`, `.env.example`, `server/db/schema.ts`, `server/db/index.ts`, `server/db/seed.ts`
 - Initial Drizzle migration generated under `drizzle/`
 - Shared enums/constants and Zod schemas now exist in `lib/constants.ts` and `lib/schemas.ts`
+- Shared Axios client entrypoint now exists in `services/api.ts`
 
 Still not implemented:
 - Real auth, a running database with applied migrations, Stripe, Telegram webhook/pairing worker, signed downloads, provider abstraction, real run backend
@@ -262,7 +263,7 @@ The initial API routes were broken. Most read/write mock routes have now been re
 
 ### 6.2 Frontend API Service Layer
 
-Still not added. Current pages mostly call app routes directly; a dedicated `services/` client layer remains future work.
+Partially added. `services/api.ts` now exists as the shared Axios entrypoint, but per-domain client modules are still future work.
 
 ```
 services/
@@ -368,13 +369,13 @@ Port infrastructure into current project. Current slice landed the DB config/sch
 7. [x] Port `lib/schemas.ts` (Zod validation from shared/)
 8. [x] Port `lib/constants.ts` (enums from shared/)
 9. [x] Install DB deps: `drizzle-orm`, `drizzle-kit`, `pg`, `tsx`
-10. [ ] Install remaining backend deps: `@auth/core`, `@auth/drizzle-adapter`, `stripe`, `axios`
+10. [ ] Install remaining backend deps: `@auth/core`, `@auth/drizzle-adapter`, `stripe`
 11. [x] Generate initial Drizzle migration under `drizzle/`
 12. [ ] Add `server/lib/auth.ts` (NextAuth v5 config)
 13. [ ] Add `server/lib/stripe.ts` (Stripe client init)
 14. [ ] Add `app/api/auth/[...nextauth]/route.ts`
 15. [ ] Verify: `docker compose up -d && npm run db:migrate && npm run db:seed` works
-16. [ ] Add `services/api.ts` (Axios shared instance)
+16. [x] Add `services/api.ts` (Axios shared instance)
 
 ### Phase 1: Port Backend Services (~7 files, ~2000 LOC)
 
