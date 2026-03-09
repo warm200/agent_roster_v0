@@ -1,7 +1,6 @@
 'use client'
 
-import { use, useState } from 'react'
-import { notFound } from 'next/navigation'
+import { use, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { Header } from '@/components/header'
 import { RiskBadge } from '@/components/risk-badge'
@@ -10,20 +9,22 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { getAgentBySlug, formatPrice } from '@/lib/mock-data'
+import { Skeleton } from '@/components/ui/skeleton'
+import { formatPrice } from '@/lib/mock-data'
 import { useCart } from '@/lib/cart-context'
 import { formatDate } from '@/lib/utils'
 import { toast } from 'sonner'
-import { 
-  ShoppingCart, 
-  Download, 
-  MessageSquare, 
+import type { Agent } from '@/lib/types'
+import {
+  ShoppingCart,
+  Download,
+  MessageSquare,
   ChevronLeft,
   CheckCircle2,
   XCircle,
-  FileText,
   Shield,
-  GitBranch
+  GitBranch,
+  AlertTriangle,
 } from 'lucide-react'
 
 interface PageProps {
@@ -32,12 +33,88 @@ interface PageProps {
 
 export default function AgentDetailPage({ params }: PageProps) {
   const { slug } = use(params)
-  const agent = getAgentBySlug(slug)
+  const [agent, setAgent] = useState<Agent | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const { addItem, isInCart } = useCart()
   const [showChat, setShowChat] = useState(false)
 
+  useEffect(() => {
+    let isMounted = true
+
+    async function loadAgent() {
+      setIsLoading(true)
+      setLoadError(null)
+
+      try {
+        const response = await fetch(`/api/agents/${slug}`)
+        const payload = await response.json()
+
+        if (!response.ok) {
+          throw new Error(payload.error || 'Agent not found')
+        }
+
+        if (isMounted) {
+          setAgent(payload)
+        }
+      } catch (error) {
+        if (isMounted) {
+          setLoadError(error instanceof Error ? error.message : 'Agent not found')
+          setAgent(null)
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false)
+        }
+      }
+    }
+
+    loadAgent()
+
+    return () => {
+      isMounted = false
+    }
+  }, [slug])
+
+  const parsedSections = useMemo(() => {
+    if (!agent) {
+      return { whatItDoes: null as string | null, whatItDoesNot: null as string | null }
+    }
+
+    const sections = agent.descriptionMarkdown.split('## ').filter(Boolean)
+
+    return {
+      whatItDoes: sections.find((section) => section.startsWith('What this agent does')) ?? null,
+      whatItDoesNot: sections.find((section) => section.startsWith('What this agent does NOT do')) ?? null,
+    }
+  }, [agent])
+
+  if (isLoading) {
+    return <AgentDetailSkeleton />
+  }
+
   if (!agent) {
-    notFound()
+    return (
+      <div className="min-h-screen bg-background">
+        <Header />
+        <div className="container mx-auto px-4 py-8">
+          <Link
+            href="/agents"
+            className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-6"
+          >
+            <ChevronLeft className="w-4 h-4" />
+            Back to Catalog
+          </Link>
+          <Card className="border-red-500/30 bg-red-500/5">
+            <CardContent className="p-6 text-center">
+              <AlertTriangle className="mx-auto mb-3 h-6 w-6 text-red-400" />
+              <p className="font-medium text-red-400">Unable to load agent</p>
+              <p className="mt-1 text-sm text-muted-foreground">{loadError ?? 'Agent not found'}</p>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    )
   }
 
   const { currentVersion } = agent
@@ -49,17 +126,11 @@ export default function AgentDetailPage({ params }: PageProps) {
     toast.success(`${agent.title} added to cart`)
   }
 
-  // Parse markdown description sections
-  const sections = agent.descriptionMarkdown.split('## ').filter(Boolean)
-  const whatItDoes = sections.find((s) => s.startsWith('What this agent does'))
-  const whatItDoesNot = sections.find((s) => s.startsWith('What this agent does NOT do'))
-
   return (
     <div className="min-h-screen bg-background">
       <Header />
 
       <div className="container mx-auto px-4 py-8">
-        {/* Back link */}
         <Link
           href="/agents"
           className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-6"
@@ -69,9 +140,7 @@ export default function AgentDetailPage({ params }: PageProps) {
         </Link>
 
         <div className="grid lg:grid-cols-3 gap-8">
-          {/* Main content */}
           <div className="lg:col-span-2 space-y-8">
-            {/* Header */}
             <div>
               <div className="flex items-center gap-3 mb-4">
                 <Badge variant="secondary">{agent.category}</Badge>
@@ -81,7 +150,6 @@ export default function AgentDetailPage({ params }: PageProps) {
               <p className="text-lg text-muted-foreground">{agent.summary}</p>
             </div>
 
-            {/* Tabs */}
             <Tabs defaultValue="overview" className="w-full">
               <TabsList className="grid w-full grid-cols-3">
                 <TabsTrigger value="overview">Overview</TabsTrigger>
@@ -90,7 +158,7 @@ export default function AgentDetailPage({ params }: PageProps) {
               </TabsList>
 
               <TabsContent value="overview" className="mt-6 space-y-6">
-                {whatItDoes && (
+                {parsedSections.whatItDoes && (
                   <Card>
                     <CardHeader>
                       <CardTitle className="flex items-center gap-2 text-lg">
@@ -100,12 +168,12 @@ export default function AgentDetailPage({ params }: PageProps) {
                     </CardHeader>
                     <CardContent>
                       <div className="prose prose-invert prose-sm max-w-none">
-                        {whatItDoes
+                        {parsedSections.whatItDoes
                           .replace('What this agent does\n\n', '')
                           .split('\n')
                           .filter(Boolean)
-                          .map((line, i) => (
-                            <p key={i} className="text-muted-foreground">
+                          .map((line, index) => (
+                            <p key={index} className="text-muted-foreground">
                               {line.replace(/^- \*\*/, '').replace(/\*\*/, ': ').replace(/\*\*/g, '')}
                             </p>
                           ))}
@@ -114,7 +182,7 @@ export default function AgentDetailPage({ params }: PageProps) {
                   </Card>
                 )}
 
-                {whatItDoesNot && (
+                {parsedSections.whatItDoesNot && (
                   <Card>
                     <CardHeader>
                       <CardTitle className="flex items-center gap-2 text-lg">
@@ -124,12 +192,12 @@ export default function AgentDetailPage({ params }: PageProps) {
                     </CardHeader>
                     <CardContent>
                       <div className="prose prose-invert prose-sm max-w-none">
-                        {whatItDoesNot
+                        {parsedSections.whatItDoesNot
                           .replace('What this agent does NOT do\n\n', '')
                           .split('\n')
                           .filter(Boolean)
-                          .map((line, i) => (
-                            <p key={i} className="text-muted-foreground">
+                          .map((line, index) => (
+                            <p key={index} className="text-muted-foreground">
                               {line.replace(/^- /, '')}
                             </p>
                           ))}
@@ -155,36 +223,11 @@ export default function AgentDetailPage({ params }: PageProps) {
                     <p className="text-sm text-muted-foreground">{riskProfile.scanSummary}</p>
 
                     <div className="grid grid-cols-2 gap-4 pt-4">
-                      <div className="flex items-center justify-between p-3 bg-secondary rounded-lg">
-                        <span className="text-sm">Chat Only</span>
-                        <span className={riskProfile.chatOnly ? 'text-emerald-400' : 'text-muted-foreground'}>
-                          {riskProfile.chatOnly ? 'Yes' : 'No'}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between p-3 bg-secondary rounded-lg">
-                        <span className="text-sm">Read Files</span>
-                        <span className={riskProfile.readFiles ? 'text-amber-400' : 'text-muted-foreground'}>
-                          {riskProfile.readFiles ? 'Yes' : 'No'}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between p-3 bg-secondary rounded-lg">
-                        <span className="text-sm">Write Files</span>
-                        <span className={riskProfile.writeFiles ? 'text-red-400' : 'text-muted-foreground'}>
-                          {riskProfile.writeFiles ? 'Yes' : 'No'}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between p-3 bg-secondary rounded-lg">
-                        <span className="text-sm">Network</span>
-                        <span className={riskProfile.network ? 'text-amber-400' : 'text-muted-foreground'}>
-                          {riskProfile.network ? 'Yes' : 'No'}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between p-3 bg-secondary rounded-lg">
-                        <span className="text-sm">Shell Access</span>
-                        <span className={riskProfile.shell ? 'text-red-400' : 'text-muted-foreground'}>
-                          {riskProfile.shell ? 'Yes' : 'No'}
-                        </span>
-                      </div>
+                      <RiskFlag label="Chat Only" value={riskProfile.chatOnly} positive="text-emerald-400" />
+                      <RiskFlag label="Read Files" value={riskProfile.readFiles} positive="text-amber-400" />
+                      <RiskFlag label="Write Files" value={riskProfile.writeFiles} positive="text-red-400" />
+                      <RiskFlag label="Network" value={riskProfile.network} positive="text-amber-400" />
+                      <RiskFlag label="Shell Access" value={riskProfile.shell} positive="text-red-400" />
                     </div>
                   </CardContent>
                 </Card>
@@ -221,7 +264,6 @@ export default function AgentDetailPage({ params }: PageProps) {
               </TabsContent>
             </Tabs>
 
-            {/* Preview Chat */}
             <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
@@ -252,10 +294,8 @@ export default function AgentDetailPage({ params }: PageProps) {
             </Card>
           </div>
 
-          {/* Sidebar */}
           <div className="lg:col-span-1">
             <div className="sticky top-24 space-y-6">
-              {/* Purchase Card */}
               <Card className="bg-card">
                 <CardContent className="p-6">
                   <div className="text-3xl font-bold text-foreground mb-2">
@@ -274,7 +314,7 @@ export default function AgentDetailPage({ params }: PageProps) {
                       <ShoppingCart className="w-4 h-4 mr-2" />
                       {inCart ? 'In Cart' : 'Add to Cart'}
                     </Button>
-                    
+
                     {inCart && (
                       <Button variant="outline" className="w-full" asChild>
                         <Link href="/cart">View Cart</Link>
@@ -302,7 +342,6 @@ export default function AgentDetailPage({ params }: PageProps) {
                 </CardContent>
               </Card>
 
-              {/* Version Info */}
               <Card>
                 <CardContent className="p-6">
                   <h4 className="font-medium text-sm mb-4">Version Info</h4>
@@ -323,6 +362,54 @@ export default function AgentDetailPage({ params }: PageProps) {
                 </CardContent>
               </Card>
             </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function RiskFlag({
+  label,
+  positive,
+  value,
+}: {
+  label: string
+  positive: string
+  value: boolean
+}) {
+  return (
+    <div className="flex items-center justify-between p-3 bg-secondary rounded-lg">
+      <span className="text-sm">{label}</span>
+      <span className={value ? positive : 'text-muted-foreground'}>
+        {value ? 'Yes' : 'No'}
+      </span>
+    </div>
+  )
+}
+
+function AgentDetailSkeleton() {
+  return (
+    <div className="min-h-screen bg-background">
+      <Header />
+      <div className="container mx-auto px-4 py-8">
+        <Skeleton className="mb-6 h-5 w-32" />
+        <div className="grid lg:grid-cols-3 gap-8">
+          <div className="lg:col-span-2 space-y-8">
+            <div className="space-y-4">
+              <div className="flex gap-3">
+                <Skeleton className="h-6 w-24 rounded-full" />
+                <Skeleton className="h-6 w-20 rounded-full" />
+              </div>
+              <Skeleton className="h-10 w-72" />
+              <Skeleton className="h-6 w-full" />
+            </div>
+            <Skeleton className="h-96 w-full" />
+            <Skeleton className="h-64 w-full" />
+          </div>
+          <div className="space-y-6">
+            <Skeleton className="h-80 w-full" />
+            <Skeleton className="h-40 w-full" />
           </div>
         </div>
       </div>

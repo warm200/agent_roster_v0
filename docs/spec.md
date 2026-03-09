@@ -52,8 +52,8 @@ The API routes reference fields that don't exist on the PRD types:
 | Page                          | Route                         | PRD §   | Status   | Notes |
 |-------------------------------|-------------------------------|---------|----------|-------|
 | Home                          | `/`                           | §5.2    | DONE     | Hero, value prop, CTA present |
-| Catalog                       | `/agents`                     | §5.3    | DONE     | Category filter, search, agent cards |
-| Agent Detail                  | `/agents/:slug`               | §5.4    | DONE     | Tabs: overview, risk, changelog; preview chat; add to cart |
+| Catalog                       | `/agents`                     | §5.3    | DONE     | API-backed catalog with category/search filters and loading/error states |
+| Agent Detail                  | `/agents/:slug`               | §5.4    | DONE     | API-backed detail page with overview/risk/changelog tabs, preview chat, and add-to-cart |
 | Cart                          | `/cart`                       | §5.5    | DONE     | Items, risk summary, price total, remove, checkout CTA |
 | Checkout                      | `/checkout`                   | §5.6    | DONE     | Order summary, risk, terms, mock payment |
 | Dashboard                     | `/app`                        | §5.7    | DONE     | Quick stats, recent bundles, recent runs |
@@ -221,11 +221,11 @@ The API routes reference fields that don't exist on the PRD types:
 
 | Area                                | Status   | Notes |
 |-------------------------------------|----------|-------|
-| Pages call API routes               | PARTIAL  | Runs and bundle detail now fetch through app APIs; catalog/cart/dashboard still read local mock data |
+| Pages call API routes               | PARTIAL  | Catalog, agent detail, runs, and bundle detail now fetch through app APIs; cart/dashboard still read local mock data |
 | API routes match PRD endpoint paths  | NO      | Routes use `/api/bundles`, `/api/runs` instead of `/api/me/orders`, `/api/me/runs` |
 | API route schemas match types.ts     | PARTIAL | Agents/runs/bundles routes now align with shared mock types; checkout/telegram remain mock contracts |
-| Loading states on data fetch         | PARTIAL | Checkout has processing state; most pages render synchronously from mock |
-| Error states                         | PARTIAL | Run detail has "not found" state; most pages have no error handling |
+| Loading states on data fetch         | PARTIAL | Catalog, agent detail, bundle detail, checkout, and runs now render loading states; dashboard/cart still sync-render from local state |
+| Error states                         | PARTIAL | Catalog, agent detail, bundle detail, and run detail now have basic fetch error states |
 | Empty states                         | PARTIAL | Some pages have empty states (runs list, bundle runs) |
 
 ---
