@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 
 import { HttpError } from '@/server/lib/http'
 import { getRequestUserId } from '@/server/lib/request-user'
-import { getOrderByIdForUser } from '@/server/services/order.service'
+import { getOrderService } from '@/server/services/order.service'
 
 export async function GET(
   request: NextRequest,
@@ -11,7 +11,7 @@ export async function GET(
   try {
     const { orderId } = await params
     const userId = await getRequestUserId(request)
-    const order = await getOrderByIdForUser({ orderId, userId })
+    const order = await getOrderService().getOrderByIdForUser({ orderId, userId })
     return NextResponse.json(order)
   } catch (error) {
     if (error instanceof HttpError) {

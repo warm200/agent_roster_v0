@@ -315,8 +315,34 @@ export async function getSignedDownloadsForOrder(input: {
         orderId: order.id,
         orderItemId: item.id,
       }),
-    })),
+      })),
   }
+}
+
+export type OrderService = {
+  createPaidOrderFromCart: typeof createPaidOrderFromCart
+  getOrderByIdForUser: typeof getOrderByIdForUser
+  getSignedDownloadsForOrder: typeof getSignedDownloadsForOrder
+  listOrdersForUser: typeof listOrdersForUser
+}
+
+let orderServiceOverride: OrderService | null = null
+
+export function getOrderService(): OrderService {
+  if (orderServiceOverride) {
+    return orderServiceOverride
+  }
+
+  return {
+    createPaidOrderFromCart,
+    getOrderByIdForUser,
+    getSignedDownloadsForOrder,
+    listOrdersForUser,
+  }
+}
+
+export function setOrderServiceForTesting(service: OrderService | null) {
+  orderServiceOverride = service
 }
 
 export async function resolveSignedDownload(input: {

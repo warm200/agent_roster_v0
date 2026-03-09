@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 
 import { HttpError } from '@/server/lib/http'
 import { getRequestUserId } from '@/server/lib/request-user'
-import { getSignedDownloadsForOrder } from '@/server/services/order.service'
+import { getOrderService } from '@/server/services/order.service'
 
 export async function GET(
   request: NextRequest,
@@ -11,7 +11,7 @@ export async function GET(
   try {
     const { orderId } = await params
     const userId = await getRequestUserId(request)
-    const downloads = await getSignedDownloadsForOrder({
+    const downloads = await getOrderService().getSignedDownloadsForOrder({
       baseUrl: request.nextUrl.origin,
       orderId,
       userId,
