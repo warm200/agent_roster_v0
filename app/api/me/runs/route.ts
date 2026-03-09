@@ -3,8 +3,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import type { Agent, Order, Run, RunLog } from '@/lib/types'
 import { HttpError } from '@/server/lib/http'
 import { getRequestUserId } from '@/server/lib/request-user'
-import { getOrderByIdForUser } from '@/server/services/order.service'
-import { RunService } from '@/server/services/run.service'
+import { getOrderService } from '@/server/services/order.service'
+import { getRunService } from '@/server/services/run.service'
 
 interface RunSummary extends Run {
   agents: Agent[]
@@ -14,12 +14,10 @@ interface RunSummary extends Run {
   order: Order | undefined
 }
 
-const runService = new RunService()
-
 async function buildRunSummary(userId: string, run: Run): Promise<RunSummary> {
   const [order, logs] = await Promise.all([
-    getOrderByIdForUser({ orderId: run.orderId, userId }),
-    runService.getRunLogs(userId, run.id),
+    getOrderService().getOrderByIdForUser({ orderId: run.orderId, userId }),
+    getRunService().getRunLogs(userId, run.id),
   ])
 
   return {
@@ -40,7 +38,7 @@ export async function GET(request: NextRequest) {
     const orderId = searchParams.get('orderId')
     const limit = parseInt(searchParams.get('limit') || '50')
     const offset = parseInt(searchParams.get('offset') || '0')
-    let runs = await runService.listRuns(userId)
+    let runs = await getRunService().listRuns(userId)
 
     if (status && status !== 'all') {
       runs = runs.filter((run) => run.status === status)

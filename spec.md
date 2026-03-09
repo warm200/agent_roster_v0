@@ -65,6 +65,7 @@ Implemented in the current mock app:
 - Route smoke coverage now exists for Telegram validate, pairing-start, and webhook route behavior
 - Route smoke coverage now exists for checkout session creation, checkout-session reconciliation, and Stripe webhook handling
 - Route smoke coverage now exists for orders list/detail/download route behavior
+- Route smoke coverage now exists for run list/detail/logs/result routes plus retry/cancel actions
 
 Still not implemented:
 - Production auth provider setup, production Stripe/Telegram operations, provider abstraction, and a real run backend
