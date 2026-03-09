@@ -2,9 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 
 import { HttpError } from '@/server/lib/http'
 import { getRequestUserId } from '@/server/lib/request-user'
-import { RunService } from '@/server/services/run.service'
-
-const runService = new RunService()
+import { getRunService } from '@/server/services/run.service'
 
 export async function PATCH(
   request: NextRequest,
@@ -13,7 +11,7 @@ export async function PATCH(
   try {
     const { runId, stepId } = await params
     const userId = await getRequestUserId(request)
-    const run = await runService.getRun(userId, runId)
+    const run = await getRunService().getRun(userId, runId)
 
     return NextResponse.json(
       {

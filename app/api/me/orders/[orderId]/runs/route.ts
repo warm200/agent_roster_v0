@@ -2,9 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 
 import { HttpError } from '@/server/lib/http'
 import { getRequestUserId } from '@/server/lib/request-user'
-import { RunService } from '@/server/services/run.service'
-
-const runService = new RunService()
+import { getRunService } from '@/server/services/run.service'
 
 export async function POST(
   request: NextRequest,
@@ -13,7 +11,7 @@ export async function POST(
   try {
     const { orderId } = await params
     const userId = await getRequestUserId(request)
-    const run = await runService.createRun(userId, orderId)
+    const run = await getRunService().createRun(userId, orderId)
     return NextResponse.json(run, { status: 201 })
   } catch (error) {
     if (error instanceof HttpError) {

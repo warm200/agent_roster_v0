@@ -132,4 +132,12 @@ export class RunService {
   }
 }
 
-export const runService = new RunService()
+let runServiceOverride: RunService | null = null
+
+export function getRunService() {
+  return runServiceOverride ?? new RunService()
+}
+
+export function setRunServiceForTesting(service: RunService | null) {
+  runServiceOverride = service
+}

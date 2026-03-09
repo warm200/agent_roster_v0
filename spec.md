@@ -61,6 +61,7 @@ Implemented in the current mock app:
 - Route-level loading skeletons now exist for catalog, agent detail, dashboard, bundles, bundle detail, runs, and run detail
 - `npm test` now runs smoke regression coverage for the preview route and auth proxy
 - Browser smoke coverage now exists for catalog-to-cart, protected-app redirect, signed-in dashboard access, authenticated bundle/run page-access flows, and protected app navigation flows
+- Route smoke coverage now exists for run launch creation and the deprecated manual-step compatibility endpoint
 
 Still not implemented:
 - Production auth provider setup, production Stripe/Telegram operations, provider abstraction, and a real run backend

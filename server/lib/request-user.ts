@@ -10,6 +10,9 @@ import { users } from '../db/schema'
 export const DEFAULT_REQUEST_USER_ID = 'user-1'
 
 let dbClient: DbClient | null = null
+let requestUserIdOverride:
+  | ((request: NextRequest) => Promise<string> | string)
+  | null = null
 
 function getDb() {
   dbClient ??= createDb()
@@ -59,6 +62,10 @@ export async function ensureRequestUser(userId: string, seed: RequestUserSeed = 
 }
 
 export async function getRequestUserId(request: NextRequest) {
+  if (requestUserIdOverride) {
+    return requestUserIdOverride(request)
+  }
+
   if (isAuthConfigured()) {
     const token = await getToken({
       req: request,
@@ -86,4 +93,10 @@ export async function getRequestUserId(request: NextRequest) {
     authProvider: headerUserId ? 'header' : 'demo',
   })
   return userId
+}
+
+export function setRequestUserIdForTesting(
+  resolver: ((request: NextRequest) => Promise<string> | string) | null,
+) {
+  requestUserIdOverride = resolver
 }
