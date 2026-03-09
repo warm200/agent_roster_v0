@@ -38,6 +38,11 @@ export async function putJson<TResponse, TBody = unknown>(url: string, body?: TB
   return response.data
 }
 
+export async function patchJson<TResponse, TBody = unknown>(url: string, body?: TBody) {
+  const response = await api.patch<TResponse>(url, body)
+  return response.data
+}
+
 export async function deleteJson<TResponse>(url: string) {
   const response = await api.delete<TResponse>(url)
   return response.data

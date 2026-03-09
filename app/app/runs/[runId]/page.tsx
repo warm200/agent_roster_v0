@@ -1,6 +1,6 @@
 "use client"
 
-import { use, useEffect, useState, type ReactNode } from 'react'
+import { use, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { RiskBadge } from '@/components/risk-badge'
@@ -13,8 +13,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Spinner } from '@/components/ui/spinner'
-import type { Agent, Order, Run, RunLog } from '@/lib/types'
+import { useRunStatus } from '@/hooks/use-run-status'
 import { formatDateTime } from '@/lib/utils'
+import { updateRun } from '@/services/runs.api'
 import { toast } from 'sonner'
 import { AlertTriangle, ArrowLeft, CheckCircle2, Globe, Package, RefreshCw, Wrench, XCircle } from 'lucide-react'
 
@@ -22,58 +23,12 @@ interface RunDetailPageProps {
   params: Promise<{ runId: string }>
 }
 
-interface RunDetailResponse extends Run {
-  agents: Agent[]
-  artifactsCount: number
-  logs: RunLog[]
-  logsCount: number
-  order: Order | undefined
-}
-
 export default function RunDetailPage({ params }: RunDetailPageProps) {
   const { runId } = use(params)
   const router = useRouter()
-  const [run, setRun] = useState<RunDetailResponse | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
-  const [loadError, setLoadError] = useState<string | null>(null)
+  const { run, setRun, isLoading, loadError } = useRunStatus(runId)
   const [isCancelling, setIsCancelling] = useState(false)
   const [isRetrying, setIsRetrying] = useState(false)
-
-  useEffect(() => {
-    let isMounted = true
-
-    async function loadRun() {
-      setIsLoading(true)
-      setLoadError(null)
-
-      try {
-        const response = await fetch(`/api/me/runs/${runId}`)
-        const payload = await response.json()
-
-        if (!response.ok) {
-          throw new Error(payload.error || 'Unable to load run')
-        }
-
-        if (isMounted) {
-          setRun(payload)
-        }
-      } catch (error) {
-        if (isMounted) {
-          setLoadError(error instanceof Error ? error.message : 'Unable to load run')
-        }
-      } finally {
-        if (isMounted) {
-          setIsLoading(false)
-        }
-      }
-    }
-
-    loadRun()
-
-    return () => {
-      isMounted = false
-    }
-  }, [runId])
 
   if (isLoading) {
     return <RunDetailSkeleton />
@@ -114,22 +69,11 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
     setIsCancelling(true)
 
     try {
-      const response = await fetch(`/api/me/runs/${run.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'cancel' }),
-      })
-      const payload = await response.json()
-
-      if (!response.ok) {
-        toast.error(payload.error || 'Unable to cancel run')
-        return
-      }
-
+      const payload = await updateRun(run.id, 'cancel')
       setRun(payload)
       toast.success('Run cancelled')
-    } catch {
-      toast.error('Network error while cancelling run')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Network error while cancelling run')
     } finally {
       setIsCancelling(false)
     }
@@ -143,22 +87,11 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
     setIsRetrying(true)
 
     try {
-      const response = await fetch(`/api/me/runs/${run.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'retry' }),
-      })
-      const payload = await response.json()
-
-      if (!response.ok) {
-        toast.error(payload.error || 'Unable to retry run')
-        return
-      }
-
+      const payload = await updateRun(run.id, 'retry')
       toast.success('Retry started. Redirecting to new run...')
       router.push(`/app/runs/${payload.id}`)
-    } catch {
-      toast.error('Network error while retrying run')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Network error while retrying run')
     } finally {
       setIsRetrying(false)
     }
