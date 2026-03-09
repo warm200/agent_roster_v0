@@ -21,6 +21,7 @@ Implemented in the current mock app:
 - Local PostgreSQL Docker Compose file now exists in `docker-compose.yml`
 - Fresh local Postgres verification now passes: migrate + seed succeed against a clean database
 - Run provider scaffolding now exists under `server/providers/` with mock and openclaw stubs
+- Initial backend risk-engine utility now exists in `server/lib/risk-engine.ts`
 
 Still not implemented:
 - Real auth flows, Stripe checkout/webhooks, Telegram webhook/pairing worker, signed downloads, provider abstraction, real run backend
@@ -394,7 +395,7 @@ Port all services from agent_roster. Adapt imports. Test with curl/httpie.
 6. [ ] Port `server/services/run.service.ts` + `run.repository.ts`
 7. [ ] Port `server/services/commerce.utils.ts`
 8. [x] Port `server/providers/` (interface + mock + openclaw stub)
-9. [ ] Port `server/lib/risk-engine.ts`
+9. [x] Port `server/lib/risk-engine.ts`
 
 ### Phase 2: Rewrite API Routes (~20 route files)
 
