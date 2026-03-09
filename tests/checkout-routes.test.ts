@@ -1,0 +1,189 @@
+import assert from 'node:assert/strict'
+import { afterEach, test } from 'node:test'
+
+import { NextRequest } from 'next/server'
+
+import { POST as createSession } from '@/app/api/checkout/session/route'
+import { POST as reconcileSession } from '@/app/api/checkout/session/[sessionId]/route'
+import { POST as stripeWebhook } from '@/app/api/webhooks/stripe/route'
+import { HttpError } from '@/server/lib/http'
+import { setRequestUserIdForTesting } from '@/server/lib/request-user'
+import {
+  setCheckoutServiceForTesting,
+  type CheckoutService,
+} from '@/server/services/checkout.service'
+
+const order = {
+  id: 'order-test-1',
+}
+
+afterEach(() => {
+  setRequestUserIdForTesting(null)
+  setCheckoutServiceForTesting(null)
+})
+
+test('checkout session route forwards cart payload to checkout service', async () => {
+  let received:
+    | {
+        cartId: string
+        origin: string
+        userEmail?: string | null
+        userId?: string | null
+      }
+    | undefined
+
+  setCheckoutServiceForTesting({
+    async createCheckoutSession(input) {
+      received = input
+
+      return {
+        sessionId: 'cs_test_123',
+        sessionUrl: 'https://checkout.stripe.com/c/session/test',
+      }
+    },
+    async handleStripeWebhookEvent() {
+      return { received: true, type: 'checkout.session.completed' as const }
+    },
+    async reconcileCheckoutSession() {
+      return order as never
+    },
+  } satisfies CheckoutService)
+
+  const request = new NextRequest('http://localhost/api/checkout/session', {
+    body: JSON.stringify({
+      cartId: 'cart-test-1',
+      email: 'buyer@example.com',
+      userId: 'user-test-1',
+    }),
+    method: 'POST',
+  })
+
+  const response = await createSession(request)
+  const payload = await response.json()
+
+  assert.equal(response.status, 201)
+  assert.deepEqual(received, {
+    cartId: 'cart-test-1',
+    origin: 'http://localhost',
+    userEmail: 'buyer@example.com',
+    userId: 'user-test-1',
+  })
+  assert.equal(payload.sessionId, 'cs_test_123')
+})
+
+test('checkout session reconcile route forwards authenticated user to service', async () => {
+  let received:
+    | {
+        sessionId: string
+        userId: string
+      }
+    | undefined
+
+  setRequestUserIdForTesting(() => 'user-test-1')
+  setCheckoutServiceForTesting({
+    async createCheckoutSession() {
+      return {
+        sessionId: 'unused',
+        sessionUrl: 'https://example.com',
+      }
+    },
+    async handleStripeWebhookEvent() {
+      return { received: true, type: 'checkout.session.completed' as const }
+    },
+    async reconcileCheckoutSession(input) {
+      received = input
+      return order as never
+    },
+  } satisfies CheckoutService)
+
+  const request = new NextRequest('http://localhost/api/checkout/session/cs_test_123', {
+    method: 'POST',
+  })
+
+  const response = await reconcileSession(request, {
+    params: Promise.resolve({ sessionId: 'cs_test_123' }),
+  })
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.deepEqual(received, {
+    sessionId: 'cs_test_123',
+    userId: 'user-test-1',
+  })
+  assert.equal(payload.id, 'order-test-1')
+})
+
+test('stripe webhook route forwards payload and preserves checkout errors', async () => {
+  let received:
+    | {
+        payload: string
+        signature: string
+      }
+    | undefined
+
+  setCheckoutServiceForTesting({
+    async createCheckoutSession() {
+      return {
+        sessionId: 'unused',
+        sessionUrl: 'https://example.com',
+      }
+    },
+    async handleStripeWebhookEvent(input) {
+      received = input
+      return {
+        received: true,
+        type: 'checkout.session.completed',
+      }
+    },
+    async reconcileCheckoutSession() {
+      return order as never
+    },
+  } satisfies CheckoutService)
+
+  const request = new NextRequest('http://localhost/api/webhooks/stripe', {
+    body: JSON.stringify({ id: 'evt_test_1' }),
+    headers: {
+      'stripe-signature': 'sig_test_123',
+    },
+    method: 'POST',
+  })
+
+  const response = await stripeWebhook(request)
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.deepEqual(received, {
+    payload: JSON.stringify({ id: 'evt_test_1' }),
+    signature: 'sig_test_123',
+  })
+  assert.equal(payload.type, 'checkout.session.completed')
+
+  setCheckoutServiceForTesting({
+    async createCheckoutSession() {
+      return {
+        sessionId: 'unused',
+        sessionUrl: 'https://example.com',
+      }
+    },
+    async handleStripeWebhookEvent() {
+      throw new HttpError(400, 'Signature verification failed.')
+    },
+    async reconcileCheckoutSession() {
+      return order as never
+    },
+  } satisfies CheckoutService)
+
+  const failedResponse = await stripeWebhook(
+    new NextRequest('http://localhost/api/webhooks/stripe', {
+      body: '{}',
+      headers: {
+        'stripe-signature': 'sig_bad',
+      },
+      method: 'POST',
+    }),
+  )
+  const failedPayload = await failedResponse.json()
+
+  assert.equal(failedResponse.status, 400)
+  assert.equal(failedPayload.error, 'Signature verification failed.')
+})

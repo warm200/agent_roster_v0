@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 import { HttpError } from '@/server/lib/http'
-import { handleStripeWebhookEvent } from '@/server/services/checkout.service'
+import { getCheckoutService } from '@/server/services/checkout.service'
 
 export async function POST(request: NextRequest) {
   try {
@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
     }
 
     const payload = await request.text()
-    const result = await handleStripeWebhookEvent({
+    const result = await getCheckoutService().handleStripeWebhookEvent({
       payload,
       signature,
     })

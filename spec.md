@@ -63,6 +63,7 @@ Implemented in the current mock app:
 - Browser smoke coverage now exists for catalog-to-cart, protected-app redirect, signed-in dashboard access, authenticated bundle/run page-access flows, and protected app navigation flows
 - Route smoke coverage now exists for run launch creation and the deprecated manual-step compatibility endpoint
 - Route smoke coverage now exists for Telegram validate, pairing-start, and webhook route behavior
+- Route smoke coverage now exists for checkout session creation, checkout-session reconciliation, and Stripe webhook handling
 
 Still not implemented:
 - Production auth provider setup, production Stripe/Telegram operations, provider abstraction, and a real run backend

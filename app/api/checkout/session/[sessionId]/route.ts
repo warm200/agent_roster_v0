@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 
 import { HttpError } from '@/server/lib/http'
 import { getRequestUserId } from '@/server/lib/request-user'
-import { reconcileCheckoutSession } from '@/server/services/checkout.service'
+import { getCheckoutService } from '@/server/services/checkout.service'
 
 export async function POST(
   request: NextRequest,
@@ -11,7 +11,7 @@ export async function POST(
   try {
     const { sessionId } = await params
     const userId = await getRequestUserId(request)
-    const order = await reconcileCheckoutSession({
+    const order = await getCheckoutService().reconcileCheckoutSession({
       sessionId,
       userId,
     })

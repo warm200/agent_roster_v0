@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 
 import { HttpError } from '@/server/lib/http'
 import { CART_COOKIE_NAME } from '@/server/services/cart.service'
-import { createCheckoutSession } from '@/server/services/checkout.service'
+import { getCheckoutService } from '@/server/services/checkout.service'
 
 export async function POST(request: NextRequest) {
   try {
@@ -12,14 +12,16 @@ export async function POST(request: NextRequest) {
       email?: string
       userId?: string
     }
-    const cookieStore = await cookies()
-    const cartId = body.cartId ?? cookieStore.get(CART_COOKIE_NAME)?.value ?? null
+    const cartId =
+      body.cartId ??
+      (await cookies()).get(CART_COOKIE_NAME)?.value ??
+      null
 
     if (!cartId) {
       return NextResponse.json({ error: 'cartId is required' }, { status: 400 })
     }
 
-    const session = await createCheckoutSession({
+    const session = await getCheckoutService().createCheckoutSession({
       cartId,
       origin: request.nextUrl.origin,
       userEmail: body.email ?? null,

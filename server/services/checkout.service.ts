@@ -201,3 +201,27 @@ export async function handleStripeWebhookEvent(input: {
     type: event.type,
   }
 }
+
+export type CheckoutService = {
+  createCheckoutSession: typeof createCheckoutSession
+  reconcileCheckoutSession: typeof reconcileCheckoutSession
+  handleStripeWebhookEvent: typeof handleStripeWebhookEvent
+}
+
+let checkoutServiceOverride: CheckoutService | null = null
+
+export function getCheckoutService(): CheckoutService {
+  if (checkoutServiceOverride) {
+    return checkoutServiceOverride
+  }
+
+  return {
+    createCheckoutSession,
+    reconcileCheckoutSession,
+    handleStripeWebhookEvent,
+  }
+}
+
+export function setCheckoutServiceForTesting(service: CheckoutService | null) {
+  checkoutServiceOverride = service
+}
