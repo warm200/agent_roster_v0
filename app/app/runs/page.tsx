@@ -14,20 +14,13 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
-import type { Agent, Order, Run, RunLog, RunStatus } from '@/lib/types'
+import type { RunStatus } from '@/lib/types'
 import { formatDateTime } from '@/lib/utils'
+import { listRuns, type RunSummary } from '@/services/runs.api'
 import { AlertTriangle, ArrowUpDown, Filter, Play, Search } from 'lucide-react'
 
 type RunFilter = 'all' | RunStatus
 type SortKey = 'date' | 'status'
-
-interface RunSummary extends Run {
-  agents: Agent[]
-  artifactsCount: number
-  logs: RunLog[]
-  logsCount: number
-  order: Order | undefined
-}
 
 export default function RunsPage() {
   const [runs, setRuns] = useState<RunSummary[]>([])
@@ -45,12 +38,7 @@ export default function RunsPage() {
       setLoadError(null)
 
       try {
-        const response = await fetch('/api/me/runs')
-        const payload = await response.json()
-
-        if (!response.ok) {
-          throw new Error(payload.error || 'Unable to load runs')
-        }
+        const payload = await listRuns()
 
         if (isMounted) {
           setRuns(payload.runs)

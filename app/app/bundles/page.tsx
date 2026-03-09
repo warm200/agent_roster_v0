@@ -11,12 +11,8 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { formatPrice } from '@/lib/mock-data'
 import { formatDate } from '@/lib/utils'
 import type { Agent, Order } from '@/lib/types'
+import { listOrders } from '@/services/orders.api'
 import { Package, ArrowRight, ShoppingCart, Send, AlertTriangle } from 'lucide-react'
-
-interface BundlesResponse {
-  orders: Order[]
-  total: number
-}
 
 export default function BundlesPage() {
   const [orders, setOrders] = useState<Array<Order & { agents: Agent[] }>>([])
@@ -31,14 +27,9 @@ export default function BundlesPage() {
       setLoadError(null)
 
       try {
-        const response = await fetch('/api/me/orders')
-        const payload: BundlesResponse | { error?: string } = await response.json()
+        const payload = await listOrders()
 
-        if (!response.ok) {
-          throw new Error('error' in payload ? payload.error || 'Unable to load bundles' : 'Unable to load bundles')
-        }
-
-        if (isMounted && 'orders' in payload) {
+        if (isMounted) {
           setOrders(
             payload.orders.map((order) => ({
               ...order,

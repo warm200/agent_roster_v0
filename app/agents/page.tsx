@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useCart } from '@/lib/cart-context'
+import { getAgents } from '@/services/catalog.api'
 import { toast } from 'sonner'
 import type { Agent, AgentCategory } from '@/lib/types'
 import { Search, Mail, Calendar, FileText, Zap, BarChart3, LayoutGrid, AlertTriangle } from 'lucide-react'
@@ -28,12 +29,6 @@ const categoryLabels: Record<AgentCategory, string> = {
   inbox: 'Inbox',
 }
 
-interface AgentsResponse {
-  agents: Agent[]
-  categories: AgentCategory[]
-  total: number
-}
-
 export default function AgentsPage() {
   const [selectedCategory, setSelectedCategory] = useState<AgentCategory | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
@@ -52,27 +47,13 @@ export default function AgentsPage() {
       setLoadError(null)
 
       try {
-        const params = new URLSearchParams()
-
-        if (selectedCategory) {
-          params.set('category', selectedCategory)
-        }
-
-        if (searchQuery.trim()) {
-          params.set('search', searchQuery.trim())
-        }
-
-        const query = params.toString()
-        const response = await fetch(`/api/agents${query ? `?${query}` : ''}`, {
+        const payload = await getAgents({
+          category: selectedCategory,
+          search: searchQuery,
           signal: controller.signal,
         })
-        const payload: AgentsResponse | { error?: string } = await response.json()
 
-        if (!response.ok) {
-          throw new Error('error' in payload ? payload.error || 'Unable to load agents' : 'Unable to load agents')
-        }
-
-        if (isMounted && 'agents' in payload) {
+        if (isMounted) {
           setAgents(payload.agents)
           setCategories(payload.categories)
         }

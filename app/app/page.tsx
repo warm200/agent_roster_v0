@@ -11,6 +11,8 @@ import { RunStatusBadge } from '@/components/run-status-badge'
 import { formatPrice } from '@/lib/mock-data'
 import { formatDate } from '@/lib/utils'
 import type { Agent, Order, Run, RunLog } from '@/lib/types'
+import { listOrders } from '@/services/orders.api'
+import { listRuns, type RunSummary } from '@/services/runs.api'
 import {
   Package,
   Play,
@@ -20,24 +22,6 @@ import {
   ShoppingCart,
   AlertTriangle,
 } from 'lucide-react'
-
-interface BundleResponse {
-  orders: Array<Order>
-  total: number
-}
-
-interface RunSummary extends Run {
-  agents: Agent[]
-  artifactsCount: number
-  logs: RunLog[]
-  logsCount: number
-  order: Order | undefined
-}
-
-interface RunsResponse {
-  runs: RunSummary[]
-  total: number
-}
 
 export default function DashboardPage() {
   const [orders, setOrders] = useState<Array<Order & { agents: Agent[] }>>([])
@@ -53,28 +37,17 @@ export default function DashboardPage() {
       setLoadError(null)
 
       try {
-        const [bundlesResponse, runsResponse] = await Promise.all([
-          fetch('/api/me/orders'),
-          fetch('/api/me/runs'),
+        const [bundlesPayload, runsPayload] = await Promise.all([
+          listOrders(),
+          listRuns(),
         ])
 
-        const bundlesPayload: BundleResponse | { error?: string } = await bundlesResponse.json()
-        const runsPayload: RunsResponse | { error?: string } = await runsResponse.json()
-
-        if (!bundlesResponse.ok) {
-          throw new Error('error' in bundlesPayload ? bundlesPayload.error || 'Unable to load bundles' : 'Unable to load bundles')
-        }
-
-        if (!runsResponse.ok) {
-          throw new Error('error' in runsPayload ? runsPayload.error || 'Unable to load runs' : 'Unable to load runs')
-        }
-
         if (isMounted) {
-          setOrders('orders' in bundlesPayload ? bundlesPayload.orders.map((order) => ({
+          setOrders(bundlesPayload.orders.map((order) => ({
             ...order,
             agents: order.items.map((item) => item.agent),
-          })) : [])
-          setRuns('runs' in runsPayload ? runsPayload.runs : [])
+          })))
+          setRuns(runsPayload.runs)
         }
       } catch (error) {
         if (isMounted) {

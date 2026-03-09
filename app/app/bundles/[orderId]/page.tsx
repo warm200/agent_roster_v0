@@ -15,12 +15,14 @@ import { TelegramSetupWizard } from '@/components/telegram-setup-wizard'
 import { formatPrice } from '@/lib/mock-data'
 import type { Order, Run } from '@/lib/types'
 import { formatDate, formatDateTime } from '@/lib/utils'
+import { createOrderRun, getOrder, getOrderDownloads } from '@/services/orders.api'
+import { listRuns } from '@/services/runs.api'
 import { toast } from 'sonner'
-import { 
-  ChevronLeft, 
-  Package, 
-  Play, 
-  Download, 
+import {
+  ChevronLeft,
+  Package,
+  Play,
+  Download,
   AlertTriangle,
   FileText,
   ExternalLink
@@ -51,26 +53,16 @@ export default function BundleDetailPage({ params }: PageProps) {
       setIsLoading(true)
 
       try {
-        const [orderResponse, runsResponse, downloadsResponse] = await Promise.all([
-          fetch(`/api/me/orders/${orderId}`),
-          fetch(`/api/me/runs?orderId=${orderId}`),
-          fetch(`/api/me/orders/${orderId}/download`),
+        const [orderPayload, runsPayload, downloadsPayload] = await Promise.all([
+          getOrder(orderId),
+          listRuns({ orderId }),
+          getOrderDownloads(orderId),
         ])
-        const orderPayload = await orderResponse.json()
-        const runsPayload = await runsResponse.json()
-        const downloadsPayload = await downloadsResponse.json()
-
-        if (!orderResponse.ok) {
-          if (isMounted) {
-            setOrder(null)
-          }
-          return
-        }
 
         if (isMounted) {
           setOrder(orderPayload)
-          setOrderRuns('runs' in runsPayload ? runsPayload.runs : [])
-          setDownloads('downloads' in downloadsPayload ? downloadsPayload.downloads : [])
+          setOrderRuns(runsPayload.runs)
+          setDownloads(downloadsPayload.downloads)
         }
       } catch {
         if (isMounted) {
@@ -124,7 +116,7 @@ export default function BundleDetailPage({ params }: PageProps) {
       order.channelConfig?.tokenStatus === 'validated' &&
       order.channelConfig?.recipientBindingStatus === 'paired'
     )
-  
+
   const canLaunchRun = order.status === 'paid' && hasTelegramSetup
 
   const handleLaunchRun = async () => {
@@ -133,21 +125,11 @@ export default function BundleDetailPage({ params }: PageProps) {
     setIsLaunching(true)
 
     try {
-      const response = await fetch(`/api/me/orders/${order.id}/runs`, {
-        method: 'POST',
-      })
-
-      const payload = await response.json()
-
-      if (!response.ok) {
-        toast.error(payload.error || 'Unable to launch run')
-        return
-      }
-
+      const payload = await createOrderRun(order.id)
       toast.success('Run started. Redirecting to run details...')
       router.push(`/app/runs/${payload.id}`)
-    } catch {
-      toast.error('Network error while launching run')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Network error while launching run')
     } finally {
       setIsLaunching(false)
     }
@@ -185,8 +167,8 @@ export default function BundleDetailPage({ params }: PageProps) {
           </div>
         </div>
 
-        <Button 
-          size="lg" 
+        <Button
+          size="lg"
           disabled={!canLaunchRun || isLaunching}
           onClick={handleLaunchRun}
         >
@@ -339,7 +321,7 @@ export default function BundleDetailPage({ params }: PageProps) {
                 <Play className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
                 <p className="font-medium mb-2">No runs yet</p>
                 <p className="text-sm text-muted-foreground mb-4">
-                  {canLaunchRun 
+                  {canLaunchRun
                     ? 'Launch your first run to see it here.'
                     : 'Complete Telegram setup to launch runs.'}
                 </p>

@@ -13,6 +13,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { formatPrice } from '@/lib/mock-data'
 import { useCart } from '@/lib/cart-context'
 import { formatDate } from '@/lib/utils'
+import { getAgentBySlug } from '@/services/catalog.api'
 import { toast } from 'sonner'
 import type { Agent } from '@/lib/types'
 import {
@@ -47,13 +48,7 @@ export default function AgentDetailPage({ params }: PageProps) {
       setLoadError(null)
 
       try {
-        const response = await fetch(`/api/agents/${slug}`)
-        const payload = await response.json()
-
-        if (!response.ok) {
-          throw new Error(payload.error || 'Agent not found')
-        }
-
+        const payload = await getAgentBySlug(slug)
         if (isMounted) {
           setAgent(payload)
         }

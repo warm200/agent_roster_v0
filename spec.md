@@ -16,6 +16,7 @@ Implemented in the current mock app:
 - Initial Drizzle migration generated under `drizzle/`
 - Shared enums/constants and Zod schemas now exist in `lib/constants.ts` and `lib/schemas.ts`
 - Shared Axios client entrypoint now exists in `services/api.ts`
+- Catalog client helpers now exist in `services/catalog.api.ts`
 - Preview chat client now exists in `services/preview.api.ts`
 - Cart client helpers now exist in `services/cart.api.ts`
 - Checkout client helpers now exist in `services/checkout.api.ts`
@@ -53,10 +54,11 @@ Implemented in the current mock app:
 - `usePairingStatus(orderId)` now exists and polls `/api/me/orders/:id/run-channel` until pairing reaches a terminal state
 - `useRunStatus(runId)` now exists and polls `/api/me/runs/:id` until active runs reach a terminal state
 - Cart sync, checkout, and Telegram setup flows now call shared frontend API clients instead of raw `fetch`
+- Catalog, dashboard, bundles, bundle detail, and runs pages now call shared frontend API clients instead of raw `fetch`
 
 Still not implemented:
 - Production auth provider setup, production Stripe/Telegram operations, provider abstraction, and a real run backend
-- Remaining frontend service-layer modules and hardened production contracts
+- Hardened production contracts and deeper auth enforcement polish
 
 ---
 
@@ -458,7 +460,7 @@ Normalize current mock routes into final service-backed PRD routes. Several func
 
 Wire pages to real API. Keep all existing UI.
 
-1. [ ] Create `services/*.api.ts` files (7 service clients; `api.ts`, `cart.api.ts`, `checkout.api.ts`, `orders.api.ts`, `preview.api.ts`, `runs.api.ts`, and `telegram.api.ts` now exist)
+1. [x] Create `services/*.api.ts` files (all planned client modules now exist: `catalog.api.ts`, `cart.api.ts`, `checkout.api.ts`, `orders.api.ts`, `preview.api.ts`, `runs.api.ts`, and `telegram.api.ts`)
 2. [x] Add `lib/auth-context.tsx` + `AuthProvider` in `providers.tsx`
 3. [x] Add `proxy.ts` for `/app/*` route protection
 4. [x] Wire CartContext to API (`addItem` → `POST /api/cart/items`, etc.) for the mock flow
