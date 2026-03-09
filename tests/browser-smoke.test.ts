@@ -100,6 +100,22 @@ async function clickByText(page: Page, selector: string, text: string) {
   assert.equal(clicked, true, `Could not find ${selector} with text "${text}"`)
 }
 
+async function clickByHref(page: Page, href: string) {
+  await page.waitForFunction(
+    (expectedHref) => Boolean(document.querySelector(`a[href="${expectedHref}"]`)),
+    {},
+    href,
+  )
+
+  const clicked = await page.evaluate((expectedHref) => {
+    const candidate = document.querySelector<HTMLElement>(`a[href="${expectedHref}"]`)
+    candidate?.click()
+    return Boolean(candidate)
+  }, href)
+
+  assert.equal(clicked, true, `Could not find link with href "${href}"`)
+}
+
 async function createSessionToken(overrides: Record<string, string> = {}) {
   return encode({
     secret: process.env.AUTH_SECRET || 'test-auth-secret',
@@ -245,6 +261,30 @@ if (!chromePath) {
         assert.equal(page.url(), `${BASE_URL}/app/bundles`)
 
         await page.goto(`${BASE_URL}/app/runs`, { waitUntil: 'domcontentloaded' })
+        await waitForText(page, 'Run History')
+        assert.equal(page.url(), `${BASE_URL}/app/runs`)
+      } finally {
+        await page.close()
+      }
+    },
+  )
+
+  test(
+    'browser smoke covers signed-in app navigation',
+    { timeout: 120_000 },
+    async () => {
+      assert.ok(browser, 'Browser failed to launch')
+      const page = await browser.newPage()
+
+      try {
+        await authenticatePage(page)
+        await page.goto(`${BASE_URL}/app`, { waitUntil: 'domcontentloaded' })
+        await waitForText(page, 'Dashboard')
+        await clickByHref(page, '/app/bundles')
+        await waitForText(page, 'My Bundles')
+        assert.equal(page.url(), `${BASE_URL}/app/bundles`)
+
+        await clickByHref(page, '/app/runs')
         await waitForText(page, 'Run History')
         assert.equal(page.url(), `${BASE_URL}/app/runs`)
       } finally {
