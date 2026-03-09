@@ -1,5 +1,7 @@
+"use client"
+
+import { use, useEffect, useState, type ReactNode } from 'react'
 import Link from 'next/link'
-import { notFound } from 'next/navigation'
 import { RiskBadge } from '@/components/risk-badge'
 import { RunLogsPanel } from '@/components/run-logs-panel'
 import { RunResultsPanel } from '@/components/run-results-panel'
@@ -8,7 +10,8 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
-import { getOrderById, getRunAgents, getRunById, getRunLogs } from '@/lib/mock-selectors'
+import { Skeleton } from '@/components/ui/skeleton'
+import type { Agent, Order, Run, RunLog } from '@/lib/types'
 import { formatDateTime } from '@/lib/utils'
 import { AlertTriangle, ArrowLeft, CheckCircle2, Globe, Package, Wrench, XCircle } from 'lucide-react'
 
@@ -16,22 +19,85 @@ interface RunDetailPageProps {
   params: Promise<{ runId: string }>
 }
 
-export default async function RunDetailPage({ params }: RunDetailPageProps) {
-  const { runId } = await params
-  const run = getRunById(runId)
+interface RunDetailResponse extends Run {
+  agents: Agent[]
+  artifactsCount: number
+  logs: RunLog[]
+  logsCount: number
+  order: Order | undefined
+}
 
-  if (!run) {
-    notFound()
+export default function RunDetailPage({ params }: RunDetailPageProps) {
+  const { runId } = use(params)
+  const [run, setRun] = useState<RunDetailResponse | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let isMounted = true
+
+    async function loadRun() {
+      setIsLoading(true)
+      setLoadError(null)
+
+      try {
+        const response = await fetch(`/api/runs/${runId}`)
+        const payload = await response.json()
+
+        if (!response.ok) {
+          throw new Error(payload.error || 'Unable to load run')
+        }
+
+        if (isMounted) {
+          setRun(payload)
+        }
+      } catch (error) {
+        if (isMounted) {
+          setLoadError(error instanceof Error ? error.message : 'Unable to load run')
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false)
+        }
+      }
+    }
+
+    loadRun()
+
+    return () => {
+      isMounted = false
+    }
+  }, [runId])
+
+  if (isLoading) {
+    return <RunDetailSkeleton />
   }
 
-  const order = getOrderById(run.orderId)
-
-  if (!order) {
-    notFound()
+  if (!run || !run.order) {
+    return (
+      <div className="space-y-6 p-6 lg:p-8">
+        <Link
+          href="/app/runs"
+          className="inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to Runs
+        </Link>
+        <Card className="border-red-500/30 bg-red-500/5">
+          <CardContent className="flex items-start gap-3 p-6">
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-red-400" />
+            <div>
+              <p className="font-medium text-red-400">Run not found</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {loadError ?? 'This run could not be loaded from the mock API.'}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
   }
 
-  const agents = getRunAgents(run)
-  const logs = getRunLogs(run.id)
   const isActive = run.status === 'provisioning' || run.status === 'running'
 
   return (
@@ -50,12 +116,12 @@ export default async function RunDetailPage({ params }: RunDetailPageProps) {
             <RunStatusBadge status={run.status} />
           </div>
           <p className="text-muted-foreground">
-            Bundle {order.id} · {agents.length} agent{agents.length === 1 ? '' : 's'} · created {formatDateTime(run.createdAt)}
+            Bundle {run.order.id} · {run.agents.length} agent{run.agents.length === 1 ? '' : 's'} · created {formatDateTime(run.createdAt)}
           </p>
         </div>
 
         <Button variant="outline" asChild>
-          <Link href={`/app/bundles/${order.id}`}>
+          <Link href={`/app/bundles/${run.order.id}`}>
             <Package className="mr-2 h-4 w-4" />
             View Bundle
           </Link>
@@ -97,7 +163,7 @@ export default async function RunDetailPage({ params }: RunDetailPageProps) {
             </CardContent>
           </Card>
 
-          <RunLogsPanel logs={logs} />
+          <RunLogsPanel logs={run.logs} />
           <RunResultsPanel summary={run.resultSummary} artifacts={run.resultArtifacts} />
         </div>
 
@@ -109,12 +175,12 @@ export default async function RunDetailPage({ params }: RunDetailPageProps) {
             <CardContent className="space-y-4">
               <InfoRow label="Run ID" value={run.id} monospace />
               <Separator />
-              <InfoRow label="Bundle ID" value={order.id} monospace />
+              <InfoRow label="Bundle ID" value={run.order.id} monospace />
               <Separator />
               <div>
                 <div className="mb-2 text-xs text-muted-foreground">Agents in bundle</div>
                 <div className="flex flex-wrap gap-2">
-                  {agents.map((agent) => (
+                  {run.agents.map((agent) => (
                     <Badge key={agent.id} variant="secondary">
                       {agent.title}
                     </Badge>
@@ -155,9 +221,9 @@ export default async function RunDetailPage({ params }: RunDetailPageProps) {
               <CardTitle className="text-base">Outcome</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              <InfoRow label="Logs captured" value={logs.length.toString()} />
+              <InfoRow label="Logs captured" value={run.logsCount.toString()} />
               <Separator />
-              <InfoRow label="Artifacts" value={run.resultArtifacts.length.toString()} />
+              <InfoRow label="Artifacts" value={run.artifactsCount.toString()} />
               <Separator />
               <InfoRow label="Channel config" value={run.channelConfigId} monospace />
             </CardContent>
@@ -174,7 +240,7 @@ function CapabilityRow({
   label,
 }: {
   active: boolean
-  icon: React.ReactNode
+  icon: ReactNode
   label: string
 }) {
   return (
@@ -225,6 +291,33 @@ function TimelineRow({
       <div className="pb-4">
         <div className="text-sm font-medium">{label}</div>
         <div className="text-sm text-muted-foreground">{value}</div>
+      </div>
+    </div>
+  )
+}
+
+function RunDetailSkeleton() {
+  return (
+    <div className="space-y-6 p-6 lg:p-8">
+      <Skeleton className="h-5 w-28" />
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="space-y-3">
+          <Skeleton className="h-8 w-52" />
+          <Skeleton className="h-4 w-80" />
+        </div>
+        <Skeleton className="h-10 w-32" />
+      </div>
+      <Skeleton className="h-20 w-full" />
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,2fr)_360px]">
+        <div className="space-y-6">
+          <Skeleton className="h-56 w-full" />
+          <Skeleton className="h-56 w-full" />
+          <Skeleton className="h-56 w-full" />
+        </div>
+        <div className="space-y-6">
+          <Skeleton className="h-80 w-full" />
+          <Skeleton className="h-40 w-full" />
+        </div>
       </div>
     </div>
   )

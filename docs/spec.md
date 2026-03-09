@@ -59,8 +59,8 @@ The API routes reference fields that don't exist on the PRD types:
 | Dashboard                     | `/app`                        | §5.7    | DONE     | Quick stats, recent bundles, recent runs |
 | Purchased Bundles List        | `/app/bundles`                | §5.8    | DONE     | Redirects missing (needs check) |
 | Purchased Bundle Detail       | `/app/bundles/:orderId`       | §5.8    | DONE     | Agents tab, Telegram wizard, downloads, run history |
-| Run History List              | `/app/runs`                   | §5.9    | DONE     | Uses PRD-aligned run/order data and bundle-oriented summaries |
-| Run Detail                    | `/app/runs/:runId`            | §5.9    | DONE     | Shows timeline, runtime disclosure, logs, results, artifacts, and combined risk |
+| Run History List              | `/app/runs`                   | §5.9    | DONE     | API-backed page using `/api/runs` with loading/error/filter states |
+| Run Detail                    | `/app/runs/:runId`            | §5.9    | DONE     | API-backed detail page showing timeline, runtime disclosure, logs, results, artifacts, and combined risk |
 
 ---
 
@@ -194,7 +194,7 @@ The API routes reference fields that don't exist on the PRD types:
 | Telegram token validate state       | PARTIAL  | Local component state; no API |
 | Pairing state                       | PARTIAL  | Local component state; no API |
 | Run launch readiness                | PARTIAL  | Bundle page gating is fixed and launch now redirects into a created mock run, but there is no real orchestration backend |
-| Run status/logs/results state       | PARTIAL  | Mock data only; no polling or real state |
+| Run status/logs/results state       | PARTIAL  | Runs pages now fetch from mock APIs; still no polling or real backend state |
 
 ---
 
@@ -221,7 +221,7 @@ The API routes reference fields that don't exist on the PRD types:
 
 | Area                                | Status   | Notes |
 |-------------------------------------|----------|-------|
-| Pages call API routes               | NO       | All pages import `mock-data.ts` directly; API routes are unused |
+| Pages call API routes               | PARTIAL  | Runs and bundle detail now fetch through app APIs; catalog/cart/dashboard still read local mock data |
 | API routes match PRD endpoint paths  | NO      | Routes use `/api/bundles`, `/api/runs` instead of `/api/me/orders`, `/api/me/runs` |
 | API route schemas match types.ts     | PARTIAL | Agents/runs/bundles routes now align with shared mock types; checkout/telegram remain mock contracts |
 | Loading states on data fetch         | PARTIAL | Checkout has processing state; most pages render synchronously from mock |
