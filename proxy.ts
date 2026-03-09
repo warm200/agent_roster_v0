@@ -2,12 +2,7 @@ import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 import { getToken } from 'next-auth/jwt'
 
-function isAuthConfigured() {
-  return Boolean(
-    (process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET) ||
-      (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET),
-  )
-}
+import { isAuthConfigured } from '@/server/lib/auth'
 
 export async function proxy(request: NextRequest) {
   if (!isAuthConfigured()) {

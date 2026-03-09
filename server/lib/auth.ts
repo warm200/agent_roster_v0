@@ -2,6 +2,13 @@ import type { NextAuthOptions } from 'next-auth'
 import GitHubProvider from 'next-auth/providers/github'
 import GoogleProvider from 'next-auth/providers/google'
 
+export function isAuthConfigured() {
+  return Boolean(
+    (process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET) ||
+      (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET),
+  )
+}
+
 const providers: NextAuthOptions['providers'] = []
 
 if (process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET) {

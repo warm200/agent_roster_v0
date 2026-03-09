@@ -28,6 +28,7 @@ Implemented in the current mock app:
 - Auth client context now exists in `lib/auth-context.tsx` and is mounted in `app/providers.tsx`
 - Login page now exists at `app/login/page.tsx`
 - `proxy.ts` now protects `/app/*` when OAuth providers are configured
+- Final `/api/me/*` routes now require a NextAuth JWT when OAuth providers are configured, while demo/header fallback stays available for local mock mode
 - Local PostgreSQL Docker Compose file now exists in `docker-compose.yml`
 - Fresh local Postgres verification now passes: migrate + seed succeed against a clean database
 - Run provider scaffolding now exists under `server/providers/` with mock and openclaw stubs
@@ -63,7 +64,7 @@ Implemented in the current mock app:
 
 Still not implemented:
 - Production auth provider setup, production Stripe/Telegram operations, provider abstraction, and a real run backend
-- Deeper paid checkout, Telegram pairing, and run-launch browser coverage, plus hardened production contracts and deeper auth enforcement polish
+- Deeper paid checkout, Telegram pairing, and run-launch browser coverage, plus hardened production contracts
 
 ---
 
