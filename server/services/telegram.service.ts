@@ -202,15 +202,22 @@ class EnvSecretStore implements SecretStore {
       throw new HttpError(500, 'Stored Telegram secret is invalid.')
     }
 
-    const decipher = createDecipheriv('aes-256-gcm', this.key, Buffer.from(ivPart, 'base64url'))
-    decipher.setAuthTag(Buffer.from(tagPart, 'base64url'))
+    try {
+      const decipher = createDecipheriv('aes-256-gcm', this.key, Buffer.from(ivPart, 'base64url'))
+      decipher.setAuthTag(Buffer.from(tagPart, 'base64url'))
 
-    const decrypted = Buffer.concat([
-      decipher.update(Buffer.from(dataPart, 'base64url')),
-      decipher.final(),
-    ])
+      const decrypted = Buffer.concat([
+        decipher.update(Buffer.from(dataPart, 'base64url')),
+        decipher.final(),
+      ])
 
-    return decrypted.toString('utf8')
+      return decrypted.toString('utf8')
+    } catch {
+      throw new HttpError(
+        409,
+        'Stored Telegram bot credentials can no longer be decrypted. Disconnect and reconnect the bot.',
+      )
+    }
   }
 }
 
@@ -338,10 +345,11 @@ function supportsTelegramWebhook(origin?: string) {
 }
 
 export function createTelegramService(options: CreateTelegramServiceOptions = {}) {
-  const secretSeed = options.secretSeed ?? process.env.AUTH_SECRET
+  const secretSeed =
+    options.secretSeed ?? process.env.TELEGRAM_SECRET_SEED ?? process.env.AUTH_SECRET
 
   if (!secretSeed) {
-    throw new Error('AUTH_SECRET is required for Telegram secret handling')
+    throw new Error('TELEGRAM_SECRET_SEED or AUTH_SECRET is required for Telegram secret handling')
   }
 
   const requiredSecretSeed = secretSeed

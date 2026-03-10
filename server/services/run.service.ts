@@ -2,6 +2,7 @@ import { riskProfileSchema, runLogSchema, runResultSchema } from '@/lib/schemas'
 import type { AgentVersion, Order, Run, RunLog, RunResult } from '@/lib/types'
 
 import { HttpError } from '../lib/http'
+import { getTelegramService } from './telegram.service'
 import { scanAgentVersion as scanAgentVersionRiskProfile } from '../lib/risk-engine'
 import { getRunProvider } from '../providers'
 import { RunRepository } from './run.repository'
@@ -41,10 +42,11 @@ export class RunService {
   ) {}
 
   async createRun(userId: string, orderId: string) {
-    const order = await getOrderByIdForUser({ orderId, userId })
+    await runServiceDeps.getTelegramService().getChannelConfig({ orderId, userId })
+    const order = await runServiceDeps.getOrderByIdForUser({ orderId, userId })
     ensureLaunchable(order)
 
-    const provider = getRunProvider()
+    const provider = runServiceDeps.getRunProvider()
     const run = await provider.createRun(order)
 
     return this.repository.createRun(run)
@@ -62,19 +64,19 @@ export class RunService {
 
   async getRunLogs(userId: string, runId: string): Promise<RunLog[]> {
     const run = await this.requireRun(userId, runId)
-    const logs = await getRunProvider().getLogs(run.id)
+    const logs = await runServiceDeps.getRunProvider().getLogs(run.id)
     return runLogSchema.array().parse(logs)
   }
 
   async getRunResult(userId: string, runId: string): Promise<RunResult | null> {
     const run = await this.requireRun(userId, runId)
-    const result = await getRunProvider().getResult(run.id)
+    const result = await runServiceDeps.getRunProvider().getResult(run.id)
     return result ? runResultSchema.parse(result) : null
   }
 
   async stopRun(userId: string, runId: string) {
     const run = await this.requireRun(userId, runId)
-    const stopped = await getRunProvider().stopRun(run.id)
+    const stopped = await runServiceDeps.getRunProvider().stopRun(run.id)
 
     if (!stopped) {
       return run
@@ -103,13 +105,13 @@ export class RunService {
   }
 
   private async syncRun(run: Run, persist: boolean) {
-    const providerRun = await getRunProvider().getStatus(run.id)
+    const providerRun = await runServiceDeps.getRunProvider().getStatus(run.id)
 
     if (!providerRun) {
       return run
     }
 
-    const result = await getRunProvider().getResult(run.id)
+    const result = await runServiceDeps.getRunProvider().getResult(run.id)
     const nextRun: Run = {
       ...run,
       status: providerRun.status,
@@ -133,6 +135,12 @@ export class RunService {
 }
 
 let runServiceOverride: RunService | null = null
+const defaultRunServiceDeps = {
+  getOrderByIdForUser,
+  getRunProvider,
+  getTelegramService,
+}
+let runServiceDeps = defaultRunServiceDeps
 
 export function getRunService() {
   return runServiceOverride ?? new RunService()
@@ -140,4 +148,10 @@ export function getRunService() {
 
 export function setRunServiceForTesting(service: RunService | null) {
   runServiceOverride = service
+}
+
+export function setRunServiceDepsForTesting(
+  overrides: Partial<typeof defaultRunServiceDeps> | null,
+) {
+  runServiceDeps = overrides ? { ...defaultRunServiceDeps, ...overrides } : defaultRunServiceDeps
 }

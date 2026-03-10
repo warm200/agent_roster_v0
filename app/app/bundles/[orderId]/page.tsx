@@ -1,6 +1,6 @@
 'use client'
 
-import { use, useEffect, useState } from 'react'
+import { use, useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
@@ -45,6 +45,38 @@ export default function BundleDetailPage({ params }: PageProps) {
   const [isLoading, setIsLoading] = useState(true)
   const [telegramSetup, setTelegramSetup] = useState(false)
   const [isLaunching, setIsLaunching] = useState(false)
+
+  const handleChannelConfigChange = useCallback((channelConfig: NonNullable<Order['channelConfig']>) => {
+    setOrder((currentOrder) => {
+      if (!currentOrder) {
+        return currentOrder
+      }
+
+      const currentConfig = currentOrder.channelConfig
+      const unchanged =
+        currentConfig?.id === channelConfig.id &&
+        currentConfig?.tokenStatus === channelConfig.tokenStatus &&
+        currentConfig?.recipientBindingStatus === channelConfig.recipientBindingStatus &&
+        currentConfig?.recipientExternalId === channelConfig.recipientExternalId &&
+        currentConfig?.botTokenSecretRef === channelConfig.botTokenSecretRef &&
+        currentConfig?.updatedAt === channelConfig.updatedAt
+
+      if (unchanged) {
+        return currentOrder
+      }
+
+      return {
+        ...currentOrder,
+        channelConfig,
+      }
+    })
+
+    setTelegramSetup(channelConfig.recipientBindingStatus === 'paired')
+  }, [])
+
+  const handleTelegramComplete = useCallback(() => {
+    setTelegramSetup(true)
+  }, [])
 
   useEffect(() => {
     let isMounted = true
@@ -251,18 +283,8 @@ export default function BundleDetailPage({ params }: PageProps) {
               tokenStatus: order.channelConfig?.tokenStatus || 'pending',
               pairingStatus: order.channelConfig?.recipientBindingStatus || 'pending',
             }}
-            onChannelConfigChange={(channelConfig) => {
-              setOrder((currentOrder) =>
-                currentOrder
-                  ? {
-                      ...currentOrder,
-                      channelConfig,
-                    }
-                  : currentOrder,
-              )
-              setTelegramSetup(channelConfig.recipientBindingStatus === 'paired')
-            }}
-            onComplete={() => setTelegramSetup(true)}
+            onChannelConfigChange={handleChannelConfigChange}
+            onComplete={handleTelegramComplete}
           />
         </TabsContent>
 

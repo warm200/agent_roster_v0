@@ -32,7 +32,9 @@ Implemented in the current mock app:
 - Final `/api/me/*` routes now require a NextAuth JWT when OAuth providers are configured, while demo/header fallback stays available for local mock mode
 - Local PostgreSQL Docker Compose file now exists in `docker-compose.yml`
 - Fresh local Postgres verification now passes: migrate + seed succeed against a clean database
-- Run providers now exist under `server/providers/` with mock, OpenAI Responses background mode, and an openclaw stub
+- Run providers now exist under `server/providers/` with a real Daytona sandbox adapter, mock fallback, OpenAI preview integration, and an openclaw stub
+- Run launch now refreshes Telegram pairing server-side before enforcing launch guards, so local polling-mode pairing is picked up at click time
+- Telegram secret handling now supports a dedicated `TELEGRAM_SECRET_SEED` and returns a reconnect error when stored bot credentials can no longer be decrypted
 - Initial backend risk-engine utility now exists in `server/lib/risk-engine.ts`
 - Backend commerce snapshot/mapping utilities now exist in `server/services/commerce.utils.ts`
 - Backend catalog service now exists in `server/services/catalog.service.ts` with DB + mock fallback logic
@@ -84,7 +86,7 @@ Implemented in the current mock app:
 - Provider unit coverage now exists for the OpenAI run adapter create/poll/result/cancel flow
 
 Still not implemented:
-- Production auth provider setup, production Stripe/Telegram operations, durable provider state persistence, and a full workspace-capable run backend
+- Production auth provider setup, production Stripe/Telegram operations, durable opaque provider-run persistence, and real per-agent run config execution inside Daytona
 - Deeper paid checkout, Telegram pairing, and run-launch browser coverage, plus hardened production contracts
 
 ---
@@ -148,7 +150,8 @@ v0_version/                        # Next.js 16 full-stack
 │   ├── providers/
 │   │   ├── run-provider.interface.ts  # Provider contract
 │   │   ├── mock.provider.ts       # Dev/demo provider
-│   │   ├── openai.provider.ts     # Real OpenAI Responses provider
+│   │   ├── daytona.provider.ts    # Real Daytona sandbox provider
+│   │   ├── openai.provider.ts     # OpenAI preview/dev provider
 │   │   ├── openclaw.provider.ts   # Stub for future
 │   │   └── index.ts               # Provider registry
 │   └── lib/
@@ -194,7 +197,7 @@ v0_version/                        # Next.js 16 full-stack
 | Checkout | `app/checkout/page.tsx` | Partial: creates a Stripe checkout session via API, enforces auth when OAuth is enabled, and success reconciles the returned `session_id` into an order |
 | Dashboard | `app/app/page.tsx` | Done: API-backed stats and recent activity |
 | Bundles List | `app/app/bundles/page.tsx` | Done: API-backed bundles list |
-| Bundle Detail | `app/app/bundles/[orderId]/page.tsx` | Partial: API-backed bundle detail, Telegram setup with local polling fallback and bot reset support, downloads, and mock run launch |
+| Bundle Detail | `app/app/bundles/[orderId]/page.tsx` | Partial: API-backed bundle detail, Telegram setup with local polling fallback and bot reset support, stable run-launch redirect, downloads, and Daytona-backed run launch |
 | Runs List | `app/app/runs/page.tsx` | Done: API-backed runs list with filters/loading/error states |
 | Run Detail | `app/app/runs/[runId]/page.tsx` | Done: API-backed detail with logs/results/artifacts/runtime disclosure/risk/retry/cancel |
 
@@ -264,7 +267,8 @@ Port as-is → `server/providers/`. Change imports only.
 |------|---------|
 | `run-provider.interface.ts` | `RunProvider` interface (createRun, getStatus, getLogs, getResult, stopRun) |
 | `mock.provider.ts` | Time-based simulation: provisioning→running→completed with synthetic logs |
-| `openclaw.provider.ts` | Stub delegating to mock; ready for real integration |
+| `daytona.provider.ts` | Real sandbox-backed provider using `@daytonaio/sdk`; sandbox name currently doubles as provider ref |
+| `openclaw.provider.ts` | Stub delegating to mock; ready for future integration |
 
 ### Shared Schemas
 
@@ -456,7 +460,7 @@ Port all services from agent_roster. Adapt imports. Test with curl/httpie.
 5. [x] Port `server/services/telegram.service.ts`
 6. [x] Port `server/services/run.service.ts` + `run.repository.ts`
 7. [x] Port `server/services/commerce.utils.ts`
-8. [x] Port `server/providers/` (interface + mock + openclaw stub)
+8. [x] Port `server/providers/` (interface + mock + daytona + openclaw stub)
 9. [x] Port `server/lib/risk-engine.ts`
 
 ### Phase 2: Rewrite API Routes (~20 route files)
@@ -546,7 +550,10 @@ NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_...
 DOWNLOAD_URL_SECRET=<random-32-bytes>
 
 # Run Provider
-RUN_PROVIDER=mock  # mock | openai | openclaw
+RUN_PROVIDER=daytona  # daytona | mock | openai | openclaw
+DAYTONA_API_KEY=replace-me
+DAYTONA_API_URL=https://app.daytona.io/api
+DAYTONA_TARGET=
 OPENAI_RUN_MODEL=gpt-5
 
 # Preview Chat
@@ -556,6 +563,7 @@ OPENAI_PREVIEW_MODEL=gpt-4o
 # Telegram
 # Production: set an HTTPS webhook URL
 # Local dev: can be left unset; Telegram pairing falls back to polling getUpdates
+TELEGRAM_SECRET_SEED=<random-32-bytes>
 TELEGRAM_WEBHOOK_URL=https://your-domain/api/webhooks/telegram
 
 # Internal

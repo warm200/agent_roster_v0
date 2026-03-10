@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { afterEach, test } from 'node:test'
 
+import { HttpError } from '@/server/lib/http'
 import { createTelegramService, type TelegramRepository } from '@/server/services/telegram.service'
 
 const originalNextAuthUrl = process.env.NEXTAUTH_URL
@@ -252,4 +253,54 @@ test('telegram service pairs pending local-dev chats by polling getUpdates', asy
 
   assert.equal(config.recipientBindingStatus, 'paired')
   assert.equal(config.recipientExternalId, '77')
+})
+
+test('telegram service surfaces unreadable stored bot credentials clearly', async () => {
+  process.env.NEXTAUTH_URL = 'http://localhost:3000'
+  delete process.env.TELEGRAM_WEBHOOK_URL
+
+  const { repository, context } = createRepository()
+  const service = createTelegramService({
+    apiClient: {
+      async deleteWebhook() {},
+      async getMe() {
+        return {
+          id: 42,
+          username: 'ops_bot',
+        }
+      },
+      async getUpdates() {
+        return []
+      },
+      async setWebhook() {},
+    },
+    repository,
+    secretSeed: 'test-secret',
+    secretStore: {
+      async read() {
+        throw new HttpError(
+          409,
+          'Stored Telegram bot credentials can no longer be decrypted. Disconnect and reconnect the bot.',
+        )
+      },
+      async write() {
+        return 'secret-ref'
+      },
+    },
+  })
+
+  await assert.rejects(
+    service.getChannelConfig({
+      orderId: context.orderId,
+      userId: context.userId,
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof HttpError)
+      assert.equal(
+        error.message,
+        'Stored Telegram bot credentials can no longer be decrypted. Disconnect and reconnect the bot.',
+      )
+      return true
+    },
+  )
 })
