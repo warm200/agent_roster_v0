@@ -35,6 +35,8 @@ Implemented in the current mock app:
 - Run providers now exist under `server/providers/` with a real Daytona sandbox adapter, mock fallback, OpenAI preview integration, and an openclaw stub
 - Deleted Daytona sandboxes now degrade to stale run records instead of breaking bundle/run pages
 - Bundle detail now loads order data independently from runs/download grants, so provider-side run failures no longer masquerade as “bundle not found”
+- Run detail timeline now visually reflects created/started/updated/completed state instead of rendering every row as the same muted style
+- Run status, logs, and result copy now redact provider names so runtime vendors stay backend-internal
 - Run launch now refreshes Telegram pairing server-side before enforcing launch guards, so local polling-mode pairing is picked up at click time
 - Telegram secret handling now supports a dedicated `TELEGRAM_SECRET_SEED` and returns a reconnect error when stored bot credentials can no longer be decrypted
 - Initial backend risk-engine utility now exists in `server/lib/risk-engine.ts`
@@ -645,4 +647,4 @@ All items from PRD §18, mapped to implementation:
 | Cart/order/run show bundle risk | Phase 3-4 | Already done in UI; wire to real data |
 | Run is post-purchase only | Phase 3 | Auth proxy + order check |
 | Run experience in-product | Current | Already done |
-| Provider stays backend-internal | Phase 2 | API responses exclude `provider_*` fields |
+| Provider stays backend-internal | Phase 2 | API responses exclude `provider_*` fields and sanitize provider-branded run copy before it reaches the UI |

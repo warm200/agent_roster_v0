@@ -8,6 +8,46 @@ import { getRunProvider } from '../providers'
 import { RunRepository } from './run.repository'
 import { getOrderByIdForUser } from './order.service'
 
+function sanitizeRunText(value: string | null) {
+  if (!value) {
+    return value
+  }
+
+  return value
+    .replaceAll(/Managed run completed for bundle/gi, 'Managed run completed for bundle')
+    .replaceAll(/Daytona workspace completed bundle/gi, 'Managed run completed for bundle')
+    .replaceAll(/Submitted background response [\w-]+ to OpenAI model [^.]+\./gi, 'Submitted run request to the managed runtime.')
+    .replaceAll(/OpenAI response is currently ([^.]+)\./gi, 'Run status is currently $1.')
+    .replaceAll(/OpenAI returned a final summary for this run\./gi, 'A final summary is ready for this run.')
+    .replaceAll(/managed Daytona workspace/gi, 'managed runtime')
+    .replaceAll(/Daytona workspace/gi, 'managed runtime')
+    .replaceAll(/ in Daytona\./gi, '.')
+    .replaceAll(/\bDaytona\b/gi, 'managed runtime')
+    .replaceAll(/\bOpenAI\b/gi, 'managed runtime')
+    .replaceAll(/\bOpenClaw\b/gi, 'managed runtime')
+}
+
+function sanitizeRun(run: Run): Run {
+  return {
+    ...run,
+    resultSummary: sanitizeRunText(run.resultSummary),
+  }
+}
+
+function sanitizeRunLogs(logs: RunLog[]): RunLog[] {
+  return logs.map((log) => ({
+    ...log,
+    message: sanitizeRunText(log.message) ?? log.message,
+  }))
+}
+
+function sanitizeRunResult(result: RunResult): RunResult {
+  return {
+    ...result,
+    summary: sanitizeRunText(result.summary) ?? result.summary,
+  }
+}
+
 function ensureLaunchable(order: Order) {
   const failures: string[] = []
 
@@ -65,13 +105,13 @@ export class RunService {
   async getRunLogs(userId: string, runId: string): Promise<RunLog[]> {
     const run = await this.requireRun(userId, runId)
     const logs = await runServiceDeps.getRunProvider().getLogs(run.id)
-    return runLogSchema.array().parse(logs)
+    return sanitizeRunLogs(runLogSchema.array().parse(logs))
   }
 
   async getRunResult(userId: string, runId: string): Promise<RunResult | null> {
     const run = await this.requireRun(userId, runId)
     const result = await runServiceDeps.getRunProvider().getResult(run.id)
-    return result ? runResultSchema.parse(result) : null
+    return result ? sanitizeRunResult(runResultSchema.parse(result)) : null
   }
 
   async stopRun(userId: string, runId: string) {
@@ -108,7 +148,7 @@ export class RunService {
     const providerRun = await runServiceDeps.getRunProvider().getStatus(run.id)
 
     if (!providerRun) {
-      return run
+      return sanitizeRun(run)
     }
 
     const result = await runServiceDeps.getRunProvider().getResult(run.id)
@@ -127,10 +167,11 @@ export class RunService {
     }
 
     if (!persist) {
-      return nextRun
+      return sanitizeRun(nextRun)
     }
 
-    return (await this.repository.updateRun(run.id, nextRun)) ?? nextRun
+    const persistedRun = (await this.repository.updateRun(run.id, nextRun)) ?? nextRun
+    return sanitizeRun(persistedRun)
   }
 }
 

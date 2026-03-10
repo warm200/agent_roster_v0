@@ -155,19 +155,19 @@ test('daytona run provider supports create, poll, logs, result, and stop flow', 
               if (command.includes('nohup python3')) {
                 const initialStatus = JSON.parse(sandbox.files['/tmp/agent-roster/status.json'])
                 sandbox.files['/tmp/agent-roster/run.log'] = [
-                  `${initialStatus.updatedAt}|info|bootstrap|Sandbox ready for order order-test-1.`,
-                  `${new Date().toISOString()}|info|complete|Run completed successfully in Daytona.`,
+                  `${initialStatus.updatedAt}|info|bootstrap|Managed runtime ready for order order-test-1.`,
+                  `${new Date().toISOString()}|info|complete|Run completed successfully.`,
                 ].join('\n')
                 sandbox.files['/tmp/agent-roster/status.json'] = JSON.stringify({
                   completedAt: new Date().toISOString(),
-                  resultSummary: 'Daytona workspace completed bundle order-test-1.',
+                  resultSummary: 'Managed run completed for bundle order-test-1.',
                   startedAt: new Date().toISOString(),
                   status: 'completed',
                   updatedAt: new Date().toISOString(),
                 })
                 sandbox.files['/tmp/agent-roster/result.json'] = JSON.stringify({
                   artifacts: [],
-                  summary: 'Daytona workspace completed bundle order-test-1.',
+                  summary: 'Managed run completed for bundle order-test-1.',
                 })
               }
 
@@ -229,7 +229,7 @@ test('daytona run provider supports create, poll, logs, result, and stop flow', 
   const status = await provider.getStatus(created.id)
   assert.ok(status)
   assert.equal(status.status, 'completed')
-  assert.match(status.resultSummary ?? '', /Daytona workspace completed bundle/)
+  assert.match(status.resultSummary ?? '', /Managed run completed for bundle/)
 
   const logs = await provider.getLogs(created.id)
   assert.equal(logs[0]?.step, 'bootstrap')
@@ -237,7 +237,7 @@ test('daytona run provider supports create, poll, logs, result, and stop flow', 
 
   const result = await provider.getResult(created.id)
   assert.ok(result)
-  assert.match(result.summary, /Daytona workspace completed bundle/)
+  assert.match(result.summary, /Managed run completed for bundle/)
 
   const stopped = await provider.stopRun(created.id)
   assert.ok(stopped)

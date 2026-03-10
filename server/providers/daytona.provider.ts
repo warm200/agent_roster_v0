@@ -202,19 +202,19 @@ def main():
     manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
     started_at = now_iso()
     write_status("running", started_at=started_at)
-    append_log("info", "bootstrap", f"Sandbox ready for order {manifest['orderId']}.")
+    append_log("info", "bootstrap", f"Managed runtime ready for order {manifest['orderId']}.")
     time.sleep(1)
     append_log("info", "channel", f"Telegram recipient: {manifest['recipientExternalId'] or 'pending pairing record'}")
     time.sleep(1)
 
     for title in manifest["agentTitles"]:
-        append_log("info", "agent", f"Prepared {title} inside managed Daytona workspace.")
+        append_log("info", "agent", f"Prepared {title} inside the managed runtime.")
         time.sleep(1)
 
-    summary = "Daytona workspace completed bundle " + manifest["orderId"] + ". Agents prepared: " + ", ".join(manifest["agentTitles"]) + ". Next step: review Telegram-triggered outputs and exported package artifacts."
+    summary = "Managed run completed for bundle " + manifest["orderId"] + ". Agents prepared: " + ", ".join(manifest["agentTitles"]) + ". Next step: review Telegram-triggered outputs and exported package artifacts."
     RESULT_PATH.write_text(json.dumps({"summary": summary, "artifacts": []}), encoding="utf-8")
     write_status("completed", started_at=started_at, completed_at=now_iso(), result_summary=summary)
-    append_log("info", "complete", "Run completed successfully in Daytona.")
+    append_log("info", "complete", "Run completed successfully.")
 
 if __name__ == "__main__":
     try:

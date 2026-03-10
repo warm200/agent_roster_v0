@@ -60,6 +60,7 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
   }
 
   const isActive = run.status === 'provisioning' || run.status === 'running'
+  const timeline = buildTimeline(run)
 
   const handleCancel = async () => {
     if (!run || isCancelling) {
@@ -176,17 +177,15 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
               <CardTitle className="text-base">Execution Timeline</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <TimelineRow label="Created" value={formatDateTime(run.createdAt)} />
-              <TimelineRow
-                label="Started"
-                value={run.startedAt ? formatDateTime(run.startedAt) : 'Waiting for workspace start'}
-              />
-              <TimelineRow label="Last Updated" value={formatDateTime(run.updatedAt)} />
-              <TimelineRow
-                label="Completed"
-                value={run.completedAt ? formatDateTime(run.completedAt) : 'Still running'}
-                isLast
-              />
+              {timeline.map((entry, index) => (
+                <TimelineRow
+                  key={entry.label}
+                  label={entry.label}
+                  value={entry.value}
+                  tone={entry.tone}
+                  isLast={index === timeline.length - 1}
+                />
+              ))}
             </CardContent>
           </Card>
 
@@ -303,24 +302,99 @@ function InfoRow({
 function TimelineRow({
   isLast,
   label,
+  tone,
   value,
 }: {
   isLast?: boolean
   label: string
+  tone: 'active' | 'complete' | 'pending' | 'failed'
   value: string
 }) {
+  const toneClassName = {
+    active: {
+      dot: 'bg-amber-400 shadow-[0_0_0_4px_rgba(251,191,36,0.18)]',
+      line: 'bg-amber-400/30',
+      label: 'text-amber-300',
+      value: 'text-foreground',
+    },
+    complete: {
+      dot: 'bg-emerald-400 shadow-[0_0_0_4px_rgba(52,211,153,0.16)]',
+      line: 'bg-emerald-400/25',
+      label: 'text-foreground',
+      value: 'text-foreground',
+    },
+    pending: {
+      dot: 'bg-muted-foreground/40',
+      line: 'bg-border',
+      label: 'text-muted-foreground',
+      value: 'text-muted-foreground',
+    },
+    failed: {
+      dot: 'bg-red-400 shadow-[0_0_0_4px_rgba(248,113,113,0.18)]',
+      line: 'bg-red-400/25',
+      label: 'text-red-300',
+      value: 'text-foreground',
+    },
+  }[tone]
+
   return (
     <div className="relative flex gap-4">
       <div className="flex flex-col items-center">
-        <div className="mt-1 h-2.5 w-2.5 rounded-full bg-foreground/70" />
-        {!isLast && <div className="mt-2 h-full w-px bg-border" />}
+        <div className={`mt-1 h-2.5 w-2.5 rounded-full ${toneClassName.dot}`} />
+        {!isLast && <div className={`mt-2 h-full w-px ${toneClassName.line}`} />}
       </div>
       <div className="pb-4">
-        <div className="text-sm font-medium">{label}</div>
-        <div className="text-sm text-muted-foreground">{value}</div>
+        <div className={`text-sm font-medium ${toneClassName.label}`}>{label}</div>
+        <div className={`text-sm ${toneClassName.value}`}>{value}</div>
       </div>
     </div>
   )
+}
+
+function buildTimeline(run: NonNullable<ReturnType<typeof useRunStatus>['run']>) {
+  const startedTone: 'active' | 'complete' | 'pending' | 'failed' = run.startedAt
+    ? 'complete'
+    : run.status === 'failed'
+      ? 'failed'
+      : run.status === 'completed'
+        ? 'pending'
+        : 'active'
+  const updatedTone: 'active' | 'complete' | 'pending' | 'failed' =
+    run.status === 'failed' ? 'failed' : run.status === 'completed' ? 'complete' : 'active'
+  const completedTone: 'active' | 'complete' | 'pending' | 'failed' = run.completedAt
+    ? run.status === 'failed'
+      ? 'failed'
+      : 'complete'
+    : run.status === 'failed'
+      ? 'failed'
+      : 'pending'
+
+  return [
+    {
+      label: 'Created',
+      tone: 'complete' as const,
+      value: formatDateTime(run.createdAt),
+    },
+    {
+      label: 'Started',
+      tone: startedTone,
+      value: run.startedAt ? formatDateTime(run.startedAt) : 'Queued for managed runtime start',
+    },
+    {
+      label: 'Last Updated',
+      tone: updatedTone,
+      value: formatDateTime(run.updatedAt),
+    },
+    {
+      label: 'Completed',
+      tone: completedTone,
+      value: run.completedAt
+        ? formatDateTime(run.completedAt)
+        : run.status === 'failed'
+          ? 'Run exited before completion'
+          : 'Still running',
+    },
+  ]
 }
 
 function RunDetailSkeleton() {
