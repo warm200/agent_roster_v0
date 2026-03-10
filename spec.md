@@ -11,6 +11,7 @@ Implemented in the current mock app:
 - Run launch now returns a provisioning run immediately, then provider bootstrap continues in the background so the UI can redirect without waiting on Daytona sandbox startup; Daytona marks the run complete once Control UI bootstrap finishes so polling can stop
 - Run detail now shows runtime disclosure, combined risk, logs, results, artifacts, retry, and cancel
 - Run detail now exposes a Control UI action for Daytona-backed runs via a signed preview-link endpoint
+- Run detail now opens the Control UI in a separate tab/window so the authenticated app stays open during external runtime access
 - Cart now persists in `localStorage` and syncs against mock cart endpoints
 - Checkout creates a mock purchased bundle and redirects to the returned order ID
 - Telegram setup wizard now uses final validate/pairing APIs and polls channel status until pairing completes
@@ -35,9 +36,9 @@ Implemented in the current mock app:
 - Local PostgreSQL Docker Compose file now exists in `docker-compose.yml`
 - Fresh local Postgres verification now passes: migrate + seed succeed against a clean database
 - Run providers now exist under `server/providers/` with a real Daytona sandbox adapter, mock fallback, OpenAI preview integration, and an openclaw stub
-- Daytona runs now stage the repo’s OpenClaw template config/workspace into the sandbox, start the gateway there, and mint signed Control UI links on demand
-- The local OpenClaw template directory is now optional; missing local files fall back to an empty config/workspace so future S3-backed agent bundles can replace it cleanly
-- Daytona no longer overwrites the sandbox-generated `~/.openclaw/openclaw.json`; Control UI links now read the token from the remote config that OpenClaw generates itself
+- Daytona runs now follow Daytona’s official OpenClaw sandbox pattern: create a public `daytona-medium` snapshot sandbox, load optional `.env.sandbox` env vars, merge base gateway config with any local `openclaw.json`, write `~/.openclaw/openclaw.json`, start `openclaw gateway run`, and mint signed Control UI links on demand
+- The local OpenClaw template directory is now optional; missing local files fall back to base config plus an empty workspace so future S3-backed agent bundles can replace them cleanly
+- Daytona now configures OpenClaw with `gateway.mode=local`, `bind=lan`, token auth, `allowInsecureAuth`, and `~/.openclaw/workspace`, matching Daytona’s reference integration so the remote Control UI can reach the sandbox gateway instead of trying a local loopback websocket
 - Deleted Daytona sandboxes now degrade to stale run records instead of breaking bundle/run pages
 - Bundle detail now loads order data independently from runs/download grants, so provider-side run failures no longer masquerade as “bundle not found”
 - Run detail timeline now visually reflects created/started/updated/completed state instead of rendering every row as the same muted style

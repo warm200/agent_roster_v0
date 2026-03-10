@@ -104,16 +104,24 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
       return
     }
 
+    const popup = window.open('', '_blank', 'noopener,noreferrer')
+
+    if (!popup) {
+      toast.error('Allow pop-ups to open the Control UI in a new tab.')
+      return
+    }
+
+    popup.document.title = 'Opening Control UI...'
+    popup.document.body.innerHTML =
+      '<p style="font-family: system-ui; padding: 24px;">Opening Control UI...</p>'
+
     setIsOpeningControlUi(true)
 
     try {
       const link = await createRunControlUiLink(run.id)
-      const popup = window.open(link.url, '_blank', 'noopener,noreferrer')
-
-      if (!popup) {
-        window.location.href = link.url
-      }
+      popup.location.href = link.url
     } catch (error) {
+      popup.close()
       toast.error(error instanceof Error ? error.message : 'Unable to open Control UI')
     } finally {
       setIsOpeningControlUi(false)

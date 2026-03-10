@@ -155,9 +155,8 @@ export class OpenAIRunProvider implements RunProvider {
     this.model = options.model ?? process.env.OPENAI_RUN_MODEL ?? 'gpt-5'
   }
 
-  async createRun(order: Order): Promise<Run> {
+  async createRun(order: Order, runId = `run-${Date.now()}`): Promise<Run> {
     const createdAt = new Date().toISOString()
-    const runId = `run-${Date.now()}`
     const baseRun = buildRun(order, runId, createdAt)
     const response = await this.request<OpenAIResponsePayload>('/responses', {
       background: true,

@@ -1,14 +1,8 @@
+import { randomBytes } from 'node:crypto'
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
 
-import {
-  CodeLanguage,
-  Daytona,
-  DaytonaNotFoundError,
-  type DaytonaConfig,
-  type Sandbox,
-  SandboxState,
-} from '@daytonaio/sdk'
+import { Daytona, DaytonaNotFoundError, SandboxState, type DaytonaConfig, type Sandbox } from '@daytonaio/sdk'
 
 import type { Order, Run, RunLog, RunResult, RunStatus } from '@/lib/types'
 
@@ -80,6 +74,7 @@ type DaytonaSandboxLike = Pick<Sandbox, 'createdAt' | 'errorReason' | 'id' | 'st
 }
 
 type OpenClawTemplate = {
+  config: Record<string, unknown>
   workspaceFiles: Array<{
     contents: Buffer
     relativePath: string
@@ -99,6 +94,29 @@ const DEFAULT_OPENCLAW_TEMPLATE_DIR = 'openclaw_config_test'
 const DEFAULT_OPENCLAW_PORT = 18_789
 const DEFAULT_PREVIEW_TTL_SECONDS = 60 * 30
 const DEFAULT_OPENCLAW_PACKAGE = 'openclaw@latest'
+const DEFAULT_DAYTONA_SNAPSHOT = 'daytona-medium'
+const DEFAULT_ENV_SANDBOX_PATH = '.env.sandbox'
+const OPENCLAW_CONFIG_PATH = '.openclaw/openclaw.json'
+const OPENCLAW_SESSION_ID = 'openclaw-gateway'
+const OPENCLAW_BASE_CONFIG = {
+  agents: {
+    defaults: {
+      workspace: '~/.openclaw/workspace',
+    },
+  },
+  gateway: {
+    auth: {
+      mode: 'token',
+      token: '',
+    },
+    bind: 'lan',
+    controlUi: {
+      allowInsecureAuth: true,
+    },
+    mode: 'local',
+    port: DEFAULT_OPENCLAW_PORT,
+  },
+} as const
 
 function nowIso() {
   return new Date().toISOString()
@@ -257,7 +275,9 @@ async function collectWorkspaceFiles(
 }
 
 async function loadOpenClawTemplate(templateDir: string): Promise<OpenClawTemplate> {
+  const configPath = path.join(templateDir, 'openclaw.json')
   const workspaceDir = path.join(templateDir, 'workspace')
+  const config = await readOptionalJsonFile(configPath)
   let workspaceFiles: OpenClawTemplate['workspaceFiles'] = []
 
   try {
@@ -268,6 +288,7 @@ async function loadOpenClawTemplate(templateDir: string): Promise<OpenClawTempla
   }
 
   return {
+    config,
     workspaceFiles,
   }
 }
@@ -288,7 +309,8 @@ WORKSPACE_STAGE=${shellQuote(STAGED_WORKSPACE_ROOT)}
 OPENCLAW_LOG=${shellQuote(OPENCLAW_GATEWAY_LOG_PATH)}
 OPENCLAW_PID_PATH=${shellQuote(OPENCLAW_PID_PATH)}
 HOME_DIR=${shellQuote(input.homeDir)}
-WORKSPACE_DIR="$HOME_DIR/workspace"
+OPENCLAW_DIR="$HOME_DIR/.openclaw"
+WORKSPACE_DIR="$HOME_DIR/.openclaw/workspace"
 PORT=${shellQuote(String(input.port))}
 OPENCLAW_PACKAGE=${shellQuote(input.openClawPackage)}
 ORDER_ID=""
@@ -351,19 +373,21 @@ ORDER_ID=$(node -e "const fs=require('fs'); const payload=JSON.parse(fs.readFile
 STARTED_AT=$(now_iso)
 
 append_log info bootstrap "Provisioning managed runtime for order $ORDER_ID."
-mkdir -p "$ROOT" "$WORKSPACE_DIR"
+mkdir -p "$ROOT" "$OPENCLAW_DIR" "$WORKSPACE_DIR"
 if [ -d "$WORKSPACE_STAGE" ]; then
   cp -R "$WORKSPACE_STAGE/." "$WORKSPACE_DIR/"
 fi
 write_status provisioning "$STARTED_AT" "" ""
 
-append_log info install "Installing OpenClaw runtime dependencies."
-command -v node >/dev/null 2>&1 || fail_run "Node.js is required inside the managed runtime."
-command -v npm >/dev/null 2>&1 || fail_run "npm is required inside the managed runtime."
-npm install -g "$OPENCLAW_PACKAGE" >> "$OPENCLAW_LOG" 2>&1
+append_log info install "Checking managed runtime dependencies."
+if ! command -v openclaw >/dev/null 2>&1; then
+  command -v node >/dev/null 2>&1 || fail_run "Node.js is required inside the managed runtime."
+  command -v npm >/dev/null 2>&1 || fail_run "npm is required inside the managed runtime."
+  npm install -g "$OPENCLAW_PACKAGE" >> "$OPENCLAW_LOG" 2>&1
+fi
 
 append_log info gateway "Starting Control UI service."
-nohup openclaw gateway --allow-unconfigured --bind loopback --port "$PORT" >> "$OPENCLAW_LOG" 2>&1 &
+nohup openclaw gateway run >> "$OPENCLAW_LOG" 2>&1 &
 echo $! > "$OPENCLAW_PID_PATH"
 
 for _ in $(seq 1 90); do
@@ -557,17 +581,132 @@ function buildControlUiUrl(previewUrl: string, openClawToken: string) {
 }
 
 type OpenClawConfigShape = {
+  agents?: {
+    defaults?: {
+      workspace?: string
+    }
+  }
   gateway?: {
     auth?: {
       token?: string
     }
+    port?: number
   }
+}
+
+function deepMerge<T>(target: T, source: Record<string, unknown>): T {
+  const output = { ...target } as Record<string, unknown>
+
+  for (const key of Object.keys(source)) {
+    const left = output[key]
+    const right = source[key]
+
+    if (
+      left != null &&
+      right != null &&
+      typeof left === 'object' &&
+      typeof right === 'object' &&
+      !Array.isArray(left) &&
+      !Array.isArray(right)
+    ) {
+      output[key] = deepMerge(left as Record<string, unknown>, right as Record<string, unknown>)
+      continue
+    }
+
+    output[key] = right
+  }
+
+  return output as T
+}
+
+async function readOptionalJsonFile(filePath: string) {
+  try {
+    const contents = await fs.readFile(filePath, 'utf8')
+    return JSON.parse(contents) as Record<string, unknown>
+  } catch (error) {
+    const candidate = error as NodeJS.ErrnoException
+    if (candidate.code === 'ENOENT') {
+      return {}
+    }
+
+    throw error
+  }
+}
+
+async function readOptionalEnvFile(filePath: string) {
+  try {
+    const contents = await fs.readFile(filePath, 'utf8')
+    return Object.fromEntries(
+      contents
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter((line) => line && !line.startsWith('#'))
+        .map((line) => {
+          const separatorIndex = line.indexOf('=')
+
+          if (separatorIndex === -1) {
+            return [line, '']
+          }
+
+          const key = line.slice(0, separatorIndex).trim()
+          let value = line.slice(separatorIndex + 1).trim()
+
+          if (
+            (value.startsWith('"') && value.endsWith('"')) ||
+            (value.startsWith("'") && value.endsWith("'"))
+          ) {
+            value = value.slice(1, -1)
+          }
+
+          return [key, value]
+        }),
+    )
+  } catch (error) {
+    const candidate = error as NodeJS.ErrnoException
+    if (candidate.code === 'ENOENT') {
+      return {}
+    }
+
+    throw error
+  }
+}
+
+function resolveDaytonaSnapshot() {
+  return process.env.DAYTONA_SNAPSHOT ?? DEFAULT_DAYTONA_SNAPSHOT
+}
+
+function resolveEnvSandboxPath() {
+  return path.resolve(process.cwd(), process.env.DAYTONA_ENV_SANDBOX_PATH ?? DEFAULT_ENV_SANDBOX_PATH)
+}
+
+function buildOpenClawConfig(
+  userConfig: Record<string, unknown>,
+  gatewayToken: string,
+  openClawPort: number,
+) {
+  const config = deepMerge(OPENCLAW_BASE_CONFIG, userConfig)
+  return deepMerge(config, {
+    gateway: {
+      auth: {
+        mode: 'token',
+        token: gatewayToken,
+      },
+      bind: 'lan',
+      controlUi: {
+        allowInsecureAuth: true,
+      },
+      mode: 'local',
+      port: openClawPort,
+    },
+  })
 }
 
 export class DaytonaRunProvider implements RunProvider {
   readonly name = 'daytona'
 
   private readonly client: DaytonaClientLike
+  private readonly daytonaSnapshot: string
+  private readonly envSandboxPath: string
   private readonly openClawPort: number
   private readonly openClawTemplateDir: string
   private readonly openClawPackage: string
@@ -580,6 +719,8 @@ export class DaytonaRunProvider implements RunProvider {
     }
 
     this.client = options.clientFactory ? options.clientFactory(config) : new Daytona(config)
+    this.daytonaSnapshot = resolveDaytonaSnapshot()
+    this.envSandboxPath = resolveEnvSandboxPath()
     this.openClawPort = resolveOpenClawPort(options.openClawPort)
     this.openClawTemplateDir = resolveOpenClawTemplateDir(options.openClawTemplateDir)
     this.openClawPackage = process.env.OPENCLAW_PACKAGE ?? DEFAULT_OPENCLAW_PACKAGE
@@ -589,26 +730,31 @@ export class DaytonaRunProvider implements RunProvider {
     const createdAt = nowIso()
     const manifest = buildManifest(order, runId, createdAt)
     const template = await loadOpenClawTemplate(this.openClawTemplateDir)
+    const gatewayToken = randomBytes(24).toString('hex')
+    const envVars = await readOptionalEnvFile(this.envSandboxPath)
 
     const sandbox = await this.client.create(
       {
         autoArchiveInterval: 60,
         autoDeleteInterval: 120,
-        autoStopInterval: 30,
+        autoStopInterval: 0,
+        envVars,
         ephemeral: false,
         labels: {
           app: 'agent-roster',
           orderId: order.id,
           runId,
         },
-        language: CodeLanguage.TYPESCRIPT,
         name: runId,
         networkBlockAll: !manifest.networkEnabled,
+        public: true,
+        snapshot: this.daytonaSnapshot,
       },
       { timeout: 90 },
     )
 
     const homeDir = await resolveUserHomeDir(sandbox)
+    const openClawConfig = buildOpenClawConfig(template.config, gatewayToken, this.openClawPort)
     const bootstrapScript = buildBootstrapScript({
       homeDir,
       openClawPackage: this.openClawPackage,
@@ -616,10 +762,14 @@ export class DaytonaRunProvider implements RunProvider {
     })
 
     await sandbox.process.executeCommand(
-      `bash -lc ${shellQuote(`mkdir -p ${DAYTONA_ROOT} ${STAGED_WORKSPACE_ROOT}`)}`,
+      `bash -lc ${shellQuote(`mkdir -p ${DAYTONA_ROOT} ${STAGED_WORKSPACE_ROOT} ${homeDir}/.openclaw`)}`,
       undefined,
       undefined,
       20,
+    )
+    await sandbox.fs.uploadFile(
+      Buffer.from(JSON.stringify(openClawConfig, null, 2), 'utf8'),
+      `${homeDir}/${OPENCLAW_CONFIG_PATH}`,
     )
     await sandbox.fs.uploadFile(Buffer.from(JSON.stringify(manifest, null, 2), 'utf8'), MANIFEST_PATH)
     await sandbox.fs.uploadFile(
@@ -734,14 +884,15 @@ export class DaytonaRunProvider implements RunProvider {
       `${homeDir}/.openclaw/openclaw.json`,
     )
     const openClawToken = config?.gateway?.auth?.token
+    const openClawPort = config?.gateway?.port ?? this.openClawPort
 
     if (!openClawToken) {
       throw new HttpError(409, 'Control UI token is not ready yet.')
     }
 
     const preview =
-      (await sandbox.getSignedPreviewUrl?.(this.openClawPort, expiresInSeconds)) ??
-      (await sandbox.getPreviewLink?.(this.openClawPort))
+      (await sandbox.getSignedPreviewUrl?.(openClawPort, expiresInSeconds)) ??
+      (await sandbox.getPreviewLink?.(openClawPort))
 
     if (!preview?.url) {
       throw new HttpError(503, 'Unable to generate a Control UI link for this run.')

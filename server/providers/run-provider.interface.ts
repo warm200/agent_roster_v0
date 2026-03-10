@@ -7,7 +7,7 @@ export type RunControlUiLink = {
 
 export interface RunProvider {
   readonly name: string
-  createRun(order: Order): Promise<Run>
+  createRun(order: Order, runId?: string): Promise<Run>
   getStatus(runId: string): Promise<Run | null>
   getLogs(runId: string): Promise<RunLog[]>
   getResult(runId: string): Promise<RunResult | null>

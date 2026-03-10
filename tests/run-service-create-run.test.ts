@@ -139,6 +139,12 @@ test('run service refreshes telegram pairing state before launch checks', async 
     async createRun(run: Run) {
       return run
     },
+    async updateRun(_runId: string, input: Partial<Run>) {
+      return {
+        ...createdRun,
+        ...input,
+      }
+    },
   } as never)
 
   setRunServiceDepsForTesting({
@@ -148,9 +154,12 @@ test('run service refreshes telegram pairing state before launch checks', async 
     },
     getRunProvider: () => ({
       name: 'test',
-      createRun: async () => {
+      createRun: async (_order, runId) => {
         calls.push('provider.createRun')
-        return createdRun
+        return {
+          ...createdRun,
+          id: runId ?? createdRun.id,
+        }
       },
       getLogs: async () => [],
       getResult: async () => null,
@@ -167,7 +176,10 @@ test('run service refreshes telegram pairing state before launch checks', async 
   })
 
   const run = await service.createRun('user-test-1', 'order-test-1')
+  await new Promise((resolve) => setTimeout(resolve, 0))
 
-  assert.equal(run.id, 'run-test-1')
+  assert.match(run.id, /^run-/)
+  assert.equal(run.status, 'provisioning')
+  assert.equal(run.orderId, 'order-test-1')
   assert.deepEqual(calls, ['telegram.getChannelConfig', 'loadOrder', 'provider.createRun'])
 })

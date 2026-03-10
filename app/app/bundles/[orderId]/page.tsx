@@ -164,7 +164,7 @@ export default function BundleDetailPage({ params }: PageProps) {
 
     try {
       const payload = await createOrderRun(order.id)
-      toast.success('Run started. Redirecting to run details...')
+      toast.success('Run requested. Redirecting to run details...')
       router.push(`/app/runs/${payload.id}`)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Network error while launching run')

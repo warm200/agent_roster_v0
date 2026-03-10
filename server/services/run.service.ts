@@ -77,6 +77,32 @@ function ensureLaunchable(order: Order) {
   }
 }
 
+function buildPendingRun(order: Order, runId: string, providerName: string): Run {
+  const createdAt = new Date().toISOString()
+  const usesTools = order.items.some((item) => {
+    const risk = item.agentVersion.riskProfile
+    return risk.readFiles || risk.writeFiles || risk.shell
+  })
+
+  return {
+    id: runId,
+    userId: order.userId,
+    orderId: order.id,
+    channelConfigId: order.channelConfig?.id ?? 'channel-pending',
+    status: 'provisioning',
+    combinedRiskLevel: order.bundleRisk.level,
+    usesRealWorkspace: providerName !== 'openai',
+    usesTools,
+    networkEnabled: order.items.some((item) => item.agentVersion.riskProfile.network),
+    resultSummary: 'Managed runtime is provisioning. Status will update automatically.',
+    resultArtifacts: [],
+    createdAt,
+    startedAt: null,
+    updatedAt: createdAt,
+    completedAt: null,
+  }
+}
+
 export class RunService {
   constructor(
     private readonly repository: RunRepository = new RunRepository(),
@@ -88,9 +114,35 @@ export class RunService {
     ensureLaunchable(order)
 
     const provider = runServiceDeps.getRunProvider()
-    const run = await provider.createRun(order)
+    const runId = `run-${Date.now()}`
+    const pendingRun = buildPendingRun(order, runId, provider.name)
+    const createdRun = await this.repository.createRun(pendingRun)
 
-    return this.repository.createRun(run)
+    void provider
+      .createRun(order, runId)
+      .then(async (providerRun) => {
+        await this.repository.updateRun(runId, {
+          ...providerRun,
+          id: runId,
+        })
+      })
+      .catch(async (error) => {
+        const failedAt = new Date().toISOString()
+        const message =
+          error instanceof Error && error.message
+            ? error.message
+            : 'Managed runtime provisioning failed.'
+
+        await this.repository.updateRun(runId, {
+          completedAt: failedAt,
+          resultSummary: message,
+          startedAt: createdRun.startedAt,
+          status: 'failed',
+          updatedAt: failedAt,
+        })
+      })
+
+    return createdRun
   }
 
   async listRuns(userId: string) {

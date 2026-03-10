@@ -18,8 +18,12 @@ function buildResult(run: Run): RunResult | null {
 export class MockRunProvider implements RunProvider {
   readonly name = 'mock'
 
-  async createRun(order: Order) {
+  async createRun(order: Order, runId?: string) {
     const run = createMockRun(order)
+
+    if (runId) {
+      run.id = runId
+    }
 
     mockRuns.unshift(run)
     mockRunLogs[run.id] = [

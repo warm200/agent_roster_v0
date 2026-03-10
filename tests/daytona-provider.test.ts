@@ -122,6 +122,8 @@ test('daytona run provider stages OpenClaw and returns a signed control ui link'
       async create(params) {
         const runId = String(params?.name)
         const createdAt = new Date().toISOString()
+        assert.equal(params?.snapshot, 'daytona-medium')
+        assert.equal(params?.public, true)
         const sandbox = {
           createdAt,
           files: {} as Record<string, string>,
@@ -163,13 +165,6 @@ test('daytona run provider stages OpenClaw and returns a signed control ui link'
 
               if (command.includes('nohup /tmp/agent-roster/bootstrap-openclaw.sh')) {
                 const startedAt = new Date().toISOString()
-                sandbox.files['/home/daytona/.openclaw/openclaw.json'] = JSON.stringify({
-                  gateway: {
-                    auth: {
-                      token: 'preview-token',
-                    },
-                  },
-                })
                 sandbox.files['/tmp/agent-roster/run.log'] = [
                   `${startedAt}|info|bootstrap|Provisioning managed runtime for order order-test-1.`,
                   `${new Date().toISOString()}|info|ready|Managed runtime is ready for Control UI access.`,
@@ -290,6 +285,17 @@ test('daytona run provider stages OpenClaw and returns a signed control ui link'
   assert.ok(controlUiLink)
   assert.match(controlUiLink.url, /proxy\.daytona\.works/)
   assert.match(controlUiLink.url, /token=/)
+  const uploadedConfig = JSON.parse(
+    sandboxes.get(created.id)?.files['/home/daytona/.openclaw/openclaw.json'] ?? '{}',
+  )
+  assert.equal(uploadedConfig.gateway?.mode, 'local')
+  assert.equal(uploadedConfig.gateway?.bind, 'lan')
+  assert.equal(uploadedConfig.gateway?.controlUi?.allowInsecureAuth, true)
+  assert.equal(uploadedConfig.agents?.defaults?.workspace, '~/.openclaw/workspace')
+  assert.match(
+    sandboxes.get(created.id)?.files['/tmp/agent-roster/bootstrap-openclaw.sh'] ?? '',
+    /openclaw gateway run/,
+  )
 
   const stopped = await provider.stopRun(created.id)
   assert.ok(stopped)

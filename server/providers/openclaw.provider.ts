@@ -8,8 +8,8 @@ export class OpenClawRunProvider implements RunProvider {
 
   private readonly fallback = new MockRunProvider()
 
-  async createRun(order: Order): Promise<Run> {
-    return this.fallback.createRun(order)
+  async createRun(order: Order, runId?: string): Promise<Run> {
+    return this.fallback.createRun(order, runId)
   }
 
   async getStatus(runId: string): Promise<Run | null> {
