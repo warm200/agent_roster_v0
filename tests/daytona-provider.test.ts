@@ -3,7 +3,7 @@ import { test } from 'node:test'
 
 import type { Order } from '@/lib/types'
 import { DaytonaRunProvider } from '@/server/providers/daytona.provider'
-import { SandboxState } from '@daytonaio/sdk'
+import { DaytonaNotFoundError, SandboxState } from '@daytonaio/sdk'
 
 const order: Order = {
   amountCents: 2900,
@@ -243,4 +243,23 @@ test('daytona run provider supports create, poll, logs, result, and stop flow', 
   assert.ok(stopped)
   assert.equal(stopped.status, 'failed')
   assert.match(stopped.resultSummary ?? '', /stopped by operator/i)
+})
+
+test('daytona run provider tolerates deleted sandboxes', async () => {
+  const provider = new DaytonaRunProvider({
+    apiKey: 'daytona-test',
+    clientFactory: () => ({
+      async create() {
+        throw new Error('not used')
+      },
+      async get() {
+        throw new DaytonaNotFoundError('Sandbox not found', 404)
+      },
+    }),
+  })
+
+  assert.equal(await provider.getStatus('run-missing'), null)
+  assert.deepEqual(await provider.getLogs('run-missing'), [])
+  assert.equal(await provider.getResult('run-missing'), null)
+  assert.equal(await provider.stopRun('run-missing'), null)
 })

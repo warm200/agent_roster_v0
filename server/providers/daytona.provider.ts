@@ -1,4 +1,10 @@
-import { Daytona, type DaytonaConfig, type Sandbox, SandboxState } from '@daytonaio/sdk'
+import {
+  Daytona,
+  DaytonaNotFoundError,
+  type DaytonaConfig,
+  type Sandbox,
+  SandboxState,
+} from '@daytonaio/sdk'
 
 import type { Order, Run, RunLog, RunResult, RunStatus } from '@/lib/types'
 
@@ -248,10 +254,22 @@ function parseLogLine(line: string): RunLog | null {
 }
 
 function isNotFoundError(error: unknown) {
-  const candidate = error as { message?: string; response?: { status?: number }; status?: number }
+  if (error instanceof DaytonaNotFoundError) {
+    return true
+  }
+
+  const candidate = error as {
+    message?: string
+    name?: string
+    response?: { status?: number }
+    status?: number
+    statusCode?: number
+  }
   return (
     candidate?.response?.status === 404 ||
     candidate?.status === 404 ||
+    candidate?.statusCode === 404 ||
+    candidate?.name === 'DaytonaNotFoundError' ||
     candidate?.message?.includes('404') ||
     candidate?.message?.toLowerCase().includes('not found')
   )
