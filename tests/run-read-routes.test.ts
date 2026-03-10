@@ -210,6 +210,66 @@ test('runs list route returns filtered summaries', async () => {
   assert.equal(payload.runs[0].logsCount, 1)
 })
 
+test('runs list route tolerates summary enrichment failures', async () => {
+  installServiceStubs()
+
+  setOrderServiceForTesting({
+    async createPaidOrderFromCart() {
+      return fixtureOrder
+    },
+    async getOrderByIdForUser() {
+      throw new Error('sandbox-backed order enrichment failed')
+    },
+    async getSignedDownloadsForOrder() {
+      return { downloads: [], orderId: fixtureOrder.id }
+    },
+    async listOrdersForUser() {
+      return [fixtureOrder]
+    },
+    async resolveSignedDownload() {
+      return '/downloads/agent-test.zip'
+    },
+  } satisfies OrderService)
+
+  setRunServiceForTesting({
+    async getRun() {
+      return fixtureRun
+    },
+    async getRunLogs() {
+      throw new Error('sandbox logs unavailable')
+    },
+    async getRunResult() {
+      return fixtureResult
+    },
+    async listRuns() {
+      return [fixtureRun]
+    },
+    async retryRun() {
+      return fixtureRun
+    },
+    scanAgentVersion(version: AgentVersion) {
+      return version.riskProfile
+    },
+    async stopRun() {
+      return { ...fixtureRun, status: 'failed' as const }
+    },
+    async createRun() {
+      return fixtureRun
+    },
+  } as unknown as RunService)
+
+  const response = await listRuns(
+    new NextRequest('http://localhost/api/me/runs?orderId=order-test-1'),
+  )
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(payload.total, 1)
+  assert.deepEqual(payload.runs[0].agents, [])
+  assert.equal(payload.runs[0].logsCount, 0)
+  assert.equal(payload.runs[0].order, undefined)
+})
+
 test('run detail route returns enriched detail and supports retry/cancel', async () => {
   installServiceStubs()
 

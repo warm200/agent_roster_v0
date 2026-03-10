@@ -85,17 +85,23 @@ export default function BundleDetailPage({ params }: PageProps) {
       setIsLoading(true)
 
       try {
-        const [orderPayload, runsPayload, downloadsPayload] = await Promise.all([
-          getOrder(orderId),
+        const orderPayload = await getOrder(orderId)
+
+        if (isMounted) {
+          setOrder(orderPayload)
+        }
+
+        const [runsResult, downloadsResult] = await Promise.allSettled([
           listRuns({ orderId }),
           getOrderDownloads(orderId),
         ])
 
-        if (isMounted) {
-          setOrder(orderPayload)
-          setOrderRuns(runsPayload.runs)
-          setDownloads(downloadsPayload.downloads)
+        if (!isMounted) {
+          return
         }
+
+        setOrderRuns(runsResult.status === 'fulfilled' ? runsResult.value.runs : [])
+        setDownloads(downloadsResult.status === 'fulfilled' ? downloadsResult.value.downloads : [])
       } catch {
         if (isMounted) {
           setOrder(null)
@@ -134,7 +140,7 @@ export default function BundleDetailPage({ params }: PageProps) {
           <CardContent className="p-6">
             <p className="font-medium text-red-400">Bundle not found</p>
             <p className="mt-2 text-sm text-muted-foreground">
-              This purchase could not be loaded from the mock API.
+              This purchase could not be loaded.
             </p>
           </CardContent>
         </Card>

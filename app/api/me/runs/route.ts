@@ -15,14 +15,17 @@ interface RunSummary extends Run {
 }
 
 async function buildRunSummary(userId: string, run: Run): Promise<RunSummary> {
-  const [order, logs] = await Promise.all([
+  const [orderResult, logsResult] = await Promise.allSettled([
     getOrderService().getOrderByIdForUser({ orderId: run.orderId, userId }),
     getRunService().getRunLogs(userId, run.id),
   ])
 
+  const order = orderResult.status === 'fulfilled' ? orderResult.value : undefined
+  const logs = logsResult.status === 'fulfilled' ? logsResult.value : []
+
   return {
     ...run,
-    agents: order.items.map((item) => item.agent),
+    agents: order?.items.map((item) => item.agent) ?? [],
     artifactsCount: run.resultArtifacts.length,
     logs,
     logsCount: logs.length,

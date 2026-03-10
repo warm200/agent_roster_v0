@@ -34,6 +34,7 @@ Implemented in the current mock app:
 - Fresh local Postgres verification now passes: migrate + seed succeed against a clean database
 - Run providers now exist under `server/providers/` with a real Daytona sandbox adapter, mock fallback, OpenAI preview integration, and an openclaw stub
 - Deleted Daytona sandboxes now degrade to stale run records instead of breaking bundle/run pages
+- Bundle detail now loads order data independently from runs/download grants, so provider-side run failures no longer masquerade as “bundle not found”
 - Run launch now refreshes Telegram pairing server-side before enforcing launch guards, so local polling-mode pairing is picked up at click time
 - Telegram secret handling now supports a dedicated `TELEGRAM_SECRET_SEED` and returns a reconnect error when stored bot credentials can no longer be decrypted
 - Initial backend risk-engine utility now exists in `server/lib/risk-engine.ts`
