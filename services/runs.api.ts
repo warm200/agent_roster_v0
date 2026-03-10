@@ -1,6 +1,6 @@
 import type { Agent, Order, Run, RunLog } from '@/lib/types'
 
-import { getJson, patchJson } from './api'
+import { getJson, patchJson, postJson } from './api'
 
 export interface RunSummary extends Run {
   agents: Agent[]
@@ -16,6 +16,11 @@ export interface RunDetailResponse extends Run {
   logs: RunLog[]
   logsCount: number
   order: Order | undefined
+}
+
+export type RunControlUiLinkResponse = {
+  expiresAt: string | null
+  url: string
 }
 
 type ListRunsResponse = {
@@ -66,4 +71,8 @@ export async function updateRun(
     `/api/me/runs/${runId}`,
     { action },
   )
+}
+
+export async function createRunControlUiLink(runId: string) {
+  return postJson<RunControlUiLinkResponse>(`/api/me/runs/${runId}/control-ui-link`)
 }

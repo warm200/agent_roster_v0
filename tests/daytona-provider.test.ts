@@ -105,7 +105,7 @@ const order: Order = {
   userId: 'user-test-1',
 }
 
-test('daytona run provider supports create, poll, logs, result, and stop flow', async () => {
+test('daytona run provider stages OpenClaw and returns a signed control ui link', async () => {
   const sandboxes = new Map<
     string,
     {
@@ -118,7 +118,7 @@ test('daytona run provider supports create, poll, logs, result, and stop flow', 
 
   const provider = new DaytonaRunProvider({
     apiKey: 'daytona-test',
-    clientFactory: (_config) => ({
+    clientFactory: () => ({
       async create(params) {
         const runId = String(params?.name)
         const createdAt = new Date().toISOString()
@@ -133,42 +133,65 @@ test('daytona run provider supports create, poll, logs, result, and stop flow', 
         return {
           createdAt,
           fs: {
-            async downloadFile(path: string) {
-              const value = sandbox.files[path]
+            async downloadFile(filePath: string) {
+              const value = sandbox.files[filePath]
               if (value === undefined) {
-                const error = new Error(`404 ${path}`)
+                const error = new Error(`404 ${filePath}`)
                 ;(error as Error & { status: number }).status = 404
                 throw error
               }
 
               return Buffer.from(value, 'utf8')
             },
-            async uploadFile(file: Buffer, path: string) {
-              sandbox.files[path] = file.toString('utf8')
+            async uploadFile(file: Buffer, filePath: string) {
+              sandbox.files[filePath] = file.toString('utf8')
             },
+          },
+          async getSignedPreviewUrl() {
+            return {
+              url: 'https://18789-demo.proxy.daytona.works',
+            }
           },
           id: runId,
           process: {
             async executeCommand(command: string) {
               sandbox.processCommands.push(command)
 
-              if (command.includes('nohup python3')) {
-                const initialStatus = JSON.parse(sandbox.files['/tmp/agent-roster/status.json'])
+              if (command.includes('mkdir -p /tmp/agent-roster /tmp/agent-roster/workspace-seed')) {
+                return { exitCode: 0, result: '' }
+              }
+
+              if (command.includes('nohup /tmp/agent-roster/bootstrap-openclaw.sh')) {
+                const startedAt = new Date().toISOString()
                 sandbox.files['/tmp/agent-roster/run.log'] = [
-                  `${initialStatus.updatedAt}|info|bootstrap|Managed runtime ready for order order-test-1.`,
-                  `${new Date().toISOString()}|info|complete|Run completed successfully.`,
+                  `${startedAt}|info|bootstrap|Provisioning managed runtime for order order-test-1.`,
+                  `${new Date().toISOString()}|info|ready|Managed runtime is ready for Control UI access.`,
                 ].join('\n')
                 sandbox.files['/tmp/agent-roster/status.json'] = JSON.stringify({
-                  completedAt: new Date().toISOString(),
-                  resultSummary: 'Managed run completed for bundle order-test-1.',
-                  startedAt: new Date().toISOString(),
-                  status: 'completed',
+                  completedAt: null,
+                  resultSummary:
+                    'Managed runtime is ready for bundle order-test-1. Open Control UI to continue.',
+                  startedAt,
+                  status: 'running',
                   updatedAt: new Date().toISOString(),
                 })
                 sandbox.files['/tmp/agent-roster/result.json'] = JSON.stringify({
                   artifacts: [],
-                  summary: 'Managed run completed for bundle order-test-1.',
+                  summary:
+                    'Managed runtime is ready for bundle order-test-1. Open Control UI to continue.',
                 })
+                sandbox.files['/tmp/agent-roster/openclaw.pid'] = '123'
+              }
+
+              if (command.includes('kill -0 "$(cat /tmp/agent-roster/openclaw.pid)"')) {
+                return {
+                  exitCode: 0,
+                  result: sandbox.files['/tmp/agent-roster/openclaw.pid'] ? 'running' : 'exited',
+                }
+              }
+
+              if (command.includes('kill "$(cat /tmp/agent-roster/openclaw.pid)"')) {
+                delete sandbox.files['/tmp/agent-roster/openclaw.pid']
               }
 
               return {
@@ -191,24 +214,41 @@ test('daytona run provider supports create, poll, logs, result, and stop flow', 
         return {
           createdAt: sandbox.createdAt,
           fs: {
-            async downloadFile(path: string) {
-              const value = sandbox.files[path]
+            async downloadFile(filePath: string) {
+              const value = sandbox.files[filePath]
               if (value === undefined) {
-                const error = new Error(`404 ${path}`)
+                const error = new Error(`404 ${filePath}`)
                 ;(error as Error & { status: number }).status = 404
                 throw error
               }
 
               return Buffer.from(value, 'utf8')
             },
-            async uploadFile(file: Buffer, path: string) {
-              sandbox.files[path] = file.toString('utf8')
+            async uploadFile(file: Buffer, filePath: string) {
+              sandbox.files[filePath] = file.toString('utf8')
             },
+          },
+          async getSignedPreviewUrl() {
+            return {
+              url: 'https://18789-demo.proxy.daytona.works',
+            }
           },
           id: runId,
           process: {
             async executeCommand(command: string) {
               sandbox.processCommands.push(command)
+
+              if (command.includes('kill -0 "$(cat /tmp/agent-roster/openclaw.pid)"')) {
+                return {
+                  exitCode: 0,
+                  result: sandbox.files['/tmp/agent-roster/openclaw.pid'] ? 'running' : 'exited',
+                }
+              }
+
+              if (command.includes('kill "$(cat /tmp/agent-roster/openclaw.pid)"')) {
+                delete sandbox.files['/tmp/agent-roster/openclaw.pid']
+              }
+
               return {
                 exitCode: 0,
                 result: '',
@@ -228,16 +268,21 @@ test('daytona run provider supports create, poll, logs, result, and stop flow', 
 
   const status = await provider.getStatus(created.id)
   assert.ok(status)
-  assert.equal(status.status, 'completed')
-  assert.match(status.resultSummary ?? '', /Managed run completed for bundle/)
+  assert.equal(status.status, 'running')
+  assert.match(status.resultSummary ?? '', /Open Control UI/)
 
   const logs = await provider.getLogs(created.id)
   assert.equal(logs[0]?.step, 'bootstrap')
-  assert.equal(logs.at(-1)?.step, 'complete')
+  assert.equal(logs.at(-1)?.step, 'ready')
 
   const result = await provider.getResult(created.id)
   assert.ok(result)
-  assert.match(result.summary, /Managed run completed for bundle/)
+  assert.match(result.summary, /Open Control UI/)
+
+  const controlUiLink = await provider.getControlUiLink?.(created.id)
+  assert.ok(controlUiLink)
+  assert.match(controlUiLink.url, /proxy\.daytona\.works/)
+  assert.match(controlUiLink.url, /token=/)
 
   const stopped = await provider.stopRun(created.id)
   assert.ok(stopped)
@@ -261,5 +306,6 @@ test('daytona run provider tolerates deleted sandboxes', async () => {
   assert.equal(await provider.getStatus('run-missing'), null)
   assert.deepEqual(await provider.getLogs('run-missing'), [])
   assert.equal(await provider.getResult('run-missing'), null)
+  assert.equal(await provider.getControlUiLink?.('run-missing'), null)
   assert.equal(await provider.stopRun('run-missing'), null)
 })

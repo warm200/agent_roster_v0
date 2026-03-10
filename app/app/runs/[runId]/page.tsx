@@ -15,9 +15,9 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Spinner } from '@/components/ui/spinner'
 import { useRunStatus } from '@/hooks/use-run-status'
 import { formatDateTime } from '@/lib/utils'
-import { updateRun } from '@/services/runs.api'
+import { createRunControlUiLink, updateRun } from '@/services/runs.api'
 import { toast } from 'sonner'
-import { AlertTriangle, ArrowLeft, CheckCircle2, Globe, Package, RefreshCw, Wrench, XCircle } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, CheckCircle2, ExternalLink, Globe, Package, RefreshCw, Wrench, XCircle } from 'lucide-react'
 
 interface RunDetailPageProps {
   params: Promise<{ runId: string }>
@@ -28,6 +28,7 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
   const router = useRouter()
   const { run, setRun, isLoading, loadError } = useRunStatus(runId)
   const [isCancelling, setIsCancelling] = useState(false)
+  const [isOpeningControlUi, setIsOpeningControlUi] = useState(false)
   const [isRetrying, setIsRetrying] = useState(false)
 
   if (isLoading) {
@@ -98,6 +99,27 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
     }
   }
 
+  const handleOpenControlUi = async () => {
+    if (!run || isOpeningControlUi) {
+      return
+    }
+
+    setIsOpeningControlUi(true)
+
+    try {
+      const link = await createRunControlUiLink(run.id)
+      const popup = window.open(link.url, '_blank', 'noopener,noreferrer')
+
+      if (!popup) {
+        window.location.href = link.url
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to open Control UI')
+    } finally {
+      setIsOpeningControlUi(false)
+    }
+  }
+
   return (
     <div className="space-y-6 p-6 lg:p-8">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -125,6 +147,25 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
               View Bundle
             </Link>
           </Button>
+          {run.usesRealWorkspace && (
+            <Button
+              variant="outline"
+              onClick={handleOpenControlUi}
+              disabled={isOpeningControlUi || run.status === 'provisioning' || run.status === 'failed'}
+            >
+              {isOpeningControlUi ? (
+                <>
+                  <Spinner className="mr-2 h-4 w-4" />
+                  Opening...
+                </>
+              ) : (
+                <>
+                  <ExternalLink className="mr-2 h-4 w-4" />
+                  Open Control UI
+                </>
+              )}
+            </Button>
+          )}
           <Button variant="outline" onClick={handleRetry} disabled={isRetrying}>
             {isRetrying ? (
               <>

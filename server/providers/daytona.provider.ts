@@ -1,4 +1,9 @@
+import { randomBytes } from 'node:crypto'
+import { promises as fs } from 'node:fs'
+import path from 'node:path'
+
 import {
+  CodeLanguage,
   Daytona,
   DaytonaNotFoundError,
   type DaytonaConfig,
@@ -9,7 +14,7 @@ import {
 import type { Order, Run, RunLog, RunResult, RunStatus } from '@/lib/types'
 
 import { HttpError } from '../lib/http'
-import type { RunProvider } from './run-provider.interface'
+import type { RunControlUiLink, RunProvider } from './run-provider.interface'
 
 type DaytonaRunManifest = {
   agentTitles: string[]
@@ -36,6 +41,8 @@ type DaytonaRunProviderOptions = {
   apiKey?: string
   apiUrl?: string
   clientFactory?: (config: DaytonaConfig) => DaytonaClientLike
+  openClawPort?: number
+  openClawTemplateDir?: string
   target?: string
 }
 
@@ -61,9 +68,24 @@ type DaytonaProcessLike = {
   ): Promise<{ exitCode: number; result: string }>
 }
 
+type PreviewLinkLike = {
+  url: string
+}
+
 type DaytonaSandboxLike = Pick<Sandbox, 'createdAt' | 'errorReason' | 'id' | 'state'> & {
   fs: DaytonaFsLike
   process: DaytonaProcessLike
+  getPreviewLink?: (port: number) => Promise<PreviewLinkLike>
+  getSignedPreviewUrl?: (port: number, expiresInSeconds?: number) => Promise<PreviewLinkLike>
+  getUserHomeDir?: () => Promise<string | undefined>
+}
+
+type OpenClawTemplate = {
+  config: Record<string, unknown>
+  workspaceFiles: Array<{
+    contents: Buffer
+    relativePath: string
+  }>
 }
 
 const DAYTONA_ROOT = '/tmp/agent-roster'
@@ -71,7 +93,15 @@ const MANIFEST_PATH = `${DAYTONA_ROOT}/manifest.json`
 const STATUS_PATH = `${DAYTONA_ROOT}/status.json`
 const RESULT_PATH = `${DAYTONA_ROOT}/result.json`
 const LOG_PATH = `${DAYTONA_ROOT}/run.log`
-const SCRIPT_PATH = `${DAYTONA_ROOT}/runner.py`
+const BOOTSTRAP_SCRIPT_PATH = `${DAYTONA_ROOT}/bootstrap-openclaw.sh`
+const STAGED_OPENCLAW_CONFIG_PATH = `${DAYTONA_ROOT}/openclaw.json`
+const STAGED_WORKSPACE_ROOT = `${DAYTONA_ROOT}/workspace-seed`
+const OPENCLAW_GATEWAY_LOG_PATH = `${DAYTONA_ROOT}/openclaw-gateway.log`
+const OPENCLAW_PID_PATH = `${DAYTONA_ROOT}/openclaw.pid`
+const DEFAULT_OPENCLAW_TEMPLATE_DIR = 'openclaw_config_test'
+const DEFAULT_OPENCLAW_PORT = 18_789
+const DEFAULT_PREVIEW_TTL_SECONDS = 60 * 30
+const DEFAULT_OPENCLAW_PACKAGE = 'openclaw@latest'
 
 function nowIso() {
   return new Date().toISOString()
@@ -92,6 +122,26 @@ function resolveDaytonaApiKey(explicitApiKey?: string) {
   }
 
   return apiKey
+}
+
+function resolveOpenClawPort(explicitPort?: number) {
+  const rawPort = explicitPort ?? Number.parseInt(process.env.OPENCLAW_PORT ?? '', 10)
+  if (!Number.isFinite(rawPort)) {
+    return DEFAULT_OPENCLAW_PORT
+  }
+
+  if (rawPort <= 0 || rawPort > 65_535) {
+    throw new HttpError(503, 'OPENCLAW_PORT must be a valid TCP port number.')
+  }
+
+  return rawPort
+}
+
+function resolveOpenClawTemplateDir(explicitTemplateDir?: string) {
+  return path.resolve(
+    process.cwd(),
+    explicitTemplateDir ?? process.env.OPENCLAW_TEMPLATE_DIR ?? DEFAULT_OPENCLAW_TEMPLATE_DIR,
+  )
 }
 
 function buildManifest(order: Order, runId: string, createdAt: string): DaytonaRunManifest {
@@ -146,6 +196,10 @@ function buildInitialStatus(createdAt: string): DaytonaStatusFile {
   }
 }
 
+function buildReadySummary(orderId: string) {
+  return `Managed runtime is ready for bundle ${orderId}. Open Control UI to continue.`
+}
+
 function mapSandboxStateToStatus(state?: string): RunStatus {
   switch (state) {
     case SandboxState.STARTED:
@@ -169,62 +223,188 @@ function shellQuote(value: string) {
   return `'${value.replaceAll("'", `'\"'\"'`)}'`
 }
 
-function buildBootstrapScript() {
-  return `#!/usr/bin/env python3
-import json
-from datetime import datetime, timezone
-from pathlib import Path
-import time
-import traceback
+function isIgnoredWorkspaceEntry(name: string) {
+  return name === '.git' || name === '.DS_Store'
+}
 
-ROOT = Path("${DAYTONA_ROOT}")
-MANIFEST_PATH = ROOT / "manifest.json"
-STATUS_PATH = ROOT / "status.json"
-RESULT_PATH = ROOT / "result.json"
+async function collectWorkspaceFiles(
+  rootDir: string,
+  currentDir = rootDir,
+): Promise<OpenClawTemplate['workspaceFiles']> {
+  const entries = await fs.readdir(currentDir, { withFileTypes: true })
+  const files: OpenClawTemplate['workspaceFiles'] = []
 
-def now_iso():
-    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-
-def append_log(level, step, message):
-    print(f"{now_iso()}|{level}|{step}|{message}", flush=True)
-
-def write_status(status, started_at=None, completed_at=None, result_summary=None):
-    payload = {
-        "status": status,
-        "startedAt": started_at,
-        "completedAt": completed_at,
-        "updatedAt": now_iso(),
-        "resultSummary": result_summary,
+  for (const entry of entries) {
+    if (isIgnoredWorkspaceEntry(entry.name)) {
+      continue
     }
-    STATUS_PATH.write_text(json.dumps(payload), encoding="utf-8")
 
-def main():
-    manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
-    started_at = now_iso()
-    write_status("running", started_at=started_at)
-    append_log("info", "bootstrap", f"Managed runtime ready for order {manifest['orderId']}.")
-    time.sleep(1)
-    append_log("info", "channel", f"Telegram recipient: {manifest['recipientExternalId'] or 'pending pairing record'}")
-    time.sleep(1)
+    const fullPath = path.join(currentDir, entry.name)
 
-    for title in manifest["agentTitles"]:
-        append_log("info", "agent", f"Prepared {title} inside the managed runtime.")
-        time.sleep(1)
+    if (entry.isDirectory()) {
+      files.push(...(await collectWorkspaceFiles(rootDir, fullPath)))
+      continue
+    }
 
-    summary = "Managed run completed for bundle " + manifest["orderId"] + ". Agents prepared: " + ", ".join(manifest["agentTitles"]) + ". Next step: review Telegram-triggered outputs and exported package artifacts."
-    RESULT_PATH.write_text(json.dumps({"summary": summary, "artifacts": []}), encoding="utf-8")
-    write_status("completed", started_at=started_at, completed_at=now_iso(), result_summary=summary)
-    append_log("info", "complete", "Run completed successfully.")
+    if (!entry.isFile()) {
+      continue
+    }
 
-if __name__ == "__main__":
-    try:
-        main()
-    except Exception as exc:
-        error = f"{type(exc).__name__}: {exc}"
-        append_log("error", "crash", error)
-        append_log("debug", "traceback", traceback.format_exc().strip().replace("\\n", " | "))
-        write_status("failed", started_at=now_iso(), completed_at=now_iso(), result_summary=error)
-        raise
+    files.push({
+      contents: await fs.readFile(fullPath),
+      relativePath: path.relative(rootDir, fullPath).split(path.sep).join('/'),
+    })
+  }
+
+  return files
+}
+
+async function loadOpenClawTemplate(templateDir: string): Promise<OpenClawTemplate> {
+  const configPath = path.join(templateDir, 'openclaw.json')
+  const workspaceDir = path.join(templateDir, 'workspace')
+
+  try {
+    await fs.access(configPath)
+    await fs.access(workspaceDir)
+  } catch {
+    throw new HttpError(
+      503,
+      `OpenClaw template files are missing. Expected ${configPath} and ${workspaceDir}.`,
+    )
+  }
+
+  return {
+    config: JSON.parse(await fs.readFile(configPath, 'utf8')) as Record<string, unknown>,
+    workspaceFiles: await collectWorkspaceFiles(workspaceDir),
+  }
+}
+
+function injectOpenClawToken(templateConfig: Record<string, unknown>) {
+  const token = randomBytes(24).toString('hex')
+  const config = structuredClone(templateConfig)
+  const gateway =
+    config.gateway && typeof config.gateway === 'object'
+      ? (config.gateway as Record<string, unknown>)
+      : {}
+  const auth =
+    gateway.auth && typeof gateway.auth === 'object'
+      ? (gateway.auth as Record<string, unknown>)
+      : {}
+
+  auth.mode = 'token'
+  auth.token = token
+  auth.allowInsecureAuth = true
+  gateway.auth = auth
+  config.gateway = gateway
+
+  return {
+    config,
+    token,
+  }
+}
+
+function buildBootstrapScript(input: {
+  homeDir: string
+  openClawPackage: string
+  port: number
+}) {
+  return `#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT=${shellQuote(DAYTONA_ROOT)}
+STATUS_PATH=${shellQuote(STATUS_PATH)}
+RESULT_PATH=${shellQuote(RESULT_PATH)}
+LOG_PATH=${shellQuote(LOG_PATH)}
+CONFIG_STAGE=${shellQuote(STAGED_OPENCLAW_CONFIG_PATH)}
+WORKSPACE_STAGE=${shellQuote(STAGED_WORKSPACE_ROOT)}
+OPENCLAW_LOG=${shellQuote(OPENCLAW_GATEWAY_LOG_PATH)}
+OPENCLAW_PID_PATH=${shellQuote(OPENCLAW_PID_PATH)}
+HOME_DIR=${shellQuote(input.homeDir)}
+OPENCLAW_CONFIG_DIR="$HOME_DIR/.openclaw"
+WORKSPACE_DIR="$HOME_DIR/workspace"
+PORT=${shellQuote(String(input.port))}
+OPENCLAW_PACKAGE=${shellQuote(input.openClawPackage)}
+ORDER_ID=""
+STARTED_AT=""
+
+now_iso() {
+  date -u +"%Y-%m-%dT%H:%M:%SZ"
+}
+
+write_status() {
+  STATUS_VALUE="$1" STARTED_VALUE="\${2:-}" COMPLETED_VALUE="\${3:-}" RESULT_SUMMARY_VALUE="\${4:-}" STATUS_FILE="$STATUS_PATH" node <<'NODE'
+const fs = require('fs')
+const payload = {
+  status: process.env.STATUS_VALUE,
+  startedAt: process.env.STARTED_VALUE || null,
+  completedAt: process.env.COMPLETED_VALUE || null,
+  updatedAt: new Date().toISOString(),
+  resultSummary: process.env.RESULT_SUMMARY_VALUE || null,
+}
+fs.writeFileSync(process.env.STATUS_FILE, JSON.stringify(payload))
+NODE
+}
+
+write_result() {
+  RESULT_SUMMARY_VALUE="$1" RESULT_FILE="$RESULT_PATH" node <<'NODE'
+const fs = require('fs')
+const payload = {
+  summary: process.env.RESULT_SUMMARY_VALUE,
+  artifacts: [],
+}
+fs.writeFileSync(process.env.RESULT_FILE, JSON.stringify(payload))
+NODE
+}
+
+append_log() {
+  local level="$1"
+  local step="$2"
+  local message="$3"
+  printf '%s|%s|%s|%s\\n' "$(now_iso)" "$level" "$step" "$message" >> "$LOG_PATH"
+}
+
+fail_run() {
+  local message="$1"
+  append_log error crash "$message"
+  write_status failed "$STARTED_AT" "$(now_iso)" "$message"
+  write_result "$message"
+  exit 1
+}
+
+trap 'fail_run "Managed runtime bootstrap failed."' ERR
+
+ORDER_ID=$(node -e "const fs=require('fs'); const payload=JSON.parse(fs.readFileSync(process.argv[1],'utf8')); process.stdout.write(payload.orderId);" "$ROOT/manifest.json")
+STARTED_AT=$(now_iso)
+
+append_log info bootstrap "Provisioning managed runtime for order $ORDER_ID."
+mkdir -p "$ROOT" "$OPENCLAW_CONFIG_DIR" "$WORKSPACE_DIR"
+cp "$CONFIG_STAGE" "$OPENCLAW_CONFIG_DIR/openclaw.json"
+if [ -d "$WORKSPACE_STAGE" ]; then
+  cp -R "$WORKSPACE_STAGE/." "$WORKSPACE_DIR/"
+fi
+write_status provisioning "$STARTED_AT" "" ""
+
+append_log info install "Installing OpenClaw runtime dependencies."
+command -v node >/dev/null 2>&1 || fail_run "Node.js is required inside the managed runtime."
+command -v npm >/dev/null 2>&1 || fail_run "npm is required inside the managed runtime."
+npm install -g "$OPENCLAW_PACKAGE" >> "$OPENCLAW_LOG" 2>&1
+
+append_log info gateway "Starting Control UI service."
+nohup openclaw gateway --port "$PORT" >> "$OPENCLAW_LOG" 2>&1 &
+echo $! > "$OPENCLAW_PID_PATH"
+
+for _ in $(seq 1 90); do
+  if (echo > /dev/tcp/127.0.0.1/"$PORT") >/dev/null 2>&1; then
+    READY_SUMMARY="Managed runtime is ready for bundle $ORDER_ID. Open Control UI to continue."
+    append_log info ready "Managed runtime is ready for Control UI access."
+    write_status running "$STARTED_AT" "" "$READY_SUMMARY"
+    write_result "$READY_SUMMARY"
+    exit 0
+  fi
+  sleep 2
+done
+
+fail_run "Managed runtime started but the Control UI port did not become ready in time."
 `
 }
 
@@ -275,12 +455,9 @@ function isNotFoundError(error: unknown) {
   )
 }
 
-async function downloadJsonFile<T>(
-  sandbox: DaytonaSandboxLike,
-  path: string,
-): Promise<T | null> {
+async function downloadJsonFile<T>(sandbox: DaytonaSandboxLike, filePath: string): Promise<T | null> {
   try {
-    const buffer = await sandbox.fs.downloadFile(path)
+    const buffer = await sandbox.fs.downloadFile(filePath)
     return JSON.parse(buffer.toString('utf8')) as T
   } catch (error) {
     if (isNotFoundError(error)) {
@@ -291,9 +468,9 @@ async function downloadJsonFile<T>(
   }
 }
 
-async function downloadTextFile(sandbox: DaytonaSandboxLike, path: string) {
+async function downloadTextFile(sandbox: DaytonaSandboxLike, filePath: string) {
   try {
-    const buffer = await sandbox.fs.downloadFile(path)
+    const buffer = await sandbox.fs.downloadFile(filePath)
     return buffer.toString('utf8')
   } catch (error) {
     if (isNotFoundError(error)) {
@@ -304,10 +481,103 @@ async function downloadTextFile(sandbox: DaytonaSandboxLike, path: string) {
   }
 }
 
+async function writeJsonFile(
+  sandbox: DaytonaSandboxLike,
+  filePath: string,
+  payload: Record<string, unknown>,
+) {
+  await sandbox.fs.uploadFile(Buffer.from(JSON.stringify(payload), 'utf8'), filePath)
+}
+
+async function appendStructuredLog(
+  sandbox: DaytonaSandboxLike,
+  level: RunLog['level'],
+  step: string,
+  message: string,
+) {
+  const response = await sandbox.process.executeCommand(
+    `bash -lc ${shellQuote(
+      `printf '%s|${level}|${step}|${message.replaceAll("'", `'\"'\"'`)}\\n' '${nowIso()}' >> ${LOG_PATH}`,
+    )}`,
+    undefined,
+    undefined,
+    20,
+  )
+
+  if (response.exitCode !== 0) {
+    throw new HttpError(502, response.result.trim() || 'Managed runtime log update failed.')
+  }
+}
+
+async function resolveUserHomeDir(sandbox: DaytonaSandboxLike) {
+  return (await sandbox.getUserHomeDir?.()) ?? '/home/daytona'
+}
+
+async function refreshGatewayStatus(
+  sandbox: DaytonaSandboxLike,
+  status: DaytonaStatusFile,
+): Promise<DaytonaStatusFile> {
+  if (status.status !== 'running') {
+    return status
+  }
+
+  const probe = await sandbox.process.executeCommand(
+    `bash -lc ${shellQuote(
+      `if [ -f ${OPENCLAW_PID_PATH} ] && kill -0 "$(cat ${OPENCLAW_PID_PATH})" 2>/dev/null; then echo running; else echo exited; fi`,
+    )}`,
+    undefined,
+    undefined,
+    20,
+  )
+
+  if (probe.exitCode !== 0) {
+    return status
+  }
+
+  if (probe.result.trim() === 'running') {
+    return status
+  }
+
+  const failedAt = nowIso()
+  const nextStatus: DaytonaStatusFile = {
+    completedAt: failedAt,
+    resultSummary: 'Managed runtime stopped unexpectedly.',
+    startedAt: status.startedAt,
+    status: 'failed',
+    updatedAt: failedAt,
+  }
+
+  await writeJsonFile(sandbox, STATUS_PATH, nextStatus)
+  await writeJsonFile(sandbox, RESULT_PATH, {
+    artifacts: [],
+    summary: nextStatus.resultSummary,
+  })
+  await appendStructuredLog(sandbox, 'error', 'runtime', 'Managed runtime stopped unexpectedly.')
+
+  return nextStatus
+}
+
+function buildControlUiUrl(previewUrl: string, openClawToken: string) {
+  const url = new URL(previewUrl)
+  url.searchParams.set('token', openClawToken)
+  return url.toString()
+}
+
+type OpenClawConfigShape = {
+  gateway?: {
+    auth?: {
+      token?: string
+    }
+  }
+}
+
 export class DaytonaRunProvider implements RunProvider {
   readonly name = 'daytona'
 
   private readonly client: DaytonaClientLike
+  private readonly openClawPort: number
+  private readonly openClawTemplateDir: string
+  private readonly openClawPackage: string
 
   constructor(options: DaytonaRunProviderOptions = {}) {
     const config: DaytonaConfig = {
@@ -317,12 +587,17 @@ export class DaytonaRunProvider implements RunProvider {
     }
 
     this.client = options.clientFactory ? options.clientFactory(config) : new Daytona(config)
+    this.openClawPort = resolveOpenClawPort(options.openClawPort)
+    this.openClawTemplateDir = resolveOpenClawTemplateDir(options.openClawTemplateDir)
+    this.openClawPackage = process.env.OPENCLAW_PACKAGE ?? DEFAULT_OPENCLAW_PACKAGE
   }
 
   async createRun(order: Order): Promise<Run> {
     const createdAt = nowIso()
     const runId = `run-${Date.now()}`
     const manifest = buildManifest(order, runId, createdAt)
+    const template = await loadOpenClawTemplate(this.openClawTemplateDir)
+    const { config } = injectOpenClawToken(template.config)
 
     const sandbox = await this.client.create(
       {
@@ -335,23 +610,55 @@ export class DaytonaRunProvider implements RunProvider {
           orderId: order.id,
           runId,
         },
-        language: 'python',
+        language: CodeLanguage.TYPESCRIPT,
         name: runId,
         networkBlockAll: !manifest.networkEnabled,
       },
       { timeout: 90 },
     )
 
+    const homeDir = await resolveUserHomeDir(sandbox)
+    const bootstrapScript = buildBootstrapScript({
+      homeDir,
+      openClawPackage: this.openClawPackage,
+      port: this.openClawPort,
+    })
+
+    await sandbox.process.executeCommand(
+      `bash -lc ${shellQuote(`mkdir -p ${DAYTONA_ROOT} ${STAGED_WORKSPACE_ROOT}`)}`,
+      undefined,
+      undefined,
+      20,
+    )
     await sandbox.fs.uploadFile(Buffer.from(JSON.stringify(manifest, null, 2), 'utf8'), MANIFEST_PATH)
     await sandbox.fs.uploadFile(
       Buffer.from(JSON.stringify(buildInitialStatus(createdAt), null, 2), 'utf8'),
       STATUS_PATH,
     )
-    await sandbox.fs.uploadFile(Buffer.from(buildBootstrapScript(), 'utf8'), SCRIPT_PATH)
+    await sandbox.fs.uploadFile(
+      Buffer.from(
+        JSON.stringify(
+          {
+            artifacts: [],
+            summary: 'Managed runtime is provisioning. Control UI will be available when setup completes.',
+          } satisfies RunResult,
+          null,
+          2,
+        ),
+        'utf8',
+      ),
+      RESULT_PATH,
+    )
+    await sandbox.fs.uploadFile(Buffer.from(JSON.stringify(config, null, 2), 'utf8'), STAGED_OPENCLAW_CONFIG_PATH)
+    await sandbox.fs.uploadFile(Buffer.from(bootstrapScript, 'utf8'), BOOTSTRAP_SCRIPT_PATH)
+
+    for (const file of template.workspaceFiles) {
+      await sandbox.fs.uploadFile(file.contents, `${STAGED_WORKSPACE_ROOT}/${file.relativePath}`)
+    }
 
     const launch = await sandbox.process.executeCommand(
       `bash -lc ${shellQuote(
-        `mkdir -p ${DAYTONA_ROOT} && nohup python3 ${SCRIPT_PATH} > ${LOG_PATH} 2>&1 &`,
+        `chmod +x ${BOOTSTRAP_SCRIPT_PATH} && nohup ${BOOTSTRAP_SCRIPT_PATH} >/dev/null 2>&1 &`,
       )}`,
       undefined,
       undefined,
@@ -359,7 +666,7 @@ export class DaytonaRunProvider implements RunProvider {
     )
 
     if (launch.exitCode !== 0) {
-      throw new HttpError(502, launch.result.trim() || 'Daytona failed to start the sandbox run.')
+      throw new HttpError(502, launch.result.trim() || 'Managed runtime bootstrap failed to start.')
     }
 
     return buildRunFromManifest(manifest, buildInitialStatus(createdAt), sandbox)
@@ -379,15 +686,18 @@ export class DaytonaRunProvider implements RunProvider {
     }
 
     const fileStatus = await downloadJsonFile<DaytonaStatusFile>(sandbox, STATUS_PATH)
-    const status =
+    const status = await refreshGatewayStatus(
+      sandbox,
       fileStatus ??
-      ({
-        completedAt: null,
-        resultSummary: null,
-        startedAt: sandbox.state === SandboxState.STARTED ? sandbox.createdAt ?? manifest.createdAt : null,
-        status: mapSandboxStateToStatus(sandbox.state),
-        updatedAt: sandbox.createdAt ?? manifest.createdAt,
-      } satisfies DaytonaStatusFile)
+        ({
+          completedAt: null,
+          resultSummary: null,
+          startedAt:
+            sandbox.state === SandboxState.STARTED ? sandbox.createdAt ?? manifest.createdAt : null,
+          status: mapSandboxStateToStatus(sandbox.state),
+          updatedAt: sandbox.createdAt ?? manifest.createdAt,
+        } satisfies DaytonaStatusFile),
+    )
 
     return buildRunFromManifest(manifest, status, sandbox)
   }
@@ -417,6 +727,37 @@ export class DaytonaRunProvider implements RunProvider {
     return downloadJsonFile<RunResult>(sandbox, RESULT_PATH)
   }
 
+  async getControlUiLink(
+    runId: string,
+    expiresInSeconds = DEFAULT_PREVIEW_TTL_SECONDS,
+  ): Promise<RunControlUiLink | null> {
+    const sandbox = await this.getSandbox(runId)
+
+    if (!sandbox) {
+      return null
+    }
+
+    const config = await downloadJsonFile<OpenClawConfigShape>(sandbox, STAGED_OPENCLAW_CONFIG_PATH)
+    const openClawToken = config?.gateway?.auth?.token
+
+    if (!openClawToken) {
+      throw new HttpError(409, 'Control UI token is not ready yet.')
+    }
+
+    const preview =
+      (await sandbox.getSignedPreviewUrl?.(this.openClawPort, expiresInSeconds)) ??
+      (await sandbox.getPreviewLink?.(this.openClawPort))
+
+    if (!preview?.url) {
+      throw new HttpError(503, 'Unable to generate a Control UI link for this run.')
+    }
+
+    return {
+      expiresAt: new Date(Date.now() + expiresInSeconds * 1000).toISOString(),
+      url: buildControlUiUrl(preview.url, openClawToken),
+    }
+  }
+
   async stopRun(runId: string): Promise<Run | null> {
     const sandbox = await this.getSandbox(runId)
 
@@ -431,14 +772,16 @@ export class DaytonaRunProvider implements RunProvider {
     }
 
     const stopResponse = await sandbox.process.executeCommand(
-      `bash -lc ${shellQuote(`pkill -f ${SCRIPT_PATH} || true`)}`,
+      `bash -lc ${shellQuote(
+        `if [ -f ${OPENCLAW_PID_PATH} ]; then kill "$(cat ${OPENCLAW_PID_PATH})" 2>/dev/null || true; fi`,
+      )}`,
       undefined,
       undefined,
       20,
     )
 
     if (stopResponse.exitCode !== 0) {
-      throw new HttpError(502, stopResponse.result.trim() || 'Daytona failed to stop the sandbox run.')
+      throw new HttpError(502, stopResponse.result.trim() || 'Managed runtime stop failed.')
     }
 
     const cancelledAt = nowIso()
@@ -450,37 +793,12 @@ export class DaytonaRunProvider implements RunProvider {
       updatedAt: cancelledAt,
     }
 
-    await sandbox.fs.uploadFile(
-      Buffer.from(JSON.stringify(cancelledStatus, null, 2), 'utf8'),
-      STATUS_PATH,
-    )
-    await sandbox.fs.uploadFile(
-      Buffer.from(
-        JSON.stringify(
-          {
-            summary: 'Run stopped by operator request.',
-            artifacts: [],
-          } satisfies RunResult,
-          null,
-          2,
-        ),
-        'utf8',
-      ),
-      RESULT_PATH,
-    )
-
-    const appendedLog = await sandbox.process.executeCommand(
-      `bash -lc ${shellQuote(
-        `printf '%s|warn|cancel|Run stopped by operator request.\\n' '${cancelledAt}' >> ${LOG_PATH}`,
-      )}`,
-      undefined,
-      undefined,
-      20,
-    )
-
-    if (appendedLog.exitCode !== 0) {
-      throw new HttpError(502, appendedLog.result.trim() || 'Daytona failed to append cancellation log.')
-    }
+    await writeJsonFile(sandbox, STATUS_PATH, cancelledStatus)
+    await writeJsonFile(sandbox, RESULT_PATH, {
+      artifacts: [],
+      summary: 'Run stopped by operator request.',
+    })
+    await appendStructuredLog(sandbox, 'warn', 'cancel', 'Run stopped by operator request.')
 
     return buildRunFromManifest(manifest, cancelledStatus, sandbox)
   }

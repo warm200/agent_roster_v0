@@ -3,6 +3,7 @@ import { afterEach, test } from 'node:test'
 
 import { NextRequest } from 'next/server'
 
+import { POST as createRunControlUiLink } from '@/app/api/me/runs/[runId]/control-ui-link/route'
 import { GET as getRunDetail, PATCH as patchRun } from '@/app/api/me/runs/[runId]/route'
 import { GET as getRunLogs } from '@/app/api/me/runs/[runId]/logs/route'
 import { GET as getRunResult } from '@/app/api/me/runs/[runId]/result/route'
@@ -391,4 +392,52 @@ test('run logs and result routes return service-backed payloads', async () => {
   assert.equal(resultResponse.status, 200)
   assert.equal(resultPayload.summary, fixtureResult.summary)
   assert.equal(resultPayload.artifacts[0].name, 'report.txt')
+})
+
+test('run control ui link route returns service-backed signed preview links', async () => {
+  installServiceStubs()
+
+  setRunServiceForTesting({
+    async getRun() {
+      return fixtureRun
+    },
+    async getRunControlUiLink() {
+      return {
+        expiresAt: new Date().toISOString(),
+        url: 'https://18789-demo.proxy.daytona.works?token=preview-token',
+      }
+    },
+    async getRunLogs() {
+      return fixtureLogs
+    },
+    async getRunResult() {
+      return fixtureResult
+    },
+    async listRuns() {
+      return [fixtureRun]
+    },
+    async retryRun() {
+      return fixtureRun
+    },
+    scanAgentVersion(version: AgentVersion) {
+      return version.riskProfile
+    },
+    async stopRun() {
+      return fixtureRun
+    },
+    async createRun() {
+      return fixtureRun
+    },
+  } as unknown as RunService)
+
+  const response = await createRunControlUiLink(
+    new NextRequest('http://localhost/api/me/runs/run-test-1/control-ui-link', {
+      method: 'POST',
+    }),
+    { params: Promise.resolve({ runId: 'run-test-1' }) },
+  )
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.match(payload.url, /proxy\.daytona\.works/)
 })

@@ -5,6 +5,7 @@ import { HttpError } from '../lib/http'
 import { getTelegramService } from './telegram.service'
 import { scanAgentVersion as scanAgentVersionRiskProfile } from '../lib/risk-engine'
 import { getRunProvider } from '../providers'
+import type { RunControlUiLink } from '../providers/run-provider.interface'
 import { RunRepository } from './run.repository'
 import { getOrderByIdForUser } from './order.service'
 
@@ -112,6 +113,32 @@ export class RunService {
     const run = await this.requireRun(userId, runId)
     const result = await runServiceDeps.getRunProvider().getResult(run.id)
     return result ? sanitizeRunResult(runResultSchema.parse(result)) : null
+  }
+
+  async getRunControlUiLink(userId: string, runId: string): Promise<RunControlUiLink> {
+    const run = await this.getRun(userId, runId)
+
+    if (run.status === 'provisioning') {
+      throw new HttpError(409, 'Control UI is still starting. Try again in a few moments.')
+    }
+
+    if (run.status === 'failed') {
+      throw new HttpError(409, 'Control UI is unavailable because this run is no longer active.')
+    }
+
+    const provider = runServiceDeps.getRunProvider()
+
+    if (!provider.getControlUiLink) {
+      throw new HttpError(409, 'Control UI is not available for this run.')
+    }
+
+    const link = await provider.getControlUiLink(run.id)
+
+    if (!link) {
+      throw new HttpError(404, 'Control UI link could not be created for this run.')
+    }
+
+    return link
   }
 
   async stopRun(userId: string, runId: string) {

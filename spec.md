@@ -9,6 +9,7 @@ Implemented in the current mock app:
 - Catalog, agent detail, dashboard, bundles list/detail, runs list/detail now fetch through app API routes
 - Bundle detail can launch mock runs and redirect into run detail
 - Run detail now shows runtime disclosure, combined risk, logs, results, artifacts, retry, and cancel
+- Run detail now exposes a Control UI action for Daytona-backed runs via a signed preview-link endpoint
 - Cart now persists in `localStorage` and syncs against mock cart endpoints
 - Checkout creates a mock purchased bundle and redirects to the returned order ID
 - Telegram setup wizard now uses final validate/pairing APIs and polls channel status until pairing completes
@@ -33,6 +34,7 @@ Implemented in the current mock app:
 - Local PostgreSQL Docker Compose file now exists in `docker-compose.yml`
 - Fresh local Postgres verification now passes: migrate + seed succeed against a clean database
 - Run providers now exist under `server/providers/` with a real Daytona sandbox adapter, mock fallback, OpenAI preview integration, and an openclaw stub
+- Daytona runs now stage the repo’s OpenClaw template config/workspace into the sandbox, start the gateway there, and mint signed Control UI links on demand
 - Deleted Daytona sandboxes now degrade to stale run records instead of breaking bundle/run pages
 - Bundle detail now loads order data independently from runs/download grants, so provider-side run failures no longer masquerade as “bundle not found”
 - Run detail timeline now visually reflects created/started/updated/completed state instead of rendering every row as the same muted style
@@ -60,6 +62,7 @@ Implemented in the current mock app:
 - Final `/api/me/orders*` routes now exist for orders, Telegram run-channel setup, run creation, and signed-download grants
 - `GET /api/downloads/orders/:orderId/items/:orderItemId` now exists to validate signed grants and redirect to install package URLs
 - Final `/api/me/runs*` routes now exist for run list, detail, logs, and result
+- `POST /api/me/runs/:runId/control-ui-link` now exists to mint a signed Daytona preview URL with the OpenClaw auth token appended for direct browser handoff
 - Legacy `/api/telegram/verify` is now a compatibility wrapper onto `telegram.service.ts`, and `/api/runs/[runId]/steps/[stepId]` is an explicit deprecated compatibility endpoint
 - Authenticated dashboard, bundles, runs, Telegram setup, run launch, and signed downloads now use the final `/api/me/*` API surface
 - `usePairingStatus(orderId)` now exists and polls `/api/me/orders/:id/run-channel` until pairing reaches a terminal state
