@@ -4,6 +4,14 @@ import { previewInterviewRequestSchema } from '@/lib/schemas'
 import { HttpError } from '@/server/lib/http'
 import { AgentNotFoundError, getCatalogService } from '@/server/services/catalog.service'
 
+function logPreviewRouteError(kind: string, error: unknown) {
+  if (process.env.NODE_ENV === 'test') {
+    return
+  }
+
+  console.error('[api/interviews/preview]', kind, error)
+}
+
 async function resolveAgentSlug(agentId?: string, slug?: string) {
   if (slug) {
     return slug
@@ -46,13 +54,27 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(preview)
   } catch (error) {
     if (error instanceof AgentNotFoundError) {
+      logPreviewRouteError('agent_not_found', {
+        message: error.message,
+      })
       return NextResponse.json({ error: error.message }, { status: 404 })
     }
 
     if (error instanceof HttpError) {
+      logPreviewRouteError('http_error', {
+        message: error.message,
+        status: error.status,
+      })
       return NextResponse.json({ error: error.message }, { status: error.status })
     }
 
-    return NextResponse.json({ error: 'Unable to generate preview reply' }, { status: 500 })
+    logPreviewRouteError('unexpected_error', error)
+
+    return NextResponse.json(
+      {
+        error: error instanceof Error ? error.message : 'Unable to generate preview reply',
+      },
+      { status: 500 },
+    )
   }
 }

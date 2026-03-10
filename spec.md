@@ -32,7 +32,7 @@ Implemented in the current mock app:
 - Final `/api/me/*` routes now require a NextAuth JWT when OAuth providers are configured, while demo/header fallback stays available for local mock mode
 - Local PostgreSQL Docker Compose file now exists in `docker-compose.yml`
 - Fresh local Postgres verification now passes: migrate + seed succeed against a clean database
-- Run provider scaffolding now exists under `server/providers/` with mock and openclaw stubs
+- Run providers now exist under `server/providers/` with mock, OpenAI Responses background mode, and an openclaw stub
 - Initial backend risk-engine utility now exists in `server/lib/risk-engine.ts`
 - Backend commerce snapshot/mapping utilities now exist in `server/services/commerce.utils.ts`
 - Backend catalog service now exists in `server/services/catalog.service.ts` with DB + mock fallback logic
@@ -81,9 +81,10 @@ Implemented in the current mock app:
 - Route smoke coverage now exists for legacy bundle wrappers and the deprecated Telegram verify compatibility route
 - Route smoke coverage now exists for legacy run wrappers, including list/create/detail/logs/result and retry/cancel actions
 - Route smoke coverage now exists for public agent list/detail routes and preview chat behavior
+- Provider unit coverage now exists for the OpenAI run adapter create/poll/result/cancel flow
 
 Still not implemented:
-- Production auth provider setup, production Stripe/Telegram operations, provider abstraction, and a real run backend
+- Production auth provider setup, production Stripe/Telegram operations, durable provider state persistence, and a full workspace-capable run backend
 - Deeper paid checkout, Telegram pairing, and run-launch browser coverage, plus hardened production contracts
 
 ---
@@ -147,6 +148,7 @@ v0_version/                        # Next.js 16 full-stack
 │   ├── providers/
 │   │   ├── run-provider.interface.ts  # Provider contract
 │   │   ├── mock.provider.ts       # Dev/demo provider
+│   │   ├── openai.provider.ts     # Real OpenAI Responses provider
 │   │   ├── openclaw.provider.ts   # Stub for future
 │   │   └── index.ts               # Provider registry
 │   └── lib/
@@ -544,7 +546,8 @@ NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_...
 DOWNLOAD_URL_SECRET=<random-32-bytes>
 
 # Run Provider
-RUN_PROVIDER=mock  # mock | openclaw
+RUN_PROVIDER=mock  # mock | openai | openclaw
+OPENAI_RUN_MODEL=gpt-5
 
 # Preview Chat
 OPENAI_API_KEY=     # For preview chat LLM calls

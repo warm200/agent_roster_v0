@@ -5,6 +5,7 @@ import { NextRequest } from 'next/server'
 
 import type { Agent } from '@/lib/types'
 import { POST } from '@/app/api/interviews/preview/route'
+import { HttpError } from '@/server/lib/http'
 import {
   setCatalogServiceForTesting,
   type CatalogService,
@@ -103,4 +104,34 @@ test('preview route rejects invalid payloads', async () => {
 
   assert.equal(response.status, 400)
   assert.equal(payload.error, 'slug or agentId plus messages are required')
+})
+
+test('preview route preserves service error details', async () => {
+  const stubService: CatalogService = {
+    async getAgentBySlug() {
+      return buildAgent()
+    },
+    async listAgents() {
+      return [buildAgent()]
+    },
+    async previewInterview() {
+      throw new HttpError(503, 'OPENAI_API_KEY is still a 1Password reference.')
+    },
+  }
+
+  setCatalogServiceForTesting(stubService)
+
+  const request = new NextRequest('http://localhost/api/interviews/preview', {
+    body: JSON.stringify({
+      messages: [{ role: 'user', content: 'How do you work?' }],
+      slug: 'ops-agent',
+    }),
+    method: 'POST',
+  })
+
+  const response = await POST(request)
+  const payload = await response.json()
+
+  assert.equal(response.status, 503)
+  assert.equal(payload.error, 'OPENAI_API_KEY is still a 1Password reference.')
 })

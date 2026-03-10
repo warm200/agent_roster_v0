@@ -6,6 +6,7 @@ import type { Agent, AgentCategory, PreviewMessage, RiskLevel } from '@/lib/type
 
 import { createDb, type DbClient } from '../db'
 import { agents, agentVersions, riskProfiles } from '../db/schema'
+import { HttpError } from '../lib/http'
 
 type AgentRow = typeof agents.$inferSelect
 type AgentVersionRow = typeof agentVersions.$inferSelect
@@ -40,6 +41,65 @@ type CatalogServiceDeps = {
   ) => Promise<string>
   getAgentRecordBySlug: (slug: string) => Promise<DbAgentRecord | null>
   listAgentRecords: (filters: CatalogFilters) => Promise<DbAgentRecord[]>
+}
+
+type PreviewResponsesMessage = {
+  role: 'assistant' | 'developer' | 'system' | 'user'
+  content: Array<{
+    text: string
+    type: 'input_text' | 'output_text'
+  }>
+}
+
+function logPreviewDiagnostic(event: string, details: Record<string, unknown>) {
+  if (process.env.NODE_ENV === 'test') {
+    return
+  }
+
+  console.error('[preview/openai]', event, details)
+}
+
+export function buildPreviewResponsesInput(
+  promptSnapshot: string,
+  messages: PreviewMessage[],
+): PreviewResponsesMessage[] {
+  return [
+    {
+      role: 'system',
+      content: [
+        {
+          type: 'input_text',
+          text: [
+            'You are rendering a product preview for a purchasable agent.',
+            'Preview mode only.',
+            'Do not use tools, files, shell, workspace access, or network access.',
+            'Do not claim that you executed actions.',
+            'Reply in plain text.',
+          ].join(' '),
+        },
+      ],
+    },
+    {
+      role: 'developer',
+      content: [
+        {
+          type: 'input_text',
+          text: `Agent preview prompt snapshot:\n${promptSnapshot}`,
+        },
+      ],
+    },
+    ...messages.map((message) => ({
+      role: message.role,
+      content: [
+        {
+          type: (message.role === 'assistant' ? 'output_text' : 'input_text') as
+            | 'input_text'
+            | 'output_text',
+          text: message.content,
+        },
+      ],
+    })),
+  ]
 }
 
 export interface CatalogService {
@@ -285,59 +345,127 @@ async function defaultGeneratePreviewReply(
     return buildFallbackPreviewReply(promptSnapshot, messages)
   }
 
-  const response = await fetch('https://api.openai.com/v1/responses', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: process.env.OPENAI_PREVIEW_MODEL ?? 'gpt-5',
-      input: [
-        {
-          role: 'system',
-          content: [
-            {
-              type: 'input_text',
-              text: [
-                'You are rendering a product preview for a purchasable agent.',
-                'Preview mode only.',
-                'Do not use tools, files, shell, workspace access, or network access.',
-                'Do not claim that you executed actions.',
-                'Reply in plain text.',
-              ].join(' '),
-            },
-          ],
-        },
-        {
-          role: 'developer',
-          content: [
-            {
-              type: 'input_text',
-              text: `Agent preview prompt snapshot:\n${promptSnapshot}`,
-            },
-          ],
-        },
-        ...messages.map((message) => ({
-          role: message.role,
-          content: [{ type: 'input_text', text: message.content }],
-        })),
-      ],
-    }),
-  })
-
-  const payload = (await response.json()) as {
-    error?: { message?: string }
-    output_text?: string
+  if (apiKey.startsWith('op://')) {
+    throw new HttpError(
+      503,
+      'OPENAI_API_KEY is still a 1Password reference. Start the app with `op run --env-file=.env -- pnpm dev` or export the resolved key first.',
+    )
   }
 
-  if (!response.ok) {
-    throw new Error(payload.error?.message ?? 'Preview generation failed.')
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 15_000)
+  let response: Response | null = null
+
+  const preferredModels = [
+    process.env.OPENAI_PREVIEW_MODEL,
+    process.env.OPENAI_RUN_MODEL,
+    'gpt-5-nano',
+    'gpt-4.1-mini',
+  ].filter((value, index, values): value is string => Boolean(value) && values.indexOf(value) === index)
+
+  let payload:
+    | {
+        error?: { code?: string; message?: string }
+        output?: Array<{
+          content?: Array<{
+            text?: string
+            type?: string
+          }>
+          type?: string
+        }>
+        output_text?: string
+      }
+    | null = null
+  let lastHttpError: HttpError | null = null
+
+  try {
+    for (const model of preferredModels) {
+      try {
+        response = await fetch('https://api.openai.com/v1/responses', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+          },
+        body: JSON.stringify({
+          model,
+          input: buildPreviewResponsesInput(promptSnapshot, messages),
+        }),
+        signal: controller.signal,
+      })
+      } catch (error) {
+        if (error instanceof Error && error.name === 'AbortError') {
+          throw new HttpError(504, 'OpenAI preview request timed out after 15 seconds.')
+        }
+
+        throw error
+      }
+
+      payload = (await response.json()) as {
+        error?: { code?: string; message?: string }
+        output?: Array<{
+          content?: Array<{
+            text?: string
+            type?: string
+          }>
+          type?: string
+        }>
+        output_text?: string
+      }
+
+      if (response.ok) {
+        break
+      }
+
+      const errorMessage = payload.error?.message ?? 'Preview generation failed.'
+      const isModelAccessIssue =
+        response.status === 400 &&
+        /model|does not exist|not found|access|unsupported/i.test(errorMessage)
+
+      logPreviewDiagnostic('upstream_error', {
+        errorCode: payload.error?.code ?? null,
+        errorMessage,
+        model,
+        status: response.status,
+      })
+
+      lastHttpError = new HttpError(response.status >= 500 ? 502 : response.status, errorMessage)
+
+      if (!isModelAccessIssue) {
+        throw lastHttpError
+      }
+    }
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new HttpError(504, 'OpenAI preview request timed out after 15 seconds.')
+    }
+
+    throw error
+  } finally {
+    clearTimeout(timeoutId)
   }
 
-  const reply = payload.output_text?.trim()
+  if (!response || !response.ok) {
+    throw lastHttpError ?? new HttpError(502, 'Preview generation failed.')
+  }
+
+  const reply =
+    payload?.output_text?.trim() ||
+    payload?.output
+      ?.flatMap((item) => item.content ?? [])
+      .filter((item) => item.type === 'output_text' || item.type === 'text' || typeof item.text === 'string')
+      .map((item) => item.text?.trim() ?? '')
+      .filter(Boolean)
+      .join('\n')
+      .trim()
+
   if (!reply) {
-    throw new Error('Preview generation returned an empty response.')
+    logPreviewDiagnostic('empty_output', {
+      modelTried: preferredModels,
+      payload,
+      status: response.status,
+    })
+    throw new HttpError(502, 'Preview generation returned an empty response.')
   }
 
   return reply
