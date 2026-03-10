@@ -1,4 +1,3 @@
-import { randomBytes } from 'node:crypto'
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
 
@@ -81,7 +80,6 @@ type DaytonaSandboxLike = Pick<Sandbox, 'createdAt' | 'errorReason' | 'id' | 'st
 }
 
 type OpenClawTemplate = {
-  config: Record<string, unknown>
   workspaceFiles: Array<{
     contents: Buffer
     relativePath: string
@@ -94,7 +92,6 @@ const STATUS_PATH = `${DAYTONA_ROOT}/status.json`
 const RESULT_PATH = `${DAYTONA_ROOT}/result.json`
 const LOG_PATH = `${DAYTONA_ROOT}/run.log`
 const BOOTSTRAP_SCRIPT_PATH = `${DAYTONA_ROOT}/bootstrap-openclaw.sh`
-const STAGED_OPENCLAW_CONFIG_PATH = `${DAYTONA_ROOT}/openclaw.json`
 const STAGED_WORKSPACE_ROOT = `${DAYTONA_ROOT}/workspace-seed`
 const OPENCLAW_GATEWAY_LOG_PATH = `${DAYTONA_ROOT}/openclaw-gateway.log`
 const OPENCLAW_PID_PATH = `${DAYTONA_ROOT}/openclaw.pid`
@@ -260,46 +257,18 @@ async function collectWorkspaceFiles(
 }
 
 async function loadOpenClawTemplate(templateDir: string): Promise<OpenClawTemplate> {
-  const configPath = path.join(templateDir, 'openclaw.json')
   const workspaceDir = path.join(templateDir, 'workspace')
+  let workspaceFiles: OpenClawTemplate['workspaceFiles'] = []
 
   try {
-    await fs.access(configPath)
     await fs.access(workspaceDir)
+    workspaceFiles = await collectWorkspaceFiles(workspaceDir)
   } catch {
-    throw new HttpError(
-      503,
-      `OpenClaw template files are missing. Expected ${configPath} and ${workspaceDir}.`,
-    )
+    workspaceFiles = []
   }
 
   return {
-    config: JSON.parse(await fs.readFile(configPath, 'utf8')) as Record<string, unknown>,
-    workspaceFiles: await collectWorkspaceFiles(workspaceDir),
-  }
-}
-
-function injectOpenClawToken(templateConfig: Record<string, unknown>) {
-  const token = randomBytes(24).toString('hex')
-  const config = structuredClone(templateConfig)
-  const gateway =
-    config.gateway && typeof config.gateway === 'object'
-      ? (config.gateway as Record<string, unknown>)
-      : {}
-  const auth =
-    gateway.auth && typeof gateway.auth === 'object'
-      ? (gateway.auth as Record<string, unknown>)
-      : {}
-
-  auth.mode = 'token'
-  auth.token = token
-  auth.allowInsecureAuth = true
-  gateway.auth = auth
-  config.gateway = gateway
-
-  return {
-    config,
-    token,
+    workspaceFiles,
   }
 }
 
@@ -315,12 +284,10 @@ ROOT=${shellQuote(DAYTONA_ROOT)}
 STATUS_PATH=${shellQuote(STATUS_PATH)}
 RESULT_PATH=${shellQuote(RESULT_PATH)}
 LOG_PATH=${shellQuote(LOG_PATH)}
-CONFIG_STAGE=${shellQuote(STAGED_OPENCLAW_CONFIG_PATH)}
 WORKSPACE_STAGE=${shellQuote(STAGED_WORKSPACE_ROOT)}
 OPENCLAW_LOG=${shellQuote(OPENCLAW_GATEWAY_LOG_PATH)}
 OPENCLAW_PID_PATH=${shellQuote(OPENCLAW_PID_PATH)}
 HOME_DIR=${shellQuote(input.homeDir)}
-OPENCLAW_CONFIG_DIR="$HOME_DIR/.openclaw"
 WORKSPACE_DIR="$HOME_DIR/workspace"
 PORT=${shellQuote(String(input.port))}
 OPENCLAW_PACKAGE=${shellQuote(input.openClawPackage)}
@@ -365,6 +332,13 @@ append_log() {
 
 fail_run() {
   local message="$1"
+  if [ -f "$OPENCLAW_LOG" ]; then
+    local tail_output
+    tail_output=$(tail -n 20 "$OPENCLAW_LOG" | tr '\n' ' ' | sed 's/[[:space:]]\\+/ /g')
+    if [ -n "$tail_output" ]; then
+      message="$message Gateway log tail: $tail_output"
+    fi
+  fi
   append_log error crash "$message"
   write_status failed "$STARTED_AT" "$(now_iso)" "$message"
   write_result "$message"
@@ -377,8 +351,7 @@ ORDER_ID=$(node -e "const fs=require('fs'); const payload=JSON.parse(fs.readFile
 STARTED_AT=$(now_iso)
 
 append_log info bootstrap "Provisioning managed runtime for order $ORDER_ID."
-mkdir -p "$ROOT" "$OPENCLAW_CONFIG_DIR" "$WORKSPACE_DIR"
-cp "$CONFIG_STAGE" "$OPENCLAW_CONFIG_DIR/openclaw.json"
+mkdir -p "$ROOT" "$WORKSPACE_DIR"
 if [ -d "$WORKSPACE_STAGE" ]; then
   cp -R "$WORKSPACE_STAGE/." "$WORKSPACE_DIR/"
 fi
@@ -390,14 +363,14 @@ command -v npm >/dev/null 2>&1 || fail_run "npm is required inside the managed r
 npm install -g "$OPENCLAW_PACKAGE" >> "$OPENCLAW_LOG" 2>&1
 
 append_log info gateway "Starting Control UI service."
-nohup openclaw gateway --port "$PORT" >> "$OPENCLAW_LOG" 2>&1 &
+nohup openclaw gateway --allow-unconfigured --bind loopback --port "$PORT" >> "$OPENCLAW_LOG" 2>&1 &
 echo $! > "$OPENCLAW_PID_PATH"
 
 for _ in $(seq 1 90); do
   if (echo > /dev/tcp/127.0.0.1/"$PORT") >/dev/null 2>&1; then
     READY_SUMMARY="Managed runtime is ready for bundle $ORDER_ID. Open Control UI to continue."
     append_log info ready "Managed runtime is ready for Control UI access."
-    write_status running "$STARTED_AT" "" "$READY_SUMMARY"
+    write_status completed "$STARTED_AT" "$(now_iso)" "$READY_SUMMARY"
     write_result "$READY_SUMMARY"
     exit 0
   fi
@@ -516,8 +489,14 @@ async function resolveUserHomeDir(sandbox: DaytonaSandboxLike) {
 async function refreshGatewayStatus(
   sandbox: DaytonaSandboxLike,
   status: DaytonaStatusFile,
+  manifest: DaytonaRunManifest,
 ): Promise<DaytonaStatusFile> {
-  if (status.status !== 'running') {
+  const shouldProbe =
+    status.status === 'running' ||
+    (status.status === 'failed' &&
+      (status.resultSummary?.includes('Managed runtime bootstrap failed.') ?? false))
+
+  if (!shouldProbe) {
     return status
   }
 
@@ -535,7 +514,21 @@ async function refreshGatewayStatus(
   }
 
   if (probe.result.trim() === 'running') {
-    return status
+    const upgradedStatus: DaytonaStatusFile = {
+      ...status,
+      resultSummary: buildReadySummary(manifest.orderId),
+      completedAt: status.completedAt ?? nowIso(),
+      status: 'completed',
+      updatedAt: nowIso(),
+    }
+
+    await writeJsonFile(sandbox, STATUS_PATH, upgradedStatus)
+    await writeJsonFile(sandbox, RESULT_PATH, {
+      artifacts: [],
+      summary: upgradedStatus.resultSummary,
+    })
+
+    return upgradedStatus
   }
 
   const failedAt = nowIso()
@@ -592,12 +585,10 @@ export class DaytonaRunProvider implements RunProvider {
     this.openClawPackage = process.env.OPENCLAW_PACKAGE ?? DEFAULT_OPENCLAW_PACKAGE
   }
 
-  async createRun(order: Order): Promise<Run> {
+  async createRun(order: Order, runId = `run-${Date.now()}`): Promise<Run> {
     const createdAt = nowIso()
-    const runId = `run-${Date.now()}`
     const manifest = buildManifest(order, runId, createdAt)
     const template = await loadOpenClawTemplate(this.openClawTemplateDir)
-    const { config } = injectOpenClawToken(template.config)
 
     const sandbox = await this.client.create(
       {
@@ -649,7 +640,6 @@ export class DaytonaRunProvider implements RunProvider {
       ),
       RESULT_PATH,
     )
-    await sandbox.fs.uploadFile(Buffer.from(JSON.stringify(config, null, 2), 'utf8'), STAGED_OPENCLAW_CONFIG_PATH)
     await sandbox.fs.uploadFile(Buffer.from(bootstrapScript, 'utf8'), BOOTSTRAP_SCRIPT_PATH)
 
     for (const file of template.workspaceFiles) {
@@ -697,6 +687,7 @@ export class DaytonaRunProvider implements RunProvider {
           status: mapSandboxStateToStatus(sandbox.state),
           updatedAt: sandbox.createdAt ?? manifest.createdAt,
         } satisfies DaytonaStatusFile),
+      manifest,
     )
 
     return buildRunFromManifest(manifest, status, sandbox)
@@ -737,7 +728,11 @@ export class DaytonaRunProvider implements RunProvider {
       return null
     }
 
-    const config = await downloadJsonFile<OpenClawConfigShape>(sandbox, STAGED_OPENCLAW_CONFIG_PATH)
+    const homeDir = await resolveUserHomeDir(sandbox)
+    const config = await downloadJsonFile<OpenClawConfigShape>(
+      sandbox,
+      `${homeDir}/.openclaw/openclaw.json`,
+    )
     const openClawToken = config?.gateway?.auth?.token
 
     if (!openClawToken) {

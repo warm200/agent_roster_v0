@@ -4,6 +4,9 @@ import { useEffect, useState } from 'react'
 
 import { getRun, type RunDetailResponse } from '@/services/runs.api'
 
+const INITIAL_NOT_FOUND_RETRIES = 8
+const INITIAL_NOT_FOUND_RETRY_MS = 400
+
 function isActiveStatus(status: RunDetailResponse['status']) {
   return status === 'provisioning' || status === 'running'
 }
@@ -17,7 +20,9 @@ export function useRunStatus(runId: string, intervalMs = 5000) {
     let isMounted = true
     let timeoutId: ReturnType<typeof setTimeout> | null = null
 
-    async function loadRun(isInitialLoad: boolean) {
+    async function loadRun(isInitialLoad: boolean, attempt = 0) {
+      let shouldFinishInitialLoad = true
+
       if (isInitialLoad) {
         setIsLoading(true)
       }
@@ -42,9 +47,23 @@ export function useRunStatus(runId: string, intervalMs = 5000) {
           return
         }
 
-        setLoadError(error instanceof Error ? error.message : 'Unable to load run')
+        const message = error instanceof Error ? error.message : 'Unable to load run'
+
+        if (
+          isInitialLoad &&
+          message === 'Run not found' &&
+          attempt < INITIAL_NOT_FOUND_RETRIES
+        ) {
+          shouldFinishInitialLoad = false
+          timeoutId = setTimeout(() => {
+            void loadRun(true, attempt + 1)
+          }, INITIAL_NOT_FOUND_RETRY_MS)
+          return
+        }
+
+        setLoadError(message)
       } finally {
-        if (isMounted && isInitialLoad) {
+        if (isMounted && isInitialLoad && shouldFinishInitialLoad) {
           setIsLoading(false)
         }
       }

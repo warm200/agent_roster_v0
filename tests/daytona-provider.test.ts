@@ -163,16 +163,23 @@ test('daytona run provider stages OpenClaw and returns a signed control ui link'
 
               if (command.includes('nohup /tmp/agent-roster/bootstrap-openclaw.sh')) {
                 const startedAt = new Date().toISOString()
+                sandbox.files['/home/daytona/.openclaw/openclaw.json'] = JSON.stringify({
+                  gateway: {
+                    auth: {
+                      token: 'preview-token',
+                    },
+                  },
+                })
                 sandbox.files['/tmp/agent-roster/run.log'] = [
                   `${startedAt}|info|bootstrap|Provisioning managed runtime for order order-test-1.`,
                   `${new Date().toISOString()}|info|ready|Managed runtime is ready for Control UI access.`,
                 ].join('\n')
                 sandbox.files['/tmp/agent-roster/status.json'] = JSON.stringify({
-                  completedAt: null,
+                  completedAt: new Date().toISOString(),
                   resultSummary:
                     'Managed runtime is ready for bundle order-test-1. Open Control UI to continue.',
                   startedAt,
-                  status: 'running',
+                  status: 'completed',
                   updatedAt: new Date().toISOString(),
                 })
                 sandbox.files['/tmp/agent-roster/result.json'] = JSON.stringify({
@@ -268,7 +275,7 @@ test('daytona run provider stages OpenClaw and returns a signed control ui link'
 
   const status = await provider.getStatus(created.id)
   assert.ok(status)
-  assert.equal(status.status, 'running')
+  assert.equal(status.status, 'completed')
   assert.match(status.resultSummary ?? '', /Open Control UI/)
 
   const logs = await provider.getLogs(created.id)
@@ -308,4 +315,219 @@ test('daytona run provider tolerates deleted sandboxes', async () => {
   assert.equal(await provider.getResult('run-missing'), null)
   assert.equal(await provider.getControlUiLink?.('run-missing'), null)
   assert.equal(await provider.stopRun('run-missing'), null)
+})
+
+test('daytona run provider upgrades legacy running bootstrap state to completed once control ui is ready', async () => {
+  const runId = 'run-legacy'
+  const startedAt = new Date().toISOString()
+  const sandbox = {
+    createdAt: startedAt,
+    files: {
+      '/tmp/agent-roster/manifest.json': JSON.stringify({
+        agentTitles: ['Inbox Triage Agent'],
+        channelConfigId: 'channel-test-1',
+        combinedRiskLevel: 'low',
+        createdAt: startedAt,
+        networkEnabled: true,
+        orderId: 'order-test-1',
+        recipientExternalId: '77',
+        runId,
+        userId: 'user-test-1',
+        usesTools: true,
+      }),
+      '/tmp/agent-roster/status.json': JSON.stringify({
+        completedAt: null,
+        resultSummary: 'Managed runtime is ready for bundle order-test-1. Open Control UI to continue.',
+        startedAt,
+        status: 'running',
+        updatedAt: startedAt,
+      }),
+      '/tmp/agent-roster/result.json': JSON.stringify({
+        artifacts: [],
+        summary: 'Managed runtime is ready for bundle order-test-1. Open Control UI to continue.',
+      }),
+      '/tmp/agent-roster/openclaw.pid': '123',
+    } as Record<string, string>,
+  }
+
+  const provider = new DaytonaRunProvider({
+    apiKey: 'daytona-test',
+    clientFactory: () => ({
+      async create() {
+        throw new Error('not used')
+      },
+      async get(id) {
+        assert.equal(id, runId)
+        return {
+          createdAt: sandbox.createdAt,
+          fs: {
+            async downloadFile(filePath: string) {
+              const value = sandbox.files[filePath]
+              if (value === undefined) {
+                const error = new Error(`404 ${filePath}`)
+                ;(error as Error & { status: number }).status = 404
+                throw error
+              }
+
+              return Buffer.from(value, 'utf8')
+            },
+            async uploadFile(file: Buffer, filePath: string) {
+              sandbox.files[filePath] = file.toString('utf8')
+            },
+          },
+          id,
+          process: {
+            async executeCommand(command: string) {
+              if (command.includes('kill -0 "$(cat /tmp/agent-roster/openclaw.pid)"')) {
+                return {
+                  exitCode: 0,
+                  result: 'running',
+                }
+              }
+
+              return {
+                exitCode: 0,
+                result: '',
+              }
+            },
+          },
+          state: SandboxState.STARTED,
+        }
+      },
+    }),
+  })
+
+  const status = await provider.getStatus(runId)
+  assert.ok(status)
+  assert.equal(status.status, 'completed')
+  assert.ok(status.completedAt)
+})
+
+test('daytona run provider heals failed bootstrap records when control ui process is actually alive', async () => {
+  const runId = 'run-heal'
+  const startedAt = new Date().toISOString()
+  const sandbox = {
+    createdAt: startedAt,
+    files: {
+      '/tmp/agent-roster/manifest.json': JSON.stringify({
+        agentTitles: ['Inbox Triage Agent'],
+        channelConfigId: 'channel-test-1',
+        combinedRiskLevel: 'low',
+        createdAt: startedAt,
+        networkEnabled: true,
+        orderId: 'order-test-1',
+        recipientExternalId: '77',
+        runId,
+        userId: 'user-test-1',
+        usesTools: true,
+      }),
+      '/tmp/agent-roster/status.json': JSON.stringify({
+        completedAt: startedAt,
+        resultSummary: 'Managed runtime bootstrap failed.',
+        startedAt,
+        status: 'failed',
+        updatedAt: startedAt,
+      }),
+      '/tmp/agent-roster/result.json': JSON.stringify({
+        artifacts: [],
+        summary: 'Managed runtime bootstrap failed.',
+      }),
+      '/tmp/agent-roster/openclaw.pid': '123',
+    } as Record<string, string>,
+  }
+
+  const provider = new DaytonaRunProvider({
+    apiKey: 'daytona-test',
+    clientFactory: () => ({
+      async create() {
+        throw new Error('not used')
+      },
+      async get(id) {
+        assert.equal(id, runId)
+        return {
+          createdAt: sandbox.createdAt,
+          fs: {
+            async downloadFile(filePath: string) {
+              const value = sandbox.files[filePath]
+              if (value === undefined) {
+                const error = new Error(`404 ${filePath}`)
+                ;(error as Error & { status: number }).status = 404
+                throw error
+              }
+
+              return Buffer.from(value, 'utf8')
+            },
+            async uploadFile(file: Buffer, filePath: string) {
+              sandbox.files[filePath] = file.toString('utf8')
+            },
+          },
+          id,
+          process: {
+            async executeCommand(command: string) {
+              if (command.includes('kill -0 "$(cat /tmp/agent-roster/openclaw.pid)"')) {
+                return {
+                  exitCode: 0,
+                  result: 'running',
+                }
+              }
+
+              return {
+                exitCode: 0,
+                result: '',
+              }
+            },
+          },
+          state: SandboxState.STARTED,
+        }
+      },
+    }),
+  })
+
+  const status = await provider.getStatus(runId)
+  assert.ok(status)
+  assert.equal(status.status, 'completed')
+  assert.match(status.resultSummary ?? '', /Open Control UI/)
+})
+
+test('daytona run provider falls back to empty template state when local OpenClaw files are missing', async () => {
+  let uploadedWorkspaceFile = ''
+  const provider = new DaytonaRunProvider({
+    apiKey: 'daytona-test',
+    clientFactory: () => ({
+      async create(params) {
+        const runId = String(params?.name)
+        return {
+          createdAt: new Date().toISOString(),
+          fs: {
+            async downloadFile() {
+              throw Object.assign(new Error('404 missing'), { status: 404 })
+            },
+            async uploadFile(file: Buffer, filePath: string) {
+              if (filePath.startsWith('/tmp/agent-roster/workspace-seed/')) {
+                uploadedWorkspaceFile = file.toString('utf8')
+              }
+            },
+          },
+          id: runId,
+          process: {
+            async executeCommand() {
+              return {
+                exitCode: 0,
+                result: '',
+              }
+            },
+          },
+          state: SandboxState.STARTED,
+        }
+      },
+      async get() {
+        throw new Error('not used')
+      },
+    }),
+    openClawTemplateDir: 'openclaw_config_test-missing',
+  })
+
+  const created = await provider.createRun(order)
+  assert.equal(created.status, 'provisioning')
+  assert.equal(uploadedWorkspaceFile, '')
 })

@@ -8,6 +8,7 @@ Strategy: single Next.js 16 full-stack app. Port backend services into this proj
 Implemented in the current mock app:
 - Catalog, agent detail, dashboard, bundles list/detail, runs list/detail now fetch through app API routes
 - Bundle detail can launch mock runs and redirect into run detail
+- Run launch now returns a provisioning run immediately, then provider bootstrap continues in the background so the UI can redirect without waiting on Daytona sandbox startup; Daytona marks the run complete once Control UI bootstrap finishes so polling can stop
 - Run detail now shows runtime disclosure, combined risk, logs, results, artifacts, retry, and cancel
 - Run detail now exposes a Control UI action for Daytona-backed runs via a signed preview-link endpoint
 - Cart now persists in `localStorage` and syncs against mock cart endpoints
@@ -35,6 +36,8 @@ Implemented in the current mock app:
 - Fresh local Postgres verification now passes: migrate + seed succeed against a clean database
 - Run providers now exist under `server/providers/` with a real Daytona sandbox adapter, mock fallback, OpenAI preview integration, and an openclaw stub
 - Daytona runs now stage the repo’s OpenClaw template config/workspace into the sandbox, start the gateway there, and mint signed Control UI links on demand
+- The local OpenClaw template directory is now optional; missing local files fall back to an empty config/workspace so future S3-backed agent bundles can replace it cleanly
+- Daytona no longer overwrites the sandbox-generated `~/.openclaw/openclaw.json`; Control UI links now read the token from the remote config that OpenClaw generates itself
 - Deleted Daytona sandboxes now degrade to stale run records instead of breaking bundle/run pages
 - Bundle detail now loads order data independently from runs/download grants, so provider-side run failures no longer masquerade as “bundle not found”
 - Run detail timeline now visually reflects created/started/updated/completed state instead of rendering every row as the same muted style
@@ -67,6 +70,7 @@ Implemented in the current mock app:
 - Authenticated dashboard, bundles, runs, Telegram setup, run launch, and signed downloads now use the final `/api/me/*` API surface
 - `usePairingStatus(orderId)` now exists and polls `/api/me/orders/:id/run-channel` until pairing reaches a terminal state
 - `useRunStatus(runId)` now exists and polls `/api/me/runs/:id` until active runs reach a terminal state
+- Run detail now retries initial `Run not found` responses briefly after launch, so redirect-to-detail no longer flashes a false missing state while the new DB row settles
 - Cart sync, checkout, and Telegram setup flows now call shared frontend API clients instead of raw `fetch`
 - Telegram pairing now falls back to local polling mode on non-HTTPS local dev origins instead of requiring Telegram webhook registration
 - Telegram setup UI now exposes a disconnect/reset action to swap bots without editing database state manually
