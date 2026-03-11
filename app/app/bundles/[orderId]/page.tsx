@@ -11,9 +11,10 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Spinner } from '@/components/ui/spinner'
 import { RiskBadge } from '@/components/risk-badge'
 import { BundleRiskSummary } from '@/components/bundle-risk-summary'
+import { AgentSetupCard } from '@/components/agent-setup-card'
 import { TelegramSetupWizard } from '@/components/telegram-setup-wizard'
 import { formatPrice } from '@/lib/mock-data'
-import type { Order, Run } from '@/lib/types'
+import type { AgentSetup, Order, Run } from '@/lib/types'
 import { formatDate, formatDateTime } from '@/lib/utils'
 import { createOrderRun, getOrder, getOrderDownloads } from '@/services/orders.api'
 import { listRuns } from '@/services/runs.api'
@@ -76,6 +77,17 @@ export default function BundleDetailPage({ params }: PageProps) {
 
   const handleTelegramComplete = useCallback(() => {
     setTelegramSetup(true)
+  }, [])
+
+  const handleAgentSetupSaved = useCallback((agentSetup: AgentSetup) => {
+    setOrder((currentOrder) =>
+      currentOrder
+        ? {
+            ...currentOrder,
+            agentSetup,
+          }
+        : currentOrder,
+    )
   }, [])
 
   useEffect(() => {
@@ -250,6 +262,12 @@ export default function BundleDetailPage({ params }: PageProps) {
         {/* Agents Tab */}
         <TabsContent value="agents" className="space-y-6">
           <BundleRiskSummary bundleRisk={order.bundleRisk} />
+
+          <AgentSetupCard
+            orderId={order.id}
+            initialSetup={order.agentSetup ?? null}
+            onSaved={handleAgentSetupSaved}
+          />
 
           <div className="grid gap-4">
             {order.items.map((item) => (

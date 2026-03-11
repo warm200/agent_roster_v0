@@ -29,6 +29,7 @@ const order: Order = {
   },
   cartId: 'cart-test-1',
   channelConfig: null,
+  agentSetup: null,
   createdAt: new Date().toISOString(),
   currency: 'USD',
   id: 'order-test-1',
@@ -84,6 +85,9 @@ test('legacy bundles list/detail routes use order service', async () => {
     async listOrdersForUser(userId: string) {
       listedUserId = userId
       return [order]
+    },
+    async updateOrderAgentSetupForUser() {
+      return order
     },
     async resolveSignedDownload() {
       return '/downloads/agent-test.zip'

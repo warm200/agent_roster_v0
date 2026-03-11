@@ -5,6 +5,7 @@ export type RiskLevel = 'low' | 'medium' | 'high'
 
 // Run statuses
 export type RunStatus = 'provisioning' | 'running' | 'completed' | 'failed'
+export type AgentTimeFormat = 'auto' | '12' | '24'
 
 // Order statuses
 export type OrderStatus = 'pending' | 'paid' | 'failed' | 'refunded'
@@ -53,6 +54,7 @@ export interface Agent {
   id: string
   slug: string
   title: string
+  thumbnailUrl?: string | null
   category: AgentCategory
   summary: string
   descriptionMarkdown: string
@@ -117,6 +119,14 @@ export interface RunChannelConfig {
   updatedAt: string
 }
 
+export interface AgentSetup {
+  workspace: string | null
+  timeFormat: AgentTimeFormat
+  modelPrimary: string | null
+  modelFallbacks: string[]
+  subagentsMaxConcurrent: number | null
+}
+
 // Order
 export interface Order {
   id: string
@@ -129,6 +139,7 @@ export interface Order {
   status: OrderStatus
   items: OrderItem[]
   channelConfig: RunChannelConfig | null
+  agentSetup?: AgentSetup | null
   bundleRisk: BundleRisk
   createdAt: string
   updatedAt: string

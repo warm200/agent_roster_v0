@@ -1,5 +1,6 @@
 export const RISK_LEVELS = ['low', 'medium', 'high'] as const
 export const RUN_STATUSES = ['provisioning', 'running', 'completed', 'failed'] as const
+export const AGENT_TIME_FORMATS = ['auto', '12', '24'] as const
 export const TERMINAL_RUN_STATUSES = ['completed', 'failed'] as const
 export const ORDER_STATUSES = ['pending', 'paid', 'failed', 'refunded'] as const
 export const TOKEN_STATUSES = ['pending', 'validated', 'failed'] as const

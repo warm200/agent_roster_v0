@@ -7,6 +7,7 @@ import { RiskBadge } from './risk-badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardFooter } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { MessageSquare, ShoppingCart, Mail, Calendar, FileText, Zap, BarChart3 } from 'lucide-react'
 
 interface AgentCardProps {
@@ -39,9 +40,12 @@ export function AgentCard({ agent, onAddToCart, isInCart = false }: AgentCardPro
       <CardContent className="p-5">
         <div className="flex items-start justify-between gap-3 mb-3">
           <div className="flex items-center gap-2">
-            <div className="w-10 h-10 rounded-lg bg-secondary flex items-center justify-center">
-              <CategoryIcon className="w-5 h-5 text-foreground" />
-            </div>
+            <Avatar className="h-10 w-10 rounded-lg border border-border bg-secondary">
+              <AvatarImage alt={agent.title} src={agent.thumbnailUrl ?? undefined} />
+              <AvatarFallback className="rounded-lg bg-secondary text-foreground">
+                <CategoryIcon className="w-5 h-5" />
+              </AvatarFallback>
+            </Avatar>
             <div>
               <Badge variant="secondary" className="text-xs mb-1">
                 {categoryLabels[agent.category]}

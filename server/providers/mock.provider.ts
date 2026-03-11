@@ -55,7 +55,7 @@ export class MockRunProvider implements RunProvider {
     return buildResult(run)
   }
 
-  async restartRun(runId: string, fallbackRun?: Run) {
+  async restartRun(runId: string, _order: Order, fallbackRun?: Run) {
     const run = getRunById(runId) ?? fallbackRun ?? null
     if (!run) {
       return null

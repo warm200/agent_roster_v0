@@ -46,6 +46,7 @@ Implemented in the current mock app:
 - The local OpenClaw template directory is now optional; missing local files fall back to base config plus an empty workspace so future S3-backed agent bundles can replace them cleanly
 - Daytona now configures OpenClaw with `gateway.mode=local`, `bind=lan`, token auth, `allowInsecureAuth`, and `~/.openclaw/workspace`, matching Daytona’s reference integration so the remote Control UI can reach the sandbox gateway instead of trying a local loopback websocket
 - Daytona now injects paired Telegram channel config into `channels.telegram` inside the sandbox `~/.openclaw/openclaw.json`, using the stored bot token plus DM allowlisting for the paired Telegram recipient
+- Daytona now also reads DB-stored local agent source snapshots from `agent_versions.run_config_snapshot`, merges any per-agent `openclaw.json`, and stages agent files into the sandbox workspace during launch/restart
 - Deleted Daytona sandboxes now degrade to stale run records instead of breaking bundle/run pages
 - Bundle detail now loads order data independently from runs/download grants, so provider-side run failures no longer masquerade as “bundle not found”
 - Run detail timeline now visually reflects created/started/updated/completed state instead of rendering every row as the same muted style
@@ -55,12 +56,14 @@ Implemented in the current mock app:
 - Initial backend risk-engine utility now exists in `server/lib/risk-engine.ts`
 - Backend commerce snapshot/mapping utilities now exist in `server/services/commerce.utils.ts`
 - Backend catalog service now exists in `server/services/catalog.service.ts` with DB + mock fallback logic
+- Local agent folders under `agents_file/` now upsert into the catalog tables on read, so catalog/cart/order flows stay DB-first while preserving a source pointer for later sandbox staging
 - Backend cart service now exists in `server/services/cart.service.ts` with DB-backed cart summary recalculation
 - Backend order service now exists in `server/services/order.service.ts` with paid-order creation and signed-download helpers
 - Backend checkout service now exists in `server/services/checkout.service.ts` with Stripe session creation and paid-session reconciliation helpers
 - Backend Telegram service now exists in `server/services/telegram.service.ts` with token validation, encrypted secret storage, pairing, and webhook handling
 - Backend run repository/service now exist in `server/services/run.repository.ts` and `server/services/run.service.ts` with provider-backed run sync against the current DB shape
 - `GET /api/agents` and `GET /api/agents/[slug]` now route through `server/services/catalog.service.ts`
+- `GET /api/agents/[slug]/thumbnail` now exists to serve DB-backed local agent avatars into the catalog UI
 - `POST /api/interviews/preview` now routes through `server/services/catalog.service.ts`
 - `/api/cart`, `/api/cart/items`, and `/api/cart/items/[id]` now route through `server/services/cart.service.ts` using the cart cookie
 - `POST /api/checkout/session` now routes through `server/services/checkout.service.ts`
@@ -83,6 +86,7 @@ Implemented in the current mock app:
 - Telegram pairing now falls back to local polling mode on non-HTTPS local dev origins instead of requiring Telegram webhook registration
 - Telegram setup UI now exposes a disconnect/reset action to swap bots without editing database state manually
 - Catalog, dashboard, bundles, bundle detail, and runs pages now call shared frontend API clients instead of raw `fetch`
+- Catalog and agent detail now render local-agent thumbnails when the DB snapshot includes an avatar source path
 - Route-level error boundaries now exist for the public shell and the authenticated app shell
 - Route-level loading skeletons now exist for catalog, agent detail, dashboard, bundles, bundle detail, runs, and run detail
 - `npm test` now runs smoke regression coverage for the preview route and auth proxy

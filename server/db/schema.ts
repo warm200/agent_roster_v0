@@ -175,6 +175,7 @@ export const orders = pgTable('orders', {
   amountCents: integer('amount_cents').notNull(),
   currency: text('currency').notNull(),
   status: orderStatusEnum('status').notNull(),
+  agentSetup: jsonb('agent_setup').$type<Record<string, unknown> | null>(),
   bundleRiskLevel: riskLevelEnum('bundle_risk_level').notNull(),
   highestRiskDriver: text('highest_risk_driver'),
   bundleRiskSummary: text('bundle_risk_summary').notNull(),

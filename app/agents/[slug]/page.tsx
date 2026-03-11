@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { formatPrice } from '@/lib/mock-data'
 import { useCart } from '@/lib/cart-context'
 import { formatDate } from '@/lib/utils'
@@ -26,6 +27,7 @@ import {
   Shield,
   GitBranch,
   AlertTriangle,
+  Bot,
 } from 'lucide-react'
 
 interface PageProps {
@@ -138,6 +140,12 @@ export default function AgentDetailPage({ params }: PageProps) {
           <div className="lg:col-span-2 space-y-8">
             <div>
               <div className="flex items-center gap-3 mb-4">
+                <Avatar className="h-12 w-12 rounded-xl border border-border bg-secondary">
+                  <AvatarImage alt={agent.title} src={agent.thumbnailUrl ?? undefined} />
+                  <AvatarFallback className="rounded-xl bg-secondary text-foreground">
+                    <Bot className="h-5 w-5" />
+                  </AvatarFallback>
+                </Avatar>
                 <Badge variant="secondary">{agent.category}</Badge>
                 <RiskBadge level={riskProfile.riskLevel} />
               </div>

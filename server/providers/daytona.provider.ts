@@ -4,9 +4,10 @@ import path from 'node:path'
 
 import { Daytona, DaytonaNotFoundError, SandboxState, type DaytonaConfig, type Sandbox } from '@daytonaio/sdk'
 
-import type { Order, Run, RunLog, RunResult, RunStatus } from '@/lib/types'
+import type { AgentSetup, Order, Run, RunLog, RunResult, RunStatus } from '@/lib/types'
 
 import { HttpError, logServerError } from '../lib/http'
+import { loadRuntimeAssetsFromSnapshot } from '../services/local-agent-files'
 import { buildOpenClawTelegramChannelConfig } from '../services/telegram.service'
 import type { RunControlUiLink, RunProvider } from './run-provider.interface'
 
@@ -329,6 +330,34 @@ async function loadOpenClawTemplate(templateDir: string): Promise<OpenClawTempla
     config,
     workspaceFiles,
   }
+}
+
+async function buildOrderRuntimeAssets(baseTemplate: OpenClawTemplate, order: Order) {
+  let config = baseTemplate.config
+  const workspaceFilesByPath = new Map<string, Buffer>()
+
+  for (const file of baseTemplate.workspaceFiles) {
+    workspaceFilesByPath.set(file.relativePath, file.contents)
+  }
+
+  for (const item of order.items) {
+    const assets = await loadRuntimeAssetsFromSnapshot(item.agentVersion.runConfigSnapshot)
+    if (Object.keys(assets.config).length > 0) {
+      config = deepMerge(config, assets.config)
+    }
+
+    for (const file of assets.workspaceFiles) {
+      workspaceFilesByPath.set(file.relativePath, file.contents)
+    }
+  }
+
+  return {
+    config,
+    workspaceFiles: Array.from(workspaceFilesByPath.entries()).map(([relativePath, contents]) => ({
+      contents,
+      relativePath,
+    })),
+  } satisfies OpenClawTemplate
 }
 
 function buildBootstrapScript(input: {
@@ -737,9 +766,10 @@ function buildOpenClawConfig(
   gatewayToken: string,
   openClawPort: number,
   telegramChannelConfig?: Record<string, unknown> | null,
+  agentDefaultsConfig?: Record<string, unknown> | null,
 ) {
   const config = deepMerge(OPENCLAW_BASE_CONFIG, userConfig)
-  const runtimeConfig = deepMerge(config, {
+  let runtimeConfig = deepMerge(config, {
     gateway: {
       auth: {
         mode: 'token',
@@ -754,6 +784,14 @@ function buildOpenClawConfig(
     },
   })
 
+  if (agentDefaultsConfig) {
+    runtimeConfig = deepMerge(runtimeConfig, {
+      agents: {
+        defaults: agentDefaultsConfig,
+      },
+    })
+  }
+
   if (!telegramChannelConfig) {
     return runtimeConfig
   }
@@ -763,6 +801,37 @@ function buildOpenClawConfig(
       telegram: telegramChannelConfig,
     },
   })
+}
+
+function buildOpenClawAgentDefaultsConfig(agentSetup?: AgentSetup | null) {
+  if (!agentSetup) {
+    return null
+  }
+
+  const defaults: Record<string, unknown> = {}
+
+  if (agentSetup.workspace) {
+    defaults.workspace = agentSetup.workspace
+  }
+
+  if (agentSetup.timeFormat) {
+    defaults.timeFormat = agentSetup.timeFormat
+  }
+
+  if (agentSetup.modelPrimary || agentSetup.modelFallbacks.length > 0) {
+    defaults.model = {
+      ...(agentSetup.modelPrimary ? { primary: agentSetup.modelPrimary } : {}),
+      ...(agentSetup.modelFallbacks.length > 0 ? { fallbacks: agentSetup.modelFallbacks } : {}),
+    }
+  }
+
+  if (agentSetup.subagentsMaxConcurrent) {
+    defaults.subagents = {
+      maxConcurrent: agentSetup.subagentsMaxConcurrent,
+    }
+  }
+
+  return Object.keys(defaults).length > 0 ? defaults : null
 }
 
 export class DaytonaRunProvider implements RunProvider {
@@ -793,10 +862,14 @@ export class DaytonaRunProvider implements RunProvider {
   async createRun(order: Order, runId = `run-${Date.now()}`): Promise<Run> {
     const createdAt = nowIso()
     const manifest = buildManifest(order, runId, createdAt)
-    const template = await loadOpenClawTemplate(this.openClawTemplateDir)
+    const template = await buildOrderRuntimeAssets(
+      await loadOpenClawTemplate(this.openClawTemplateDir),
+      order,
+    )
     const gatewayToken = randomBytes(24).toString('hex')
     const envVars = await readOptionalEnvFile(this.envSandboxPath)
     const telegramChannelConfig = await buildOpenClawTelegramChannelConfig(order.channelConfig)
+    const agentDefaultsConfig = buildOpenClawAgentDefaultsConfig(order.agentSetup ?? null)
 
     const sandbox = await this.client.create(
       {
@@ -824,6 +897,7 @@ export class DaytonaRunProvider implements RunProvider {
       gatewayToken,
       this.openClawPort,
       telegramChannelConfig,
+      agentDefaultsConfig,
     )
     const bootstrapScript = buildBootstrapScript({
       homeDir,
@@ -966,7 +1040,7 @@ export class DaytonaRunProvider implements RunProvider {
     }
   }
 
-  async restartRun(runId: string, fallbackRun?: Run): Promise<Run | null> {
+  async restartRun(runId: string, order: Order, fallbackRun?: Run): Promise<Run | null> {
     const sandbox = await this.getSandbox(runId)
 
     if (!sandbox) {
@@ -977,7 +1051,21 @@ export class DaytonaRunProvider implements RunProvider {
       await sandbox.start(60)
     }
 
+    const homeDir = await resolveUserHomeDir(sandbox)
     const manifest = await downloadJsonFile<DaytonaRunManifest>(sandbox, MANIFEST_PATH)
+    const template = await buildOrderRuntimeAssets(
+      await loadOpenClawTemplate(this.openClawTemplateDir),
+      order,
+    )
+    const telegramChannelConfig = await buildOpenClawTelegramChannelConfig(order.channelConfig)
+    const agentDefaultsConfig = buildOpenClawAgentDefaultsConfig(order.agentSetup ?? null)
+    const openClawConfig = buildOpenClawConfig(
+      template.config,
+      randomBytes(24).toString('hex'),
+      this.openClawPort,
+      telegramChannelConfig,
+      agentDefaultsConfig,
+    )
     const restartedAt = nowIso()
     const restartingStatus: DaytonaStatusFile = {
       completedAt: null,
@@ -989,6 +1077,13 @@ export class DaytonaRunProvider implements RunProvider {
       updatedAt: restartedAt,
     }
 
+    await sandbox.fs.uploadFile(
+      Buffer.from(JSON.stringify(openClawConfig, null, 2), 'utf8'),
+      `${homeDir}/${OPENCLAW_CONFIG_PATH}`,
+    )
+    for (const file of template.workspaceFiles) {
+      await sandbox.fs.uploadFile(file.contents, `${STAGED_WORKSPACE_ROOT}/${file.relativePath}`)
+    }
     await writeJsonFile(sandbox, STATUS_PATH, restartingStatus)
     await writeJsonFile(sandbox, RESULT_PATH, {
       artifacts: [],

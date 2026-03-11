@@ -1,6 +1,6 @@
-import type { Agent, Order, RunChannelConfig } from '@/lib/types'
+import type { Agent, AgentSetup, Order, RunChannelConfig } from '@/lib/types'
 
-import { getJson, postJson } from './api'
+import { getJson, patchJson, postJson } from './api'
 
 export interface OrderWithAgents extends Order {
   agents: Agent[]
@@ -30,6 +30,12 @@ export async function listOrders() {
 
 export async function getOrder(orderId: string) {
   return getJson<Order>(`/api/me/orders/${orderId}`)
+}
+
+export async function updateOrderAgentSetup(orderId: string, agentSetup: AgentSetup) {
+  return patchJson<Order, { agentSetup: AgentSetup }>(`/api/me/orders/${orderId}`, {
+    agentSetup,
+  })
 }
 
 export async function getOrderDownloads(orderId: string) {

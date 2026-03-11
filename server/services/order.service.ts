@@ -2,6 +2,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto'
 
 import { and, desc, eq } from 'drizzle-orm'
 
+import type { AgentSetup } from '@/lib/types'
 import { createDb, type DbClient } from '../db'
 import { agents, agentVersions, cartItems, carts, orderItems, orders, riskProfiles, runChannelConfigs } from '../db/schema'
 import { HttpError } from '../lib/http'
@@ -168,6 +169,31 @@ export async function listOrdersForUser(userId: string) {
   )
 }
 
+export async function updateOrderAgentSetupForUser(input: {
+  orderId: string
+  userId: string
+  agentSetup: AgentSetup
+}) {
+  const db = getDb()
+  const [updated] = await db
+    .update(orders)
+    .set({
+      agentSetup: input.agentSetup as unknown as Record<string, unknown>,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(orders.id, input.orderId), eq(orders.userId, input.userId)))
+    .returning({ id: orders.id })
+
+  if (!updated) {
+    throw new HttpError(404, 'Order not found.')
+  }
+
+  return getOrderByIdForUser({
+    orderId: input.orderId,
+    userId: input.userId,
+  })
+}
+
 export async function createPaidOrderFromCart(input: {
   cartId: string
   payment: PaymentInput
@@ -325,6 +351,7 @@ export type OrderService = {
   getSignedDownloadsForOrder: typeof getSignedDownloadsForOrder
   listOrdersForUser: typeof listOrdersForUser
   resolveSignedDownload: typeof resolveSignedDownload
+  updateOrderAgentSetupForUser: typeof updateOrderAgentSetupForUser
 }
 
 let orderServiceOverride: OrderService | null = null
@@ -340,6 +367,7 @@ export function getOrderService(): OrderService {
     getSignedDownloadsForOrder,
     listOrdersForUser,
     resolveSignedDownload,
+    updateOrderAgentSetupForUser,
   }
 }
 

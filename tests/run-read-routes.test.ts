@@ -163,6 +163,9 @@ function installServiceStubs() {
     async listOrdersForUser() {
       return [fixtureOrder]
     },
+    async updateOrderAgentSetupForUser() {
+      return fixtureOrder
+    },
     async resolveSignedDownload() {
       return '/downloads/agent-test.zip'
     },
@@ -226,6 +229,9 @@ test('runs list route tolerates summary enrichment failures', async () => {
     },
     async listOrdersForUser() {
       return [fixtureOrder]
+    },
+    async updateOrderAgentSetupForUser() {
+      return fixtureOrder
     },
     async resolveSignedDownload() {
       return '/downloads/agent-test.zip'

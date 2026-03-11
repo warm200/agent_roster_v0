@@ -12,6 +12,6 @@ export interface RunProvider {
   getLogs(runId: string): Promise<RunLog[]>
   getResult(runId: string): Promise<RunResult | null>
   getControlUiLink?(runId: string, expiresInSeconds?: number): Promise<RunControlUiLink | null>
-  restartRun?(runId: string, fallbackRun?: Run): Promise<Run | null>
+  restartRun?(runId: string, order: Order, fallbackRun?: Run): Promise<Run | null>
   stopRun(runId: string, fallbackRun?: Run): Promise<Run | null>
 }

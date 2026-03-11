@@ -1,6 +1,9 @@
 import { createCipheriv, createHash, randomBytes } from 'node:crypto'
 import assert from 'node:assert/strict'
-import { test } from 'node:test'
+import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
+import { afterEach, test } from 'node:test'
 
 import type { Order } from '@/lib/types'
 import { DaytonaRunProvider } from '@/server/providers/daytona.provider'
@@ -25,6 +28,14 @@ function encryptTelegramSecret(value: string, secretSeed = TEST_TELEGRAM_SECRET_
 
 process.env.TELEGRAM_SECRET_SEED ??= TEST_TELEGRAM_SECRET_SEED
 
+const tempDirs: string[] = []
+
+afterEach(async () => {
+  await Promise.all(
+    tempDirs.splice(0).map((directory) => rm(directory, { force: true, recursive: true })),
+  )
+})
+
 const order: Order = {
   amountCents: 2900,
   bundleRisk: {
@@ -33,6 +44,13 @@ const order: Order = {
     summary: 'Low risk test order.',
   },
   cartId: 'cart-test-1',
+  agentSetup: {
+    workspace: '/home/daytona/workspace/custom',
+    timeFormat: '24',
+    modelPrimary: 'anthropic/claude-sonnet-4-5',
+    modelFallbacks: ['openai/gpt-5-mini'],
+    subagentsMaxConcurrent: 2,
+  },
   channelConfig: {
     id: 'channel-test-1',
     orderId: 'order-test-1',
@@ -323,7 +341,11 @@ test('daytona run provider stages OpenClaw and returns a signed control ui link'
   assert.equal(uploadedConfig.gateway?.mode, 'local')
   assert.equal(uploadedConfig.gateway?.bind, 'lan')
   assert.equal(uploadedConfig.gateway?.controlUi?.allowInsecureAuth, true)
-  assert.equal(uploadedConfig.agents?.defaults?.workspace, '~/.openclaw/workspace')
+  assert.equal(uploadedConfig.agents?.defaults?.workspace, '/home/daytona/workspace/custom')
+  assert.equal(uploadedConfig.agents?.defaults?.timeFormat, '24')
+  assert.equal(uploadedConfig.agents?.defaults?.model?.primary, 'anthropic/claude-sonnet-4-5')
+  assert.deepEqual(uploadedConfig.agents?.defaults?.model?.fallbacks, ['openai/gpt-5-mini'])
+  assert.equal(uploadedConfig.agents?.defaults?.subagents?.maxConcurrent, 2)
   assert.equal(uploadedConfig.channels?.telegram?.botToken, '123456:telegram-bot-token')
   assert.equal(uploadedConfig.channels?.telegram?.dmPolicy, 'allowlist')
   assert.deepEqual(uploadedConfig.channels?.telegram?.allowFrom, ['tg:77'])
@@ -344,6 +366,121 @@ test('daytona run provider stages OpenClaw and returns a signed control ui link'
     ),
     false,
   )
+})
+
+test('daytona run provider stages DB-sourced local agent assets into the sandbox workspace', async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), 'daytona-local-agent-'))
+  tempDirs.push(rootDir)
+  const agentDir = path.join(rootDir, 'test-writer')
+  await mkdir(path.join(agentDir, 'workspace'), { recursive: true })
+  await writeFile(
+    path.join(agentDir, 'openclaw.json'),
+    JSON.stringify({
+      agents: {
+        defaults: {
+          locale: 'en-US',
+        },
+      },
+    }),
+  )
+  await writeFile(path.join(agentDir, 'workspace', 'README.md'), '# hello')
+
+  const localOrder: Order = {
+    ...order,
+    items: order.items.map((item) => ({
+      ...item,
+      agent: {
+        ...item.agent,
+        slug: 'test-writer',
+      },
+      agentVersion: {
+        ...item.agentVersion,
+        runConfigSnapshot: JSON.stringify({
+          source: {
+            kind: 'local-folder',
+            slug: 'test-writer',
+            sourceRootRelativePath: path.relative(process.cwd(), agentDir).split(path.sep).join('/'),
+            openClawConfigRelativePath: 'openclaw.json',
+            workspaceRelativePath: 'workspace',
+            stagingRelativePath: 'agents/test-writer',
+            avatarRelativePath: null,
+          },
+        }),
+      },
+    })),
+  }
+
+  const sandboxes = new Map<string, Record<string, string>>()
+  const provider = new DaytonaRunProvider({
+    apiKey: 'daytona-test',
+    clientFactory: () => ({
+      async create(params) {
+        const runId = String(params?.name)
+        sandboxes.set(runId, {})
+
+        return {
+          createdAt: new Date().toISOString(),
+          fs: {
+            async downloadFile(filePath: string) {
+              const value = sandboxes.get(runId)?.[filePath]
+              if (value === undefined) {
+                const error = new Error(`404 ${filePath}`)
+                ;(error as Error & { status: number }).status = 404
+                throw error
+              }
+
+              return Buffer.from(value, 'utf8')
+            },
+            async uploadFile(file: Buffer, filePath: string) {
+              const sandbox = sandboxes.get(runId)
+              if (sandbox) {
+                sandbox[filePath] = file.toString('utf8')
+              }
+            },
+          },
+          getSignedPreviewUrl: async () => ({
+            url: 'https://18789-demo.proxy.daytona.works',
+          }),
+          id: runId,
+          process: {
+            async executeCommand(command: string) {
+              if (command.includes('nohup /tmp/agent-roster/bootstrap-openclaw.sh')) {
+                const sandbox = sandboxes.get(runId)
+                if (sandbox) {
+                  sandbox['/tmp/agent-roster/status.json'] = JSON.stringify({
+                    completedAt: new Date().toISOString(),
+                    resultSummary:
+                      'Managed runtime is ready for bundle order-test-1. Open Control UI to continue.',
+                    startedAt: new Date().toISOString(),
+                    status: 'completed',
+                    updatedAt: new Date().toISOString(),
+                  })
+                  sandbox['/tmp/agent-roster/result.json'] = JSON.stringify({
+                    artifacts: [],
+                    summary:
+                      'Managed runtime is ready for bundle order-test-1. Open Control UI to continue.',
+                  })
+                }
+              }
+
+              return { exitCode: 0, result: '' }
+            },
+          },
+          state: SandboxState.STARTED,
+        }
+      },
+      async get() {
+        throw new Error('not used')
+      },
+    }),
+  })
+
+  const created = await provider.createRun(localOrder, 'run-local-assets')
+  const sandboxFiles = sandboxes.get(created.id) ?? {}
+  const uploadedConfig = JSON.parse(sandboxFiles['/home/daytona/.openclaw/openclaw.json'] ?? '{}')
+
+  assert.equal(uploadedConfig.agents?.defaults?.locale, 'en-US')
+  assert.equal(sandboxFiles['/tmp/agent-roster/workspace-seed/agents/test-writer/README.md'], '# hello')
 })
 
 test('daytona run provider tolerates deleted sandboxes', async () => {
@@ -795,7 +932,7 @@ test('daytona run provider restarts the same stopped sandbox in place', async ()
     }),
   })
 
-  const restarted = await provider.restartRun?.(runId, {
+  const restarted = await provider.restartRun?.(runId, order, {
     id: runId,
     userId: order.userId,
     orderId: order.id,

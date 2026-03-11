@@ -25,6 +25,9 @@ const stubOrderService = {
   async listOrdersForUser() {
     throw new Error('not implemented')
   },
+  async updateOrderAgentSetupForUser() {
+    throw new Error('not implemented')
+  },
   async resolveSignedDownload() {
     return '/downloads/agent-test.zip'
   },

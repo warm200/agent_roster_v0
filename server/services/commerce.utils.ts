@@ -1,6 +1,7 @@
 import type { InferSelectModel } from 'drizzle-orm'
 
 import {
+  agentSetupSchema,
   agentSchema,
   agentVersionSchema,
   cartItemSchema,
@@ -11,6 +12,7 @@ import {
 } from '@/lib/schemas'
 import type {
   Agent,
+  AgentSetup,
   AgentVersion,
   BundleRisk,
   Cart,
@@ -31,6 +33,7 @@ import {
   riskProfiles,
   runChannelConfigs,
 } from '../db/schema'
+import { buildLocalAgentThumbnailUrl } from './local-agent-files'
 
 const riskRank: Record<RiskLevel, number> = {
   low: 1,
@@ -118,6 +121,7 @@ export function buildAgentSnapshot(row: SaleRow): Agent {
     id: row.agent.id,
     slug: row.agent.slug,
     title: row.agent.title,
+    thumbnailUrl: buildLocalAgentThumbnailUrl(row.version.runConfigSnapshot, row.agent.slug),
     category: row.agent.category,
     summary: row.agent.summary,
     descriptionMarkdown: row.agent.descriptionMarkdown,
@@ -167,6 +171,14 @@ export function buildRunChannelConfigSnapshot(
   })
 }
 
+export function buildAgentSetupSnapshot(config: Record<string, unknown> | null): AgentSetup | null {
+  if (!config) {
+    return null
+  }
+
+  return agentSetupSchema.parse(config)
+}
+
 export function buildCartItemSnapshot(row: CartItemRow): CartItem {
   return cartItemSchema.parse({
     id: row.cartItem.id,
@@ -206,6 +218,7 @@ export function buildOrderSnapshot(input: {
     channelConfig: input.runChannelConfig
       ? buildRunChannelConfigSnapshot(input.runChannelConfig)
       : null,
+    agentSetup: buildAgentSetupSnapshot(input.order.agentSetup),
     bundleRisk: buildBundleRisk({
       level: input.order.bundleRiskLevel,
       highestRiskDriver: input.order.highestRiskDriver,

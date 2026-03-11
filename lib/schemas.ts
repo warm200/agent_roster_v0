@@ -3,6 +3,7 @@ import { z } from 'zod'
 import {
   AGENT_CATEGORIES,
   AGENT_STATUSES,
+  AGENT_TIME_FORMATS,
   CART_STATUSES,
   CHANNEL_SCOPES,
   CHANNEL_TYPES,
@@ -19,6 +20,7 @@ const timestampSchema = z.string().min(1)
 
 export const riskLevelSchema = z.enum(RISK_LEVELS)
 export const runStatusSchema = z.enum(RUN_STATUSES)
+export const agentTimeFormatSchema = z.enum(AGENT_TIME_FORMATS)
 export const orderStatusSchema = z.enum(ORDER_STATUSES)
 export const tokenStatusSchema = z.enum(TOKEN_STATUSES)
 export const pairingStatusSchema = z.enum(PAIRING_STATUSES)
@@ -61,6 +63,7 @@ export const agentSchema = z.object({
   id: z.string().min(1),
   slug: z.string().min(1),
   title: z.string().min(1),
+  thumbnailUrl: z.string().min(1).nullable().optional(),
   category: agentCategorySchema,
   summary: z.string().min(1),
   descriptionMarkdown: z.string(),
@@ -120,6 +123,14 @@ export const runChannelConfigSchema = z.object({
   updatedAt: timestampSchema,
 })
 
+export const agentSetupSchema = z.object({
+  workspace: z.string().min(1).nullable(),
+  timeFormat: agentTimeFormatSchema,
+  modelPrimary: z.string().min(1).nullable(),
+  modelFallbacks: z.array(z.string().min(1)),
+  subagentsMaxConcurrent: z.number().int().positive().max(16).nullable(),
+})
+
 export const orderSchema = z.object({
   id: z.string().min(1),
   userId: z.string().min(1),
@@ -131,6 +142,7 @@ export const orderSchema = z.object({
   status: orderStatusSchema,
   items: z.array(orderItemSchema),
   channelConfig: runChannelConfigSchema.nullable(),
+  agentSetup: agentSetupSchema.nullable().optional(),
   bundleRisk: bundleRiskSchema,
   createdAt: timestampSchema,
   updatedAt: timestampSchema,
@@ -220,6 +232,10 @@ export const previewInterviewRequestSchema = z.object({
   messages: z.array(previewMessageSchema).min(1),
 })
 
+export const updateOrderAgentSetupRequestSchema = z.object({
+  agentSetup: agentSetupSchema,
+})
+
 export const apiErrorSchema = z.object({
   error: z.string().min(1),
 })
@@ -235,5 +251,6 @@ export type AgentVersionInput = z.infer<typeof agentVersionSchema>
 export type AgentInput = z.infer<typeof agentSchema>
 export type CartInput = z.infer<typeof cartSchema>
 export type OrderInput = z.infer<typeof orderSchema>
+export type AgentSetupInput = z.infer<typeof agentSetupSchema>
 export type RunChannelConfigInput = z.infer<typeof runChannelConfigSchema>
 export type RunInput = z.infer<typeof runSchema>

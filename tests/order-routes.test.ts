@@ -3,7 +3,7 @@ import { afterEach, test } from 'node:test'
 
 import { NextRequest } from 'next/server'
 
-import { GET as getOrder } from '@/app/api/me/orders/[orderId]/route'
+import { GET as getOrder, PATCH as patchOrder } from '@/app/api/me/orders/[orderId]/route'
 import { GET as getOrderDownloads } from '@/app/api/me/orders/[orderId]/download/route'
 import { GET as listOrders } from '@/app/api/me/orders/route'
 import { HttpError } from '@/server/lib/http'
@@ -12,6 +12,7 @@ import {
   setOrderServiceForTesting,
   type OrderService,
 } from '@/server/services/order.service'
+import type { AgentSetup } from '@/lib/types'
 
 const order = {
   amountCents: 2900,
@@ -22,6 +23,7 @@ const order = {
   },
   cartId: 'cart-test-1',
   channelConfig: null,
+  agentSetup: null,
   createdAt: new Date().toISOString(),
   currency: 'USD',
   id: 'order-test-1',
@@ -57,6 +59,9 @@ test('orders list route returns service-backed orders', async () => {
       receivedUserId = userId
       return [order]
     },
+    async updateOrderAgentSetupForUser() {
+      return order
+    },
     async resolveSignedDownload() {
       return '/downloads/agent-test.zip'
     },
@@ -86,6 +91,9 @@ test('order detail route returns 404 from service http errors', async () => {
     async listOrdersForUser() {
       return [order]
     },
+    async updateOrderAgentSetupForUser() {
+      return order
+    },
     async resolveSignedDownload() {
       return '/downloads/agent-test.zip'
     },
@@ -98,6 +106,75 @@ test('order detail route returns 404 from service http errors', async () => {
 
   assert.equal(response.status, 404)
   assert.equal(payload.error, 'Order not found.')
+})
+
+test('order detail patch route forwards agent setup updates', async () => {
+  let received:
+    | {
+        orderId: string
+        userId: string
+        agentSetup: AgentSetup
+      }
+    | undefined
+
+  setRequestUserIdForTesting(() => 'user-test-1')
+  setOrderServiceForTesting({
+    async createPaidOrderFromCart() {
+      return order
+    },
+    async getOrderByIdForUser() {
+      return order
+    },
+    async getSignedDownloadsForOrder() {
+      return { downloads: [], orderId: order.id }
+    },
+    async listOrdersForUser() {
+      return [order]
+    },
+    async resolveSignedDownload() {
+      return '/downloads/agent-test.zip'
+    },
+    async updateOrderAgentSetupForUser(input) {
+      received = input
+      return {
+        ...order,
+        agentSetup: input.agentSetup,
+      }
+    },
+  } satisfies OrderService)
+
+  const response = await patchOrder(
+    new NextRequest('http://localhost/api/me/orders/order-test-1', {
+      body: JSON.stringify({
+        agentSetup: {
+          workspace: '~/.openclaw/workspace',
+          timeFormat: '24',
+          modelPrimary: 'anthropic/claude-sonnet-4-5',
+          modelFallbacks: ['openai/gpt-5-mini'],
+          subagentsMaxConcurrent: 2,
+        },
+      }),
+      method: 'PATCH',
+    }),
+    {
+      params: Promise.resolve({ orderId: 'order-test-1' }),
+    },
+  )
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.deepEqual(received, {
+    orderId: 'order-test-1',
+    userId: 'user-test-1',
+    agentSetup: {
+      workspace: '~/.openclaw/workspace',
+      timeFormat: '24',
+      modelPrimary: 'anthropic/claude-sonnet-4-5',
+      modelFallbacks: ['openai/gpt-5-mini'],
+      subagentsMaxConcurrent: 2,
+    },
+  })
+  assert.equal(payload.agentSetup.modelPrimary, 'anthropic/claude-sonnet-4-5')
 })
 
 test('order download route forwards baseUrl and userId', async () => {
@@ -135,6 +212,9 @@ test('order download route forwards baseUrl and userId', async () => {
     },
     async listOrdersForUser() {
       return [order]
+    },
+    async updateOrderAgentSetupForUser() {
+      return order
     },
     async resolveSignedDownload() {
       return '/downloads/agent-test.zip'

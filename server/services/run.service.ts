@@ -268,7 +268,11 @@ export class RunService {
     }
 
     if (run.usesRealWorkspace && provider.restartRun) {
-      const restarted = await provider.restartRun(run.id, run)
+      const order = await runServiceDeps.getOrderByIdForUser({
+        orderId: run.orderId,
+        userId,
+      })
+      const restarted = await provider.restartRun(run.id, order, run)
 
       if (!restarted) {
         throw new HttpError(409, 'Managed runtime sandbox could not be restarted.')

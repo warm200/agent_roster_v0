@@ -7,6 +7,7 @@ import type { Agent, AgentCategory, PreviewMessage, RiskLevel } from '@/lib/type
 import { createDb, type DbClient } from '../db'
 import { agents, agentVersions, riskProfiles } from '../db/schema'
 import { HttpError } from '../lib/http'
+import { buildLocalAgentThumbnailUrl, syncLocalAgentsToDb } from './local-agent-files'
 
 type AgentRow = typeof agents.$inferSelect
 type AgentVersionRow = typeof agentVersions.$inferSelect
@@ -167,6 +168,7 @@ export function createCatalogService(
 function createDefaultCatalogServiceDeps(): CatalogServiceDeps {
   return {
     async listAgentRecords(filters) {
+      await syncLocalAgentsToDb()
       const db = getDb()
       const clauses: SQL[] = [eq(agents.status, 'active')]
 
@@ -194,6 +196,7 @@ function createDefaultCatalogServiceDeps(): CatalogServiceDeps {
     },
 
     async getAgentRecordBySlug(slug) {
+      await syncLocalAgentsToDb()
       const db = getDb()
       const [agentRow] = await db
         .select()
@@ -258,6 +261,10 @@ function toAgent(record: DbAgentRecord): Agent {
     id: record.agent.id,
     slug: record.agent.slug,
     title: record.agent.title,
+    thumbnailUrl: buildLocalAgentThumbnailUrl(
+      currentVersionRow.version.runConfigSnapshot,
+      record.agent.slug,
+    ),
     category: record.agent.category,
     summary: record.agent.summary,
     descriptionMarkdown: record.agent.descriptionMarkdown,
