@@ -55,8 +55,33 @@ export class MockRunProvider implements RunProvider {
     return buildResult(run)
   }
 
-  async stopRun(runId: string) {
-    const run = getRunById(runId)
+  async restartRun(runId: string, fallbackRun?: Run) {
+    const run = getRunById(runId) ?? fallbackRun ?? null
+    if (!run) {
+      return null
+    }
+
+    const now = new Date().toISOString()
+    run.status = 'provisioning'
+    run.startedAt = now
+    run.completedAt = null
+    run.updatedAt = now
+    run.resultSummary = 'Managed runtime is restarting. Status will update automatically.'
+    mockRunLogs[runId] = [
+      ...(mockRunLogs[runId] ?? []),
+      {
+        timestamp: now,
+        level: 'info',
+        step: 'restart',
+        message: 'Managed runtime restart requested.',
+      },
+    ]
+
+    return run
+  }
+
+  async stopRun(runId: string, fallbackRun?: Run) {
+    const run = getRunById(runId) ?? fallbackRun ?? null
     if (!run || run.status === 'completed' || run.status === 'failed') {
       return run ?? null
     }

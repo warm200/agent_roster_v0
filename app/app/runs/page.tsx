@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
+import { Button } from '@/components/ui/button'
 import { RunStatusBadge } from '@/components/run-status-badge'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -16,8 +17,10 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import type { RunStatus } from '@/lib/types'
 import { formatDateTime } from '@/lib/utils'
-import { listRuns, type RunSummary } from '@/services/runs.api'
-import { AlertTriangle, ArrowUpDown, Filter, Play, Search } from 'lucide-react'
+import { listRuns, type RunSummary, updateRun } from '@/services/runs.api'
+import { AlertTriangle, ArrowUpDown, ExternalLink, Filter, Play, RefreshCw, Search, XCircle } from 'lucide-react'
+import { Spinner } from '@/components/ui/spinner'
+import { toast } from 'sonner'
 
 type RunFilter = 'all' | RunStatus
 type SortKey = 'date' | 'status'
@@ -29,6 +32,8 @@ export default function RunsPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<RunFilter>('all')
   const [sortBy, setSortBy] = useState<SortKey>('date')
+  const [actionRunId, setActionRunId] = useState<string | null>(null)
+  const [actionType, setActionType] = useState<'cancel' | 'retry' | null>(null)
 
   useEffect(() => {
     let isMounted = true
@@ -98,6 +103,63 @@ export default function RunsPage() {
     }),
     [runs]
   )
+
+  const handleRunAction = async (run: RunSummary, action: 'cancel' | 'retry') => {
+    if (actionRunId) {
+      return
+    }
+
+    if (action === 'cancel' && !window.confirm('Stop this managed runtime and shut down its sandbox?')) {
+      return
+    }
+
+    setActionRunId(run.id)
+    setActionType(action)
+
+    try {
+      const payload = await updateRun(
+        run.id,
+        action,
+        action === 'cancel' || action === 'retry' ? { timeoutMs: 60_000 } : undefined,
+      )
+
+      if (action === 'retry') {
+        setRuns((currentRuns) =>
+          payload.id === run.id
+            ? currentRuns.map((currentRun) =>
+                currentRun.id === run.id ? { ...currentRun, ...payload } : currentRun,
+              )
+            : [payload, ...currentRuns],
+        )
+        toast.success(payload.id === run.id ? 'Sandbox restart requested' : 'Restart started')
+        return
+      }
+
+      setRuns((currentRuns) =>
+        currentRuns.map((currentRun) => (currentRun.id === run.id ? { ...currentRun, ...payload } : currentRun)),
+      )
+      toast.success('Run stopped')
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : action === 'retry'
+            ? 'Unable to restart run'
+            : 'Unable to stop run'
+
+      if (action === 'cancel' && message.toLowerCase().includes('sandbox is not started')) {
+        const payload = await listRuns()
+        setRuns(payload.runs)
+      }
+
+      toast.error(
+        message,
+      )
+    } finally {
+      setActionRunId(null)
+      setActionType(null)
+    }
+  }
 
   return (
     <div className="space-y-6 p-6 lg:p-8">
@@ -185,9 +247,8 @@ export default function RunsPage() {
                 const [primaryAgent, ...restAgents] = run.agents
 
                 return (
-                  <Link
+                  <div
                     key={run.id}
-                    href={`/app/runs/${run.id}`}
                     className="flex flex-col gap-4 p-4 transition-colors hover:bg-secondary/40 lg:flex-row lg:items-center lg:justify-between"
                   >
                     <div className="min-w-0 flex-1">
@@ -210,14 +271,65 @@ export default function RunsPage() {
                       </p>
                     </div>
 
-                    <div className="flex items-center gap-4 lg:shrink-0">
+                    <div className="flex flex-col gap-3 lg:items-end">
+                      <div className="flex flex-wrap justify-end gap-2">
+                        <Button variant="outline" size="sm" asChild>
+                          <Link href={`/app/runs/${run.id}`}>
+                            <ExternalLink className="mr-2 h-4 w-4" />
+                            View Details
+                          </Link>
+                        </Button>
+                        {run.status === 'failed' && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleRunAction(run, 'retry')}
+                            disabled={actionRunId === run.id}
+                          >
+                            {actionRunId === run.id && actionType === 'retry' ? (
+                              <>
+                                <Spinner className="mr-2 h-4 w-4" />
+                                Restarting...
+                              </>
+                            ) : (
+                              <>
+                                <RefreshCw className="mr-2 h-4 w-4" />
+                                Restart Run
+                              </>
+                            )}
+                          </Button>
+                        )}
+                        {run.usesRealWorkspace && run.status !== 'failed' && (
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => handleRunAction(run, 'cancel')}
+                            disabled={actionRunId === run.id}
+                          >
+                            {actionRunId === run.id && actionType === 'cancel' ? (
+                              <>
+                                <Spinner className="mr-2 h-4 w-4" />
+                                Stopping...
+                              </>
+                            ) : (
+                              <>
+                                <XCircle className="mr-2 h-4 w-4" />
+                                Stop Run
+                              </>
+                            )}
+                          </Button>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-4 lg:shrink-0">
                       <div className="text-right text-sm text-muted-foreground">
                         <div>{run.artifactsCount} artifact{run.artifactsCount === 1 ? '' : 's'}</div>
                         <div>{run.agents.length} agent{run.agents.length === 1 ? '' : 's'} in bundle</div>
                       </div>
                       <RunStatusBadge status={run.status} />
+                      </div>
                     </div>
-                  </Link>
+                  </div>
                 )
               })}
             </div>

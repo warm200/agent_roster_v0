@@ -5,6 +5,7 @@ import { and, eq } from 'drizzle-orm'
 import { createDb, type DbClient } from '../db'
 import { orders, runChannelConfigs } from '../db/schema'
 import { HttpError } from '../lib/http'
+import type { RunChannelConfig } from '@/lib/types'
 
 type OrderChannelContext = {
   orderId: string
@@ -44,6 +45,15 @@ export type TelegramUpdate = {
       id?: number | string
     }
   }
+}
+
+export type OpenClawTelegramChannelConfig = {
+  enabled: true
+  botToken: string
+  dmPolicy: 'allowlist'
+  allowFrom: string[]
+  groupPolicy: 'disabled'
+  configWrites: false
 }
 
 export interface TelegramRepository {
@@ -221,6 +231,16 @@ class EnvSecretStore implements SecretStore {
   }
 }
 
+function resolveTelegramSecretSeed(secretSeed?: string) {
+  const resolved = secretSeed ?? process.env.TELEGRAM_SECRET_SEED ?? process.env.AUTH_SECRET
+
+  if (!resolved) {
+    throw new Error('TELEGRAM_SECRET_SEED or AUTH_SECRET is required for Telegram secret handling')
+  }
+
+  return resolved
+}
+
 class TelegramFetchClient implements TelegramApiClient {
   async getMe(token: string) {
     const payload = await callTelegramApi<TelegramGetMeResult>(token, 'getMe')
@@ -345,12 +365,7 @@ function supportsTelegramWebhook(origin?: string) {
 }
 
 export function createTelegramService(options: CreateTelegramServiceOptions = {}) {
-  const secretSeed =
-    options.secretSeed ?? process.env.TELEGRAM_SECRET_SEED ?? process.env.AUTH_SECRET
-
-  if (!secretSeed) {
-    throw new Error('TELEGRAM_SECRET_SEED or AUTH_SECRET is required for Telegram secret handling')
-  }
+  const secretSeed = resolveTelegramSecretSeed(options.secretSeed)
 
   const requiredSecretSeed = secretSeed
 
@@ -539,6 +554,36 @@ export function createTelegramService(options: CreateTelegramServiceOptions = {}
         config,
       }
     },
+  }
+}
+
+export async function buildOpenClawTelegramChannelConfig(
+  config: Pick<
+    RunChannelConfig,
+    'botTokenSecretRef' | 'recipientBindingStatus' | 'recipientExternalId' | 'tokenStatus'
+  > | null,
+  options: { secretSeed?: string } = {},
+): Promise<OpenClawTelegramChannelConfig | null> {
+  if (
+    !config ||
+    config.tokenStatus !== 'validated' ||
+    config.recipientBindingStatus !== 'paired' ||
+    !config.botTokenSecretRef ||
+    !config.recipientExternalId
+  ) {
+    return null
+  }
+
+  const secretStore = new EnvSecretStore(resolveTelegramSecretSeed(options.secretSeed))
+  const botToken = await secretStore.read(config.botTokenSecretRef)
+
+  return {
+    enabled: true,
+    botToken,
+    dmPolicy: 'allowlist',
+    allowFrom: [`tg:${config.recipientExternalId}`],
+    groupPolicy: 'disabled',
+    configWrites: false,
   }
 }
 

@@ -344,6 +344,49 @@ test('run detail route returns enriched detail and supports retry/cancel', async
   assert.equal(retryPayload.id, 'run-test-retry')
 })
 
+test('run patch route reports stop failures as update errors instead of invalid payload', async () => {
+  installServiceStubs()
+
+  setRunServiceForTesting({
+    async getRun() {
+      return fixtureRun
+    },
+    async getRunLogs() {
+      return fixtureLogs
+    },
+    async getRunResult() {
+      return fixtureResult
+    },
+    async listRuns() {
+      return [fixtureRun]
+    },
+    async retryRun() {
+      return fixtureRun
+    },
+    scanAgentVersion(version: AgentVersion) {
+      return version.riskProfile
+    },
+    async stopRun() {
+      throw new Error('sandbox stop failed')
+    },
+    async createRun() {
+      return fixtureRun
+    },
+  } as unknown as RunService)
+
+  const response = await patchRun(
+    new NextRequest('http://localhost/api/me/runs/run-test-1', {
+      body: JSON.stringify({ action: 'cancel' }),
+      method: 'PATCH',
+    }),
+    { params: Promise.resolve({ runId: 'run-test-1' }) },
+  )
+  const payload = await response.json()
+
+  assert.equal(response.status, 500)
+  assert.equal(payload.error, 'sandbox stop failed')
+})
+
 test('run logs and result routes return service-backed payloads', async () => {
   installServiceStubs()
 

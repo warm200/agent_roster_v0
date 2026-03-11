@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 import type { Agent, Order, Run, RunLog } from '@/lib/types'
-import { HttpError } from '@/server/lib/http'
+import { HttpError, logServerError, unexpectedErrorMessage } from '@/server/lib/http'
 import { getRequestUserId } from '@/server/lib/request-user'
 import { getOrderService } from '@/server/services/order.service'
 import { getRunService } from '@/server/services/run.service'
@@ -63,9 +63,18 @@ export async function GET(request: NextRequest) {
     })
   } catch (error) {
     if (error instanceof HttpError) {
+      logServerError('api/me/runs:get:http_error', error, {
+        route: 'GET /api/me/runs',
+      })
       return NextResponse.json({ error: error.message }, { status: error.status })
     }
 
-    return NextResponse.json({ error: 'Unable to load runs' }, { status: 500 })
+    logServerError('api/me/runs:get:unexpected', error, {
+      route: 'GET /api/me/runs',
+    })
+    return NextResponse.json(
+      { error: unexpectedErrorMessage(error, 'Unable to load runs') },
+      { status: 500 },
+    )
   }
 }

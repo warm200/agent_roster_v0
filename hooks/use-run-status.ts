@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 import { getRun, type RunDetailResponse } from '@/services/runs.api'
 
@@ -15,6 +15,16 @@ export function useRunStatus(runId: string, intervalMs = 5000) {
   const [run, setRun] = useState<RunDetailResponse | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
+
+  const refetch = useCallback(async () => {
+    try {
+      const nextRun = await getRun(runId)
+      setRun(nextRun)
+      setLoadError(null)
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : 'Unable to load run')
+    }
+  }, [runId])
 
   useEffect(() => {
     let isMounted = true
@@ -82,6 +92,7 @@ export function useRunStatus(runId: string, intervalMs = 5000) {
   return {
     run,
     setRun,
+    refetch,
     isLoading,
     loadError,
   }

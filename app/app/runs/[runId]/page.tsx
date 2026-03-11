@@ -26,9 +26,10 @@ interface RunDetailPageProps {
 export default function RunDetailPage({ params }: RunDetailPageProps) {
   const { runId } = use(params)
   const router = useRouter()
-  const { run, setRun, isLoading, loadError } = useRunStatus(runId)
+  const { run, setRun, refetch, isLoading, loadError } = useRunStatus(runId)
   const [isCancelling, setIsCancelling] = useState(false)
   const [isOpeningControlUi, setIsOpeningControlUi] = useState(false)
+  const [isRefreshing, setIsRefreshing] = useState(false)
   const [isRetrying, setIsRetrying] = useState(false)
 
   if (isLoading) {
@@ -61,23 +62,45 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
   }
 
   const isActive = run.status === 'provisioning' || run.status === 'running'
+  const canStop = run.status !== 'failed' && run.usesRealWorkspace
   const timeline = buildTimeline(run)
 
-  const handleCancel = async () => {
+  const handleStop = async () => {
     if (!run || isCancelling) {
+      return
+    }
+
+    if (!window.confirm('Stop this managed runtime and shut down its sandbox?')) {
       return
     }
 
     setIsCancelling(true)
 
     try {
-      const payload = await updateRun(run.id, 'cancel')
+      const payload = await updateRun(run.id, 'cancel', { timeoutMs: 60_000 })
       setRun(payload)
-      toast.success('Run cancelled')
+      toast.success('Run stopped')
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Network error while cancelling run')
+      const message = error instanceof Error ? error.message : 'Network error while cancelling run'
+      if (message.toLowerCase().includes('sandbox is not started')) {
+        await refetch()
+      }
+      toast.error(message)
     } finally {
       setIsCancelling(false)
+    }
+  }
+
+  const handleRefresh = async () => {
+    if (isRefreshing) return
+    setIsRefreshing(true)
+    try {
+      await refetch()
+      toast.success('Status updated from sandbox')
+    } catch {
+      toast.error('Failed to refresh status')
+    } finally {
+      setIsRefreshing(false)
     }
   }
 
@@ -89,11 +112,16 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
     setIsRetrying(true)
 
     try {
-      const payload = await updateRun(run.id, 'retry')
-      toast.success('Retry started. Redirecting to new run...')
-      router.push(`/app/runs/${payload.id}`)
+      const payload = await updateRun(run.id, 'retry', { timeoutMs: 60_000 })
+      setRun(payload)
+      if (payload.id !== run.id) {
+        toast.success('Restart started. Redirecting to new run...')
+        router.push(`/app/runs/${payload.id}`)
+      } else {
+        toast.success('Sandbox restart requested')
+      }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Network error while retrying run')
+      toast.error(error instanceof Error ? error.message : 'Network error while restarting run')
     } finally {
       setIsRetrying(false)
     }
@@ -104,12 +132,14 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
       return
     }
 
-    const popup = window.open('', '_blank', 'noopener,noreferrer')
+    const popup = window.open('about:blank', '_blank')
 
     if (!popup) {
       toast.error('Allow pop-ups to open the Control UI in a new tab.')
       return
     }
+
+    popup.opener = null
 
     popup.document.title = 'Opening Control UI...'
     popup.document.body.innerHTML =
@@ -119,7 +149,7 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
 
     try {
       const link = await createRunControlUiLink(run.id)
-      popup.location.href = link.url
+      popup.location.replace(link.url)
     } catch (error) {
       popup.close()
       toast.error(error instanceof Error ? error.message : 'Unable to open Control UI')
@@ -139,8 +169,11 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
             <ArrowLeft className="h-4 w-4" />
             Back to Runs
           </Link>
-          <div className="mb-2 flex flex-wrap items-center gap-3">
+          <div className="mb-2">
             <h1 className="text-3xl font-bold text-foreground">Run {run.id}</h1>
+          </div>
+          <div className="mb-1 flex flex-wrap items-center gap-2">
+            <span className="text-sm text-muted-foreground">Sandbox status</span>
             <RunStatusBadge status={run.status} />
           </div>
           <p className="text-muted-foreground">
@@ -149,6 +182,19 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
         </div>
 
         <div className="flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+            title="Pull latest status from sandbox"
+          >
+            {isRefreshing ? (
+              <Spinner className="mr-2 h-4 w-4" />
+            ) : (
+              <RefreshCw className="mr-2 h-4 w-4" />
+            )}
+            Refresh status
+          </Button>
           <Button variant="outline" asChild>
             <Link href={`/app/bundles/${run.order.id}`}>
               <Package className="mr-2 h-4 w-4" />
@@ -174,30 +220,32 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
               )}
             </Button>
           )}
-          <Button variant="outline" onClick={handleRetry} disabled={isRetrying}>
-            {isRetrying ? (
-              <>
-                <Spinner className="mr-2 h-4 w-4" />
-                Retrying...
-              </>
-            ) : (
-              <>
-                <RefreshCw className="mr-2 h-4 w-4" />
-                Retry Run
-              </>
-            )}
-          </Button>
-          {isActive && (
-            <Button variant="outline" onClick={handleCancel} disabled={isCancelling}>
+          {run.status === 'failed' && (
+            <Button variant="outline" onClick={handleRetry} disabled={isRetrying}>
+              {isRetrying ? (
+                <>
+                  <Spinner className="mr-2 h-4 w-4" />
+                  Restarting...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  Restart Run
+                </>
+              )}
+            </Button>
+          )}
+          {canStop && (
+            <Button variant="destructive" onClick={handleStop} disabled={isCancelling}>
               {isCancelling ? (
                 <>
                   <Spinner className="mr-2 h-4 w-4" />
-                  Cancelling...
+                  Stopping...
                 </>
               ) : (
                 <>
                   <XCircle className="mr-2 h-4 w-4" />
-                  Cancel Run
+                  Stop Run
                 </>
               )}
             </Button>

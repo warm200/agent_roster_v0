@@ -2,12 +2,12 @@ import { riskProfileSchema, runLogSchema, runResultSchema } from '@/lib/schemas'
 import type { AgentVersion, Order, Run, RunLog, RunResult } from '@/lib/types'
 
 import { HttpError } from '../lib/http'
-import { getTelegramService } from './telegram.service'
 import { scanAgentVersion as scanAgentVersionRiskProfile } from '../lib/risk-engine'
 import { getRunProvider } from '../providers'
 import type { RunControlUiLink } from '../providers/run-provider.interface'
-import { RunRepository } from './run.repository'
 import { getOrderByIdForUser } from './order.service'
+import { RunRepository } from './run.repository'
+import { getTelegramService } from './telegram.service'
 
 function sanitizeRunText(value: string | null) {
   if (!value) {
@@ -47,6 +47,34 @@ function sanitizeRunResult(result: RunResult): RunResult {
     ...result,
     summary: sanitizeRunText(result.summary) ?? result.summary,
   }
+}
+
+function isStoppedSandboxReadError(error: unknown) {
+  const message = error instanceof Error ? error.message.toLowerCase() : ''
+  return (
+    message.includes('sandbox is not started') ||
+    message.includes('toolbox unavailable after sandbox stop') ||
+    message.includes('sandbox is stopped') ||
+    message.includes('sandbox is stopping')
+  )
+}
+
+function buildStoppedRun(run: Run): Run {
+  const stoppedAt = nowIso()
+  return {
+    ...run,
+    completedAt: run.completedAt ?? stoppedAt,
+    resultSummary:
+      run.status === 'failed' && run.resultSummary
+        ? run.resultSummary
+        : 'Managed runtime is no longer available.',
+    status: 'failed',
+    updatedAt: stoppedAt,
+  }
+}
+
+function nowIso() {
+  return new Date().toISOString()
 }
 
 function ensureLaunchable(order: Order) {
@@ -150,6 +178,7 @@ export class RunService {
     return Promise.all(runs.map((run) => this.syncRun(run, false)))
   }
 
+  /** Load run and sync latest status from provider (e.g. Daytona); persists merged run to repo. */
   async getRun(userId: string, runId: string) {
     const run = await this.requireRun(userId, runId)
     return this.syncRun(run, true)
@@ -157,14 +186,27 @@ export class RunService {
 
   async getRunLogs(userId: string, runId: string): Promise<RunLog[]> {
     const run = await this.requireRun(userId, runId)
-    const logs = await runServiceDeps.getRunProvider().getLogs(run.id)
-    return sanitizeRunLogs(runLogSchema.array().parse(logs))
+    try {
+      const logs = await runServiceDeps.getRunProvider().getLogs(run.id)
+      return sanitizeRunLogs(runLogSchema.array().parse(logs))
+    } catch {
+      return []
+    }
   }
 
   async getRunResult(userId: string, runId: string): Promise<RunResult | null> {
     const run = await this.requireRun(userId, runId)
-    const result = await runServiceDeps.getRunProvider().getResult(run.id)
-    return result ? sanitizeRunResult(runResultSchema.parse(result)) : null
+    try {
+      const result = await runServiceDeps.getRunProvider().getResult(run.id)
+      return result ? sanitizeRunResult(runResultSchema.parse(result)) : null
+    } catch {
+      return run.resultSummary || run.resultArtifacts.length > 0
+        ? sanitizeRunResult({
+            artifacts: run.resultArtifacts,
+            summary: run.resultSummary ?? 'Run result unavailable.',
+          })
+        : null
+    }
   }
 
   async getRunControlUiLink(userId: string, runId: string): Promise<RunControlUiLink> {
@@ -195,10 +237,23 @@ export class RunService {
 
   async stopRun(userId: string, runId: string) {
     const run = await this.requireRun(userId, runId)
-    const stopped = await runServiceDeps.getRunProvider().stopRun(run.id)
-
+    const stopped = await runServiceDeps.getRunProvider().stopRun(run.id, run)
     if (!stopped) {
-      return run
+      const stoppedAt = new Date().toISOString()
+      return (
+        (await this.repository.updateRun(run.id, {
+          completedAt: stoppedAt,
+          resultSummary: 'Run stopped by operator request.',
+          status: 'failed',
+          updatedAt: stoppedAt,
+        })) ?? {
+          ...run,
+          completedAt: stoppedAt,
+          resultSummary: 'Run stopped by operator request.',
+          status: 'failed',
+          updatedAt: stoppedAt,
+        }
+      )
     }
 
     return (await this.repository.updateRun(run.id, stopped)) ?? stopped
@@ -206,6 +261,26 @@ export class RunService {
 
   async retryRun(userId: string, runId: string) {
     const run = await this.requireRun(userId, runId)
+    const provider = runServiceDeps.getRunProvider()
+
+    if (run.status !== 'failed') {
+      throw new HttpError(409, 'Only stopped runs can be restarted.')
+    }
+
+    if (run.usesRealWorkspace && provider.restartRun) {
+      const restarted = await provider.restartRun(run.id, run)
+
+      if (!restarted) {
+        throw new HttpError(409, 'Managed runtime sandbox could not be restarted.')
+      }
+
+      return (await this.repository.updateRun(run.id, restarted)) ?? restarted
+    }
+
+    if (run.usesRealWorkspace) {
+      throw new HttpError(409, 'Managed runtime restart is unavailable for this provider.')
+    }
+
     return this.createRun(userId, run.orderId)
   }
 
@@ -223,14 +298,39 @@ export class RunService {
     return run
   }
 
+  /** Pull latest status/result from provider (e.g. Daytona sandbox), merge with run, optionally persist. */
   private async syncRun(run: Run, persist: boolean) {
-    const providerRun = await runServiceDeps.getRunProvider().getStatus(run.id)
+    let providerRun: Run | null = null
+
+    try {
+      providerRun = await runServiceDeps.getRunProvider().getStatus(run.id)
+    } catch (error) {
+      if (isStoppedSandboxReadError(error)) {
+        const stoppedRun = buildStoppedRun(run)
+        if (!persist) {
+          return sanitizeRun(stoppedRun)
+        }
+
+        const persistedRun = (await this.repository.updateRun(run.id, stoppedRun)) ?? stoppedRun
+        return sanitizeRun(persistedRun)
+      }
+
+      return sanitizeRun(run)
+    }
 
     if (!providerRun) {
       return sanitizeRun(run)
     }
 
-    const result = await runServiceDeps.getRunProvider().getResult(run.id)
+    let result: RunResult | null = null
+
+    try {
+      const providerResult = await runServiceDeps.getRunProvider().getResult(run.id)
+      result = providerResult ? runResultSchema.parse(providerResult) : null
+    } catch {
+      result = null
+    }
+
     const nextRun: Run = {
       ...run,
       status: providerRun.status,
@@ -238,8 +338,8 @@ export class RunService {
       usesRealWorkspace: providerRun.usesRealWorkspace,
       usesTools: providerRun.usesTools,
       networkEnabled: providerRun.networkEnabled,
-      resultSummary: result?.summary ?? providerRun.resultSummary,
-      resultArtifacts: result?.artifacts ?? providerRun.resultArtifacts,
+      resultSummary: result?.summary ?? providerRun.resultSummary ?? run.resultSummary,
+      resultArtifacts: result?.artifacts ?? providerRun.resultArtifacts ?? run.resultArtifacts,
       startedAt: providerRun.startedAt,
       updatedAt: providerRun.updatedAt,
       completedAt: providerRun.completedAt,

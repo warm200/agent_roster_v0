@@ -1,4 +1,5 @@
 import axios, { AxiosError } from 'axios'
+import type { AxiosRequestConfig } from 'axios'
 
 const serverBaseUrl =
   process.env.NEXT_PUBLIC_APP_URL ?? process.env.NEXTAUTH_URL ?? 'http://localhost:3000'
@@ -23,27 +24,39 @@ api.interceptors.response.use(
   },
 )
 
-export async function getJson<T>(url: string) {
-  const response = await api.get<T>(url)
+export async function getJson<T>(url: string, config?: AxiosRequestConfig) {
+  const response = await api.get<T>(url, config)
   return response.data
 }
 
-export async function postJson<TResponse, TBody = unknown>(url: string, body?: TBody) {
-  const response = await api.post<TResponse>(url, body)
+export async function postJson<TResponse, TBody = unknown>(
+  url: string,
+  body?: TBody,
+  config?: AxiosRequestConfig,
+) {
+  const response = await api.post<TResponse>(url, body, config)
   return response.data
 }
 
-export async function putJson<TResponse, TBody = unknown>(url: string, body?: TBody) {
-  const response = await api.put<TResponse>(url, body)
+export async function putJson<TResponse, TBody = unknown>(
+  url: string,
+  body?: TBody,
+  config?: AxiosRequestConfig,
+) {
+  const response = await api.put<TResponse>(url, body, config)
   return response.data
 }
 
-export async function patchJson<TResponse, TBody = unknown>(url: string, body?: TBody) {
-  const response = await api.patch<TResponse>(url, body)
+export async function patchJson<TResponse, TBody = unknown>(
+  url: string,
+  body?: TBody,
+  config?: AxiosRequestConfig,
+) {
+  const response = await api.patch<TResponse>(url, body, config)
   return response.data
 }
 
-export async function deleteJson<TResponse>(url: string) {
-  const response = await api.delete<TResponse>(url)
+export async function deleteJson<TResponse>(url: string, config?: AxiosRequestConfig) {
+  const response = await api.delete<TResponse>(url, config)
   return response.data
 }

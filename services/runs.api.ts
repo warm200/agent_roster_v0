@@ -66,10 +66,14 @@ export async function getRun(runId: string) {
 export async function updateRun(
   runId: string,
   action: 'cancel' | 'retry',
+  options?: {
+    timeoutMs?: number
+  },
 ) {
   return patchJson<RunDetailResponse, { action: 'cancel' | 'retry' }>(
     `/api/me/runs/${runId}`,
     { action },
+    options?.timeoutMs ? { timeout: options.timeoutMs } : undefined,
   )
 }
 

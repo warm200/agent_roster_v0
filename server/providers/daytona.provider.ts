@@ -6,7 +6,8 @@ import { Daytona, DaytonaNotFoundError, SandboxState, type DaytonaConfig, type S
 
 import type { Order, Run, RunLog, RunResult, RunStatus } from '@/lib/types'
 
-import { HttpError } from '../lib/http'
+import { HttpError, logServerError } from '../lib/http'
+import { buildOpenClawTelegramChannelConfig } from '../services/telegram.service'
 import type { RunControlUiLink, RunProvider } from './run-provider.interface'
 
 type DaytonaRunManifest = {
@@ -66,11 +67,14 @@ type PreviewLinkLike = {
 }
 
 type DaytonaSandboxLike = Pick<Sandbox, 'createdAt' | 'errorReason' | 'id' | 'state'> & {
+  delete?: (timeout?: number) => Promise<void>
   fs: DaytonaFsLike
   process: DaytonaProcessLike
   getPreviewLink?: (port: number) => Promise<PreviewLinkLike>
   getSignedPreviewUrl?: (port: number, expiresInSeconds?: number) => Promise<PreviewLinkLike>
   getUserHomeDir?: () => Promise<string | undefined>
+  start?: (timeout?: number) => Promise<void>
+  stop?: (timeout?: number) => Promise<void>
 }
 
 type OpenClawTemplate = {
@@ -97,7 +101,6 @@ const DEFAULT_OPENCLAW_PACKAGE = 'openclaw@latest'
 const DEFAULT_DAYTONA_SNAPSHOT = 'daytona-medium'
 const DEFAULT_ENV_SANDBOX_PATH = '.env.sandbox'
 const OPENCLAW_CONFIG_PATH = '.openclaw/openclaw.json'
-const OPENCLAW_SESSION_ID = 'openclaw-gateway'
 const OPENCLAW_BASE_CONFIG = {
   agents: {
     defaults: {
@@ -215,6 +218,37 @@ function buildReadySummary(orderId: string) {
   return `Managed runtime is ready for bundle ${orderId}. Open Control UI to continue.`
 }
 
+function buildRestartingSummary(orderId: string) {
+  return `Managed runtime is restarting for bundle ${orderId}. Status will update automatically.`
+}
+
+function reconcileSandboxStatus(
+  sandbox: Pick<DaytonaSandboxLike, 'state'>,
+  status: DaytonaStatusFile,
+): DaytonaStatusFile {
+  const mappedStatus = mapSandboxStateToStatus(sandbox.state)
+
+  if (mappedStatus !== 'failed') {
+    return status
+  }
+
+  const terminalSummary =
+    status.resultSummary &&
+    status.resultSummary.trim().length > 0 &&
+    !status.resultSummary.includes('Open Control UI')
+      ? status.resultSummary
+      : 'Managed runtime is no longer available.'
+  const terminalAt = status.completedAt ?? nowIso()
+
+  return {
+    ...status,
+    completedAt: terminalAt,
+    resultSummary: terminalSummary,
+    status: 'failed',
+    updatedAt: nowIso(),
+  }
+}
+
 function mapSandboxStateToStatus(state?: string): RunStatus {
   switch (state) {
     case SandboxState.STARTED:
@@ -223,6 +257,10 @@ function mapSandboxStateToStatus(state?: string): RunStatus {
     case SandboxState.BUILD_FAILED:
     case SandboxState.DESTROYED:
     case SandboxState.DESTROYING:
+    case SandboxState.STOPPED:
+    case SandboxState.STOPPING:
+    case SandboxState.ARCHIVED:
+    case SandboxState.ARCHIVING:
       return 'failed'
     case SandboxState.CREATING:
     case SandboxState.STARTING:
@@ -506,6 +544,21 @@ async function appendStructuredLog(
   }
 }
 
+async function startBootstrapScript(sandbox: DaytonaSandboxLike) {
+  const launch = await sandbox.process.executeCommand(
+    `bash -lc ${shellQuote(
+      `chmod +x ${BOOTSTRAP_SCRIPT_PATH} && nohup ${BOOTSTRAP_SCRIPT_PATH} >/dev/null 2>&1 &`,
+    )}`,
+    undefined,
+    undefined,
+    20,
+  )
+
+  if (launch.exitCode !== 0) {
+    throw new HttpError(502, launch.result.trim() || 'Managed runtime bootstrap failed to start.')
+  }
+}
+
 async function resolveUserHomeDir(sandbox: DaytonaSandboxLike) {
   return (await sandbox.getUserHomeDir?.()) ?? '/home/daytona'
 }
@@ -683,9 +736,10 @@ function buildOpenClawConfig(
   userConfig: Record<string, unknown>,
   gatewayToken: string,
   openClawPort: number,
+  telegramChannelConfig?: Record<string, unknown> | null,
 ) {
   const config = deepMerge(OPENCLAW_BASE_CONFIG, userConfig)
-  return deepMerge(config, {
+  const runtimeConfig = deepMerge(config, {
     gateway: {
       auth: {
         mode: 'token',
@@ -697,6 +751,16 @@ function buildOpenClawConfig(
       },
       mode: 'local',
       port: openClawPort,
+    },
+  })
+
+  if (!telegramChannelConfig) {
+    return runtimeConfig
+  }
+
+  return deepMerge(runtimeConfig, {
+    channels: {
+      telegram: telegramChannelConfig,
     },
   })
 }
@@ -732,6 +796,7 @@ export class DaytonaRunProvider implements RunProvider {
     const template = await loadOpenClawTemplate(this.openClawTemplateDir)
     const gatewayToken = randomBytes(24).toString('hex')
     const envVars = await readOptionalEnvFile(this.envSandboxPath)
+    const telegramChannelConfig = await buildOpenClawTelegramChannelConfig(order.channelConfig)
 
     const sandbox = await this.client.create(
       {
@@ -754,7 +819,12 @@ export class DaytonaRunProvider implements RunProvider {
     )
 
     const homeDir = await resolveUserHomeDir(sandbox)
-    const openClawConfig = buildOpenClawConfig(template.config, gatewayToken, this.openClawPort)
+    const openClawConfig = buildOpenClawConfig(
+      template.config,
+      gatewayToken,
+      this.openClawPort,
+      telegramChannelConfig,
+    )
     const bootstrapScript = buildBootstrapScript({
       homeDir,
       openClawPackage: this.openClawPackage,
@@ -796,18 +866,7 @@ export class DaytonaRunProvider implements RunProvider {
       await sandbox.fs.uploadFile(file.contents, `${STAGED_WORKSPACE_ROOT}/${file.relativePath}`)
     }
 
-    const launch = await sandbox.process.executeCommand(
-      `bash -lc ${shellQuote(
-        `chmod +x ${BOOTSTRAP_SCRIPT_PATH} && nohup ${BOOTSTRAP_SCRIPT_PATH} >/dev/null 2>&1 &`,
-      )}`,
-      undefined,
-      undefined,
-      20,
-    )
-
-    if (launch.exitCode !== 0) {
-      throw new HttpError(502, launch.result.trim() || 'Managed runtime bootstrap failed to start.')
-    }
+    await startBootstrapScript(sandbox)
 
     return buildRunFromManifest(manifest, buildInitialStatus(createdAt), sandbox)
   }
@@ -828,15 +887,18 @@ export class DaytonaRunProvider implements RunProvider {
     const fileStatus = await downloadJsonFile<DaytonaStatusFile>(sandbox, STATUS_PATH)
     const status = await refreshGatewayStatus(
       sandbox,
-      fileStatus ??
-        ({
-          completedAt: null,
-          resultSummary: null,
-          startedAt:
-            sandbox.state === SandboxState.STARTED ? sandbox.createdAt ?? manifest.createdAt : null,
-          status: mapSandboxStateToStatus(sandbox.state),
-          updatedAt: sandbox.createdAt ?? manifest.createdAt,
-        } satisfies DaytonaStatusFile),
+      reconcileSandboxStatus(
+        sandbox,
+        fileStatus ??
+          ({
+            completedAt: null,
+            resultSummary: null,
+            startedAt:
+              sandbox.state === SandboxState.STARTED ? sandbox.createdAt ?? manifest.createdAt : null,
+            status: mapSandboxStateToStatus(sandbox.state),
+            updatedAt: sandbox.createdAt ?? manifest.createdAt,
+          } satisfies DaytonaStatusFile),
+      ),
       manifest,
     )
 
@@ -904,30 +966,70 @@ export class DaytonaRunProvider implements RunProvider {
     }
   }
 
-  async stopRun(runId: string): Promise<Run | null> {
+  async restartRun(runId: string, fallbackRun?: Run): Promise<Run | null> {
     const sandbox = await this.getSandbox(runId)
 
     if (!sandbox) {
       return null
     }
 
-    const manifest = await downloadJsonFile<DaytonaRunManifest>(sandbox, MANIFEST_PATH)
-
-    if (!manifest) {
-      return null
+    if (sandbox.start) {
+      await sandbox.start(60)
     }
 
-    const stopResponse = await sandbox.process.executeCommand(
-      `bash -lc ${shellQuote(
-        `if [ -f ${OPENCLAW_PID_PATH} ]; then kill "$(cat ${OPENCLAW_PID_PATH})" 2>/dev/null || true; fi`,
-      )}`,
-      undefined,
-      undefined,
-      20,
-    )
+    const manifest = await downloadJsonFile<DaytonaRunManifest>(sandbox, MANIFEST_PATH)
+    const restartedAt = nowIso()
+    const restartingStatus: DaytonaStatusFile = {
+      completedAt: null,
+      resultSummary: buildRestartingSummary(
+        manifest?.orderId ?? fallbackRun?.orderId ?? 'unknown-order',
+      ),
+      startedAt: restartedAt,
+      status: 'provisioning',
+      updatedAt: restartedAt,
+    }
 
-    if (stopResponse.exitCode !== 0) {
-      throw new HttpError(502, stopResponse.result.trim() || 'Managed runtime stop failed.')
+    await writeJsonFile(sandbox, STATUS_PATH, restartingStatus)
+    await writeJsonFile(sandbox, RESULT_PATH, {
+      artifacts: [],
+      summary: restartingStatus.resultSummary,
+    })
+    await appendStructuredLog(sandbox, 'info', 'restart', 'Managed runtime restart requested.')
+    await startBootstrapScript(sandbox)
+
+    if (manifest) {
+      return buildRunFromManifest(manifest, restartingStatus, sandbox)
+    }
+
+    if (fallbackRun) {
+      return {
+        ...fallbackRun,
+        completedAt: null,
+        resultSummary: restartingStatus.resultSummary,
+        startedAt: restartedAt,
+        status: 'provisioning',
+        updatedAt: restartedAt,
+      }
+    }
+
+    return null
+  }
+
+  async stopRun(runId: string, fallbackRun?: Run): Promise<Run | null> {
+    const sandbox = await this.getSandbox(runId)
+    if (!sandbox) {
+      if (!fallbackRun) {
+        return null
+      }
+
+      const stoppedAt = nowIso()
+      return {
+        ...fallbackRun,
+        completedAt: stoppedAt,
+        resultSummary: 'Run stopped by operator request.',
+        status: 'failed',
+        updatedAt: stoppedAt,
+      }
     }
 
     const cancelledAt = nowIso()
@@ -939,14 +1041,68 @@ export class DaytonaRunProvider implements RunProvider {
       updatedAt: cancelledAt,
     }
 
-    await writeJsonFile(sandbox, STATUS_PATH, cancelledStatus)
-    await writeJsonFile(sandbox, RESULT_PATH, {
-      artifacts: [],
-      summary: 'Run stopped by operator request.',
-    })
-    await appendStructuredLog(sandbox, 'warn', 'cancel', 'Run stopped by operator request.')
+    let manifest: DaytonaRunManifest | null = null
+    try {
+      manifest = await downloadJsonFile<DaytonaRunManifest>(sandbox, MANIFEST_PATH)
+    } catch (error) {
+      logServerError('provider/daytona:stopRun:manifest', error, {
+        runId,
+        sandboxId: sandbox.id,
+        sandboxState: sandbox.state,
+      })
+    }
 
-    return buildRunFromManifest(manifest, cancelledStatus, sandbox)
+    if (manifest) {
+      try {
+        await writeJsonFile(sandbox, STATUS_PATH, cancelledStatus)
+        await writeJsonFile(sandbox, RESULT_PATH, {
+          artifacts: [],
+          summary: 'Run stopped by operator request.',
+        })
+        await appendStructuredLog(sandbox, 'warn', 'cancel', 'Run stopped by operator request.')
+      } catch (error) {
+        logServerError('provider/daytona:stopRun:write_state', error, {
+          runId,
+          sandboxId: sandbox.id,
+          sandboxState: sandbox.state,
+        })
+      }
+    }
+
+    try {
+      if (sandbox.stop) {
+        await sandbox.stop(60)
+      } else if (sandbox.delete) {
+        await sandbox.delete(60)
+      }
+    } catch (error) {
+      logServerError('provider/daytona:stopRun', error, {
+        runId,
+        sandboxId: sandbox.id,
+        sandboxState: sandbox.state,
+      })
+      const candidate = error as { message?: string; status?: number; statusCode?: number }
+      throw new HttpError(
+        502,
+        candidate?.message?.trim() || 'Managed runtime sandbox shutdown failed.',
+      )
+    }
+
+    if (manifest) {
+      return buildRunFromManifest(manifest, cancelledStatus, sandbox)
+    }
+
+    if (fallbackRun) {
+      return {
+        ...fallbackRun,
+        completedAt: cancelledAt,
+        resultSummary: 'Run stopped by operator request.',
+        status: 'failed',
+        updatedAt: cancelledAt,
+      }
+    }
+
+    return null
   }
 
   private async getSandbox(runId: string) {

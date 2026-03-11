@@ -9,9 +9,15 @@ Implemented in the current mock app:
 - Catalog, agent detail, dashboard, bundles list/detail, runs list/detail now fetch through app API routes
 - Bundle detail can launch mock runs and redirect into run detail
 - Run launch now returns a provisioning run immediately, then provider bootstrap continues in the background so the UI can redirect without waiting on Daytona sandbox startup; Daytona marks the run complete once Control UI bootstrap finishes so polling can stop
-- Run detail now shows runtime disclosure, combined risk, logs, results, artifacts, retry, and cancel
+- Run detail now shows runtime disclosure, combined risk, logs, results, artifacts, restart, and stop controls
+- Runs list/detail now expose stop-run controls for managed-workspace runs even after bootstrap completes, and failed Daytona runs now use in-place `Restart Run` on the same sandbox instead of provisioning a brand-new run
+- Stopping a Daytona-backed run now uses Daytona sandbox shutdown directly instead of shelling into the sandbox to kill OpenClaw
+- Run list/detail now fall back to stored DB state if provider reads fail after a sandbox stop, so the dashboard stays usable even when Daytona toolbox endpoints are gone
+- Stop-run actions now require a confirmation prompt before calling the backend, and backend stop failures now surface as update errors instead of the misleading `Invalid request body`
+- Run detail refresh now reconciles live Daytona sandbox state over stale sandbox `status.json`, so externally stopped sandboxes flip to terminal failed state instead of still looking stoppable
+- Run read paths now also self-heal when Daytona toolbox reads fail with `Sandbox is not started`, so refreshed run detail/list views stop showing stale `Stop Run` controls after a sandbox is shut down elsewhere
 - Run detail now exposes a Control UI action for Daytona-backed runs via a signed preview-link endpoint
-- Run detail now opens the Control UI in a separate tab/window so the authenticated app stays open during external runtime access
+- Run detail now opens the Control UI in a separate tab/window with a popup-safe handoff so the authenticated app stays open during external runtime access
 - Cart now persists in `localStorage` and syncs against mock cart endpoints
 - Checkout creates a mock purchased bundle and redirects to the returned order ID
 - Telegram setup wizard now uses final validate/pairing APIs and polls channel status until pairing completes
@@ -39,6 +45,7 @@ Implemented in the current mock app:
 - Daytona runs now follow Daytona’s official OpenClaw sandbox pattern: create a public `daytona-medium` snapshot sandbox, load optional `.env.sandbox` env vars, merge base gateway config with any local `openclaw.json`, write `~/.openclaw/openclaw.json`, start `openclaw gateway run`, and mint signed Control UI links on demand
 - The local OpenClaw template directory is now optional; missing local files fall back to base config plus an empty workspace so future S3-backed agent bundles can replace them cleanly
 - Daytona now configures OpenClaw with `gateway.mode=local`, `bind=lan`, token auth, `allowInsecureAuth`, and `~/.openclaw/workspace`, matching Daytona’s reference integration so the remote Control UI can reach the sandbox gateway instead of trying a local loopback websocket
+- Daytona now injects paired Telegram channel config into `channels.telegram` inside the sandbox `~/.openclaw/openclaw.json`, using the stored bot token plus DM allowlisting for the paired Telegram recipient
 - Deleted Daytona sandboxes now degrade to stale run records instead of breaking bundle/run pages
 - Bundle detail now loads order data independently from runs/download grants, so provider-side run failures no longer masquerade as “bundle not found”
 - Run detail timeline now visually reflects created/started/updated/completed state instead of rendering every row as the same muted style
