@@ -712,6 +712,16 @@ test('daytona run provider registers multiple purchased agents with agent dirs a
       },
     ],
   )
+  assert.deepEqual(uploadedConfig.tools?.agentToAgent?.allow, ['test-writer', 'backend-architect'])
+  assert.equal(uploadedConfig.tools?.agentToAgent?.enabled, true)
+  assert.deepEqual(uploadedConfig.agents?.list?.[0]?.subagents?.allowAgents, [
+    'test-writer',
+    'backend-architect',
+  ])
+  assert.deepEqual(uploadedConfig.agents?.list?.[1]?.subagents?.allowAgents, [
+    'test-writer',
+    'backend-architect',
+  ])
   assert.equal(
     sandboxState.files['/home/daytona/workspace/custom-test-writer/IDENTITY.md'],
     '# test-writer identity',

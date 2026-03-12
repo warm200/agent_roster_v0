@@ -816,6 +816,7 @@ function buildOpenClawConfig(
   telegramChannelConfig?: Record<string, unknown> | null,
   agentDefaultsConfig?: Record<string, unknown> | null,
   agentListConfig?: Array<Record<string, unknown>> | null,
+  multiAgentToolsConfig?: Record<string, unknown> | null,
   skipBootstrap = false,
 ) {
   const config = deepMerge(OPENCLAW_BASE_CONFIG, userConfig)
@@ -857,6 +858,12 @@ function buildOpenClawConfig(
       agents: {
         list: agentListConfig,
       },
+    })
+  }
+
+  if (multiAgentToolsConfig) {
+    runtimeConfig = deepMerge(runtimeConfig, {
+      tools: multiAgentToolsConfig,
     })
   }
 
@@ -949,6 +956,7 @@ function buildOpenClawAgentsListConfig(
   homeDir: string,
   agentSetup?: AgentSetup | null,
 ) {
+  const agentIds = order.items.map((item) => item.agent.slug)
   const workspaceBase = agentSetup?.workspace
   const agentDirByAgentVersionId: Record<string, string> = {}
   const agentSessionsByAgentVersionId: Record<string, string> = {}
@@ -966,6 +974,13 @@ function buildOpenClawAgentsListConfig(
       default: index === 0,
       id: item.agent.slug,
       name: item.agent.title,
+      ...(agentIds.length > 1
+        ? {
+            subagents: {
+              allowAgents: agentIds,
+            },
+          }
+        : {}),
       workspace,
     }
   })
@@ -975,6 +990,21 @@ function buildOpenClawAgentsListConfig(
     agentSessionsByAgentVersionId,
     list,
     workspaceByAgentVersionId,
+  }
+}
+
+function buildOpenClawMultiAgentToolsConfig(order: Order) {
+  const agentIds = [...new Set(order.items.map((item) => item.agent.slug))]
+
+  if (agentIds.length <= 1) {
+    return null
+  }
+
+  return {
+    agentToAgent: {
+      allow: agentIds,
+      enabled: true,
+    },
   }
 }
 
@@ -1041,6 +1071,7 @@ export class DaytonaRunProvider implements RunProvider {
     )
     const telegramChannelConfig = await buildOpenClawTelegramChannelConfig(order.channelConfig)
     const agentDefaultsConfig = buildOpenClawAgentDefaultsConfig(order.agentSetup ?? null)
+    const multiAgentToolsConfig = buildOpenClawMultiAgentToolsConfig(order)
     const skipBootstrap = shouldSkipOpenClawBootstrap(template.workspaceFiles)
     const openClawConfig = buildOpenClawConfig(
       template.config,
@@ -1049,6 +1080,7 @@ export class DaytonaRunProvider implements RunProvider {
       telegramChannelConfig,
       agentDefaultsConfig,
       agentListConfig,
+      multiAgentToolsConfig,
       skipBootstrap,
     )
     const workspaceDir = resolveOpenClawWorkspaceDir(openClawConfig, homeDir)
@@ -1231,6 +1263,7 @@ export class DaytonaRunProvider implements RunProvider {
       order,
       workspaceByAgentVersionId,
     )
+    const multiAgentToolsConfig = buildOpenClawMultiAgentToolsConfig(order)
     const skipBootstrap = shouldSkipOpenClawBootstrap(template.workspaceFiles)
     const openClawConfig = buildOpenClawConfig(
       template.config,
@@ -1239,6 +1272,7 @@ export class DaytonaRunProvider implements RunProvider {
       telegramChannelConfig,
       agentDefaultsConfig,
       agentListConfig,
+      multiAgentToolsConfig,
       skipBootstrap,
     )
     const workspaceDir = resolveOpenClawWorkspaceDir(openClawConfig, homeDir)
