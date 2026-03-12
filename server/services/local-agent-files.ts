@@ -31,6 +31,7 @@ type RuntimeAssetBundle = {
   workspaceFiles: Array<{
     contents: Buffer
     relativePath: string
+    targetWorkspaceDir: string | null
   }>
 }
 
@@ -190,7 +191,6 @@ function isIgnoredWorkspaceEntry(name: string) {
 async function collectWorkspaceFiles(
   rootDir: string,
   currentDir: string,
-  targetPrefix: string,
   ignoredAbsolutePaths: Set<string>,
 ): Promise<RuntimeAssetBundle['workspaceFiles']> {
   const entries = await fs.readdir(currentDir, { withFileTypes: true })
@@ -208,7 +208,7 @@ async function collectWorkspaceFiles(
     }
 
     if (entry.isDirectory()) {
-      files.push(...(await collectWorkspaceFiles(rootDir, fullPath, targetPrefix, ignoredAbsolutePaths)))
+      files.push(...(await collectWorkspaceFiles(rootDir, fullPath, ignoredAbsolutePaths)))
       continue
     }
 
@@ -219,7 +219,8 @@ async function collectWorkspaceFiles(
     const relativePath = path.relative(rootDir, fullPath).split(path.sep).join('/')
     files.push({
       contents: await fs.readFile(fullPath),
-      relativePath: path.posix.join(targetPrefix, relativePath),
+      relativePath,
+      targetWorkspaceDir: null,
     })
   }
 
@@ -293,7 +294,7 @@ async function buildLocalAgentDefinition(agentDir: string): Promise<LocalAgentDe
     openClawConfigRelativePath,
     slug,
     sourceRootRelativePath: relativePathFromRepoRoot(agentDir),
-    stagingRelativePath: `agents/${slug}`,
+    stagingRelativePath: slug,
     workspaceRelativePath,
   }
   const riskLevel = inferRiskLevel(profile)
@@ -547,7 +548,10 @@ export async function getLocalAgentThumbnail(slug: string) {
   }
 }
 
-export async function loadRuntimeAssetsFromSnapshot(snapshot: string): Promise<RuntimeAssetBundle> {
+export async function loadRuntimeAssetsFromSnapshot(
+  snapshot: string,
+  targetWorkspaceDir: string | null = null,
+): Promise<RuntimeAssetBundle> {
   const source = parseLocalAgentRuntimeSource(snapshot)
 
   if (!source) {
@@ -578,9 +582,12 @@ export async function loadRuntimeAssetsFromSnapshot(snapshot: string): Promise<R
     workspaceFiles = await collectWorkspaceFiles(
       workspaceRoot,
       workspaceRoot,
-      source.stagingRelativePath,
       ignoredPaths,
     )
+    workspaceFiles = workspaceFiles.map((file) => ({
+      ...file,
+      targetWorkspaceDir,
+    }))
   } catch (error) {
     const candidate = error as NodeJS.ErrnoException
     if (candidate.code !== 'ENOENT') {

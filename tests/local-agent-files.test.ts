@@ -109,6 +109,7 @@ test('loadRuntimeAssetsFromSnapshot reads optional config and workspace files fr
 
   assert.equal(parsedConfig.agents?.defaults?.timeFormat, '24')
   assert.equal(assets.workspaceFiles.length, 1)
-  assert.equal(assets.workspaceFiles[0].relativePath, 'agents/test-writer/README.md')
+  assert.equal(assets.workspaceFiles[0].relativePath, 'README.md')
   assert.equal(assets.workspaceFiles[0].contents.toString('utf8'), '# staged')
+  assert.equal(assets.workspaceFiles[0].targetWorkspaceDir, null)
 })

@@ -12,6 +12,7 @@ import { buildOpenClawTelegramChannelConfig } from '../services/telegram.service
 import type { RunControlUiLink, RunProvider } from './run-provider.interface'
 
 type DaytonaRunManifest = {
+  agentWorkspaces: Record<string, string>
   agentTitles: string[]
   channelConfigId: string
   combinedRiskLevel: Order['bundleRisk']['level']
@@ -83,6 +84,7 @@ type OpenClawTemplate = {
   workspaceFiles: Array<{
     contents: Buffer
     relativePath: string
+    targetWorkspaceDir: string | null
   }>
 }
 
@@ -163,8 +165,14 @@ function resolveOpenClawTemplateDir(explicitTemplateDir?: string) {
   )
 }
 
-function buildManifest(order: Order, runId: string, createdAt: string): DaytonaRunManifest {
+function buildManifest(
+  order: Order,
+  runId: string,
+  createdAt: string,
+  agentWorkspaces: Record<string, string>,
+): DaytonaRunManifest {
   return {
+    agentWorkspaces,
     agentTitles: order.items.map((item) => item.agent.title),
     channelConfigId: order.channelConfig?.id ?? 'channel-pending',
     combinedRiskLevel: order.bundleRisk.level,
@@ -307,6 +315,7 @@ async function collectWorkspaceFiles(
     files.push({
       contents: await fs.readFile(fullPath),
       relativePath: path.relative(rootDir, fullPath).split(path.sep).join('/'),
+      targetWorkspaceDir: null,
     })
   }
 
@@ -328,35 +337,45 @@ async function loadOpenClawTemplate(templateDir: string): Promise<OpenClawTempla
 
   return {
     config,
-    workspaceFiles,
+    workspaceFiles: workspaceFiles.map((file) => ({
+      ...file,
+      targetWorkspaceDir: null,
+    })),
   }
 }
 
-async function buildOrderRuntimeAssets(baseTemplate: OpenClawTemplate, order: Order) {
+async function buildOrderRuntimeAssets(
+  baseTemplate: OpenClawTemplate,
+  order: Order,
+  workspaceByAgentVersionId: Record<string, string>,
+) {
   let config = baseTemplate.config
-  const workspaceFilesByPath = new Map<string, Buffer>()
+  const workspaceFilesByPath = new Map<string, OpenClawTemplate['workspaceFiles'][number]>()
 
   for (const file of baseTemplate.workspaceFiles) {
-    workspaceFilesByPath.set(file.relativePath, file.contents)
+    workspaceFilesByPath.set(`default:${file.relativePath}`, file)
   }
 
   for (const item of order.items) {
-    const assets = await loadRuntimeAssetsFromSnapshot(item.agentVersion.runConfigSnapshot)
+    const assets = await loadRuntimeAssetsFromSnapshot(
+      item.agentVersion.runConfigSnapshot,
+      workspaceByAgentVersionId[item.agentVersion.id] ?? null,
+    )
     if (Object.keys(assets.config).length > 0) {
       config = deepMerge(config, assets.config)
     }
 
     for (const file of assets.workspaceFiles) {
-      workspaceFilesByPath.set(file.relativePath, file.contents)
+      workspaceFilesByPath.set(
+        `${file.targetWorkspaceDir ?? 'default'}:${file.relativePath}`,
+        file,
+      )
     }
   }
 
   return {
     config,
-    workspaceFiles: Array.from(workspaceFilesByPath.entries()).map(([relativePath, contents]) => ({
-      contents,
-      relativePath,
-    })),
+    workspaceFiles: Array.from(workspaceFilesByPath.values()),
   } satisfies OpenClawTemplate
 }
 
@@ -364,6 +383,7 @@ function buildBootstrapScript(input: {
   homeDir: string
   openClawPackage: string
   port: number
+  workspaceDir: string
 }) {
   return `#!/usr/bin/env bash
 set -euo pipefail
@@ -377,7 +397,7 @@ OPENCLAW_LOG=${shellQuote(OPENCLAW_GATEWAY_LOG_PATH)}
 OPENCLAW_PID_PATH=${shellQuote(OPENCLAW_PID_PATH)}
 HOME_DIR=${shellQuote(input.homeDir)}
 OPENCLAW_DIR="$HOME_DIR/.openclaw"
-WORKSPACE_DIR="$HOME_DIR/.openclaw/workspace"
+WORKSPACE_DIR=${shellQuote(input.workspaceDir)}
 PORT=${shellQuote(String(input.port))}
 OPENCLAW_PACKAGE=${shellQuote(input.openClawPackage)}
 ORDER_ID=""
@@ -667,6 +687,12 @@ type OpenClawConfigShape = {
     defaults?: {
       workspace?: string
     }
+    list?: Array<{
+      default?: boolean
+      id?: string
+      name?: string
+      workspace?: string
+    }>
   }
   gateway?: {
     auth?: {
@@ -674,6 +700,28 @@ type OpenClawConfigShape = {
     }
     port?: number
   }
+}
+
+function resolveOpenClawWorkspaceDir(config: OpenClawConfigShape, homeDir: string) {
+  const listedWorkspace =
+    config.agents?.list?.find((agent) => agent.default && agent.workspace?.trim())?.workspace?.trim() ??
+    config.agents?.list?.find((agent) => agent.workspace?.trim())?.workspace?.trim()
+  const configuredWorkspace = config.agents?.defaults?.workspace?.trim()
+  const effectiveWorkspace = listedWorkspace || configuredWorkspace
+
+  if (!effectiveWorkspace) {
+    return `${homeDir}/.openclaw/workspace`
+  }
+
+  if (effectiveWorkspace.startsWith('~/')) {
+    return path.posix.join(homeDir, effectiveWorkspace.slice(2))
+  }
+
+  if (effectiveWorkspace === '~') {
+    return homeDir
+  }
+
+  return effectiveWorkspace
 }
 
 function deepMerge<T>(target: T, source: Record<string, unknown>): T {
@@ -767,6 +815,7 @@ function buildOpenClawConfig(
   openClawPort: number,
   telegramChannelConfig?: Record<string, unknown> | null,
   agentDefaultsConfig?: Record<string, unknown> | null,
+  agentListConfig?: Array<Record<string, unknown>> | null,
 ) {
   const config = deepMerge(OPENCLAW_BASE_CONFIG, userConfig)
   let runtimeConfig = deepMerge(config, {
@@ -792,6 +841,14 @@ function buildOpenClawConfig(
     })
   }
 
+  if (agentListConfig && agentListConfig.length > 0) {
+    runtimeConfig = deepMerge(runtimeConfig, {
+      agents: {
+        list: agentListConfig,
+      },
+    })
+  }
+
   if (!telegramChannelConfig) {
     return runtimeConfig
   }
@@ -809,10 +866,6 @@ function buildOpenClawAgentDefaultsConfig(agentSetup?: AgentSetup | null) {
   }
 
   const defaults: Record<string, unknown> = {}
-
-  if (agentSetup.workspace) {
-    defaults.workspace = agentSetup.workspace
-  }
 
   if (agentSetup.timeFormat) {
     defaults.timeFormat = agentSetup.timeFormat
@@ -832,6 +885,46 @@ function buildOpenClawAgentDefaultsConfig(agentSetup?: AgentSetup | null) {
   }
 
   return Object.keys(defaults).length > 0 ? defaults : null
+}
+
+function buildAgentWorkspacePath(baseWorkspace: string | null | undefined, slug: string, homeDir: string) {
+  const safeSlug = slug.replace(/[^a-z0-9-]/gi, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').toLowerCase()
+  const base = baseWorkspace?.trim() || '~/.openclaw/workspace'
+
+  if (base === '~') {
+    return path.posix.join(homeDir, safeSlug)
+  }
+
+  if (base.startsWith('~/')) {
+    return path.posix.join(homeDir, `${base.slice(2)}-${safeSlug}`)
+  }
+
+  return `${base}-${safeSlug}`
+}
+
+function buildOpenClawAgentsListConfig(
+  order: Order,
+  homeDir: string,
+  agentSetup?: AgentSetup | null,
+) {
+  const workspaceBase = agentSetup?.workspace
+  const workspaceByAgentVersionId: Record<string, string> = {}
+  const list = order.items.map((item, index) => {
+    const workspace = buildAgentWorkspacePath(workspaceBase, item.agent.slug, homeDir)
+    workspaceByAgentVersionId[item.agentVersion.id] = workspace
+
+    return {
+      default: index === 0,
+      id: item.agent.slug,
+      name: item.agent.title,
+      workspace,
+    }
+  })
+
+  return {
+    list,
+    workspaceByAgentVersionId,
+  }
 }
 
 export class DaytonaRunProvider implements RunProvider {
@@ -861,16 +954,8 @@ export class DaytonaRunProvider implements RunProvider {
 
   async createRun(order: Order, runId = `run-${Date.now()}`): Promise<Run> {
     const createdAt = nowIso()
-    const manifest = buildManifest(order, runId, createdAt)
-    const template = await buildOrderRuntimeAssets(
-      await loadOpenClawTemplate(this.openClawTemplateDir),
-      order,
-    )
     const gatewayToken = randomBytes(24).toString('hex')
     const envVars = await readOptionalEnvFile(this.envSandboxPath)
-    const telegramChannelConfig = await buildOpenClawTelegramChannelConfig(order.channelConfig)
-    const agentDefaultsConfig = buildOpenClawAgentDefaultsConfig(order.agentSetup ?? null)
-
     const sandbox = await this.client.create(
       {
         autoArchiveInterval: 60,
@@ -884,7 +969,7 @@ export class DaytonaRunProvider implements RunProvider {
           runId,
         },
         name: runId,
-        networkBlockAll: !manifest.networkEnabled,
+        networkBlockAll: !order.items.some((item) => item.agentVersion.riskProfile.network),
         public: true,
         snapshot: this.daytonaSnapshot,
       },
@@ -892,21 +977,42 @@ export class DaytonaRunProvider implements RunProvider {
     )
 
     const homeDir = await resolveUserHomeDir(sandbox)
+    const { list: agentListConfig, workspaceByAgentVersionId } = buildOpenClawAgentsListConfig(
+      order,
+      homeDir,
+      order.agentSetup ?? null,
+    )
+    const manifest = buildManifest(order, runId, createdAt, workspaceByAgentVersionId)
+    const template = await buildOrderRuntimeAssets(
+      await loadOpenClawTemplate(this.openClawTemplateDir),
+      order,
+      workspaceByAgentVersionId,
+    )
+    const telegramChannelConfig = await buildOpenClawTelegramChannelConfig(order.channelConfig)
+    const agentDefaultsConfig = buildOpenClawAgentDefaultsConfig(order.agentSetup ?? null)
     const openClawConfig = buildOpenClawConfig(
       template.config,
       gatewayToken,
       this.openClawPort,
       telegramChannelConfig,
       agentDefaultsConfig,
+      agentListConfig,
     )
+    const workspaceDir = resolveOpenClawWorkspaceDir(openClawConfig, homeDir)
     const bootstrapScript = buildBootstrapScript({
       homeDir,
       openClawPackage: this.openClawPackage,
       port: this.openClawPort,
+      workspaceDir,
     })
 
     await sandbox.process.executeCommand(
-      `bash -lc ${shellQuote(`mkdir -p ${DAYTONA_ROOT} ${STAGED_WORKSPACE_ROOT} ${homeDir}/.openclaw`)}`,
+      `bash -lc ${shellQuote(
+        `mkdir -p ${DAYTONA_ROOT} ${STAGED_WORKSPACE_ROOT} ${homeDir}/.openclaw ${[
+          workspaceDir,
+          ...Object.values(workspaceByAgentVersionId),
+        ].join(' ')}`,
+      )}`,
       undefined,
       undefined,
       20,
@@ -937,6 +1043,11 @@ export class DaytonaRunProvider implements RunProvider {
     await sandbox.fs.uploadFile(Buffer.from(bootstrapScript, 'utf8'), BOOTSTRAP_SCRIPT_PATH)
 
     for (const file of template.workspaceFiles) {
+      if (file.targetWorkspaceDir) {
+        await sandbox.fs.uploadFile(file.contents, `${file.targetWorkspaceDir}/${file.relativePath}`)
+        continue
+      }
+
       await sandbox.fs.uploadFile(file.contents, `${STAGED_WORKSPACE_ROOT}/${file.relativePath}`)
     }
 
@@ -1053,19 +1164,27 @@ export class DaytonaRunProvider implements RunProvider {
 
     const homeDir = await resolveUserHomeDir(sandbox)
     const manifest = await downloadJsonFile<DaytonaRunManifest>(sandbox, MANIFEST_PATH)
+    const telegramChannelConfig = await buildOpenClawTelegramChannelConfig(order.channelConfig)
+    const agentDefaultsConfig = buildOpenClawAgentDefaultsConfig(order.agentSetup ?? null)
+    const { list: agentListConfig, workspaceByAgentVersionId } = buildOpenClawAgentsListConfig(
+      order,
+      homeDir,
+      order.agentSetup ?? null,
+    )
     const template = await buildOrderRuntimeAssets(
       await loadOpenClawTemplate(this.openClawTemplateDir),
       order,
+      workspaceByAgentVersionId,
     )
-    const telegramChannelConfig = await buildOpenClawTelegramChannelConfig(order.channelConfig)
-    const agentDefaultsConfig = buildOpenClawAgentDefaultsConfig(order.agentSetup ?? null)
     const openClawConfig = buildOpenClawConfig(
       template.config,
       randomBytes(24).toString('hex'),
       this.openClawPort,
       telegramChannelConfig,
       agentDefaultsConfig,
+      agentListConfig,
     )
+    const workspaceDir = resolveOpenClawWorkspaceDir(openClawConfig, homeDir)
     const restartedAt = nowIso()
     const restartingStatus: DaytonaStatusFile = {
       completedAt: null,
@@ -1081,7 +1200,32 @@ export class DaytonaRunProvider implements RunProvider {
       Buffer.from(JSON.stringify(openClawConfig, null, 2), 'utf8'),
       `${homeDir}/${OPENCLAW_CONFIG_PATH}`,
     )
+    await sandbox.process.executeCommand(
+      `bash -lc ${shellQuote(
+        `mkdir -p ${[workspaceDir, ...Object.values(workspaceByAgentVersionId)].join(' ')}`,
+      )}`,
+      undefined,
+      undefined,
+      20,
+    )
+    await sandbox.fs.uploadFile(
+      Buffer.from(
+        buildBootstrapScript({
+          homeDir,
+          openClawPackage: this.openClawPackage,
+          port: this.openClawPort,
+          workspaceDir,
+        }),
+        'utf8',
+      ),
+      BOOTSTRAP_SCRIPT_PATH,
+    )
     for (const file of template.workspaceFiles) {
+      if (file.targetWorkspaceDir) {
+        await sandbox.fs.uploadFile(file.contents, `${file.targetWorkspaceDir}/${file.relativePath}`)
+        continue
+      }
+
       await sandbox.fs.uploadFile(file.contents, `${STAGED_WORKSPACE_ROOT}/${file.relativePath}`)
     }
     await writeJsonFile(sandbox, STATUS_PATH, restartingStatus)

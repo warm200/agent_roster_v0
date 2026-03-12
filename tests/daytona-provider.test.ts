@@ -341,15 +341,20 @@ test('daytona run provider stages OpenClaw and returns a signed control ui link'
   assert.equal(uploadedConfig.gateway?.mode, 'local')
   assert.equal(uploadedConfig.gateway?.bind, 'lan')
   assert.equal(uploadedConfig.gateway?.controlUi?.allowInsecureAuth, true)
-  assert.equal(uploadedConfig.agents?.defaults?.workspace, '/home/daytona/workspace/custom')
   assert.equal(uploadedConfig.agents?.defaults?.timeFormat, '24')
   assert.equal(uploadedConfig.agents?.defaults?.model?.primary, 'anthropic/claude-sonnet-4-5')
   assert.deepEqual(uploadedConfig.agents?.defaults?.model?.fallbacks, ['openai/gpt-5-mini'])
   assert.equal(uploadedConfig.agents?.defaults?.subagents?.maxConcurrent, 2)
+  assert.equal(uploadedConfig.agents?.list?.[0]?.workspace, '/home/daytona/workspace/custom-inbox-triage')
+  assert.equal(uploadedConfig.agents?.list?.[0]?.id, 'inbox-triage')
   assert.equal(uploadedConfig.channels?.telegram?.botToken, '123456:telegram-bot-token')
   assert.equal(uploadedConfig.channels?.telegram?.dmPolicy, 'allowlist')
   assert.deepEqual(uploadedConfig.channels?.telegram?.allowFrom, ['tg:77'])
   assert.equal(uploadedConfig.channels?.telegram?.groupPolicy, 'disabled')
+  assert.match(
+    sandboxes.get(created.id)?.files['/tmp/agent-roster/bootstrap-openclaw.sh'] ?? '',
+    /\/home\/daytona\/workspace\/custom-inbox-triage/,
+  )
   assert.match(
     sandboxes.get(created.id)?.files['/tmp/agent-roster/bootstrap-openclaw.sh'] ?? '',
     /openclaw gateway run/,
@@ -480,7 +485,11 @@ test('daytona run provider stages DB-sourced local agent assets into the sandbox
   const uploadedConfig = JSON.parse(sandboxFiles['/home/daytona/.openclaw/openclaw.json'] ?? '{}')
 
   assert.equal(uploadedConfig.agents?.defaults?.locale, 'en-US')
-  assert.equal(sandboxFiles['/tmp/agent-roster/workspace-seed/agents/test-writer/README.md'], '# hello')
+  assert.equal(
+    sandboxFiles['/home/daytona/workspace/custom-test-writer/README.md'],
+    '# hello',
+  )
+  assert.equal(uploadedConfig.agents?.list?.[0]?.workspace, '/home/daytona/workspace/custom-test-writer')
 })
 
 test('daytona run provider tolerates deleted sandboxes', async () => {

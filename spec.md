@@ -47,6 +47,7 @@ Implemented in the current mock app:
 - Daytona now configures OpenClaw with `gateway.mode=local`, `bind=lan`, token auth, `allowInsecureAuth`, and `~/.openclaw/workspace`, matching Daytona’s reference integration so the remote Control UI can reach the sandbox gateway instead of trying a local loopback websocket
 - Daytona now injects paired Telegram channel config into `channels.telegram` inside the sandbox `~/.openclaw/openclaw.json`, using the stored bot token plus DM allowlisting for the paired Telegram recipient
 - Daytona now also reads DB-stored local agent source snapshots from `agent_versions.run_config_snapshot`, merges any per-agent `openclaw.json`, and stages agent files into the sandbox workspace during launch/restart
+- Daytona bootstrap now copies staged agent files into the final configured OpenClaw workspace path instead of always using the default `~/.openclaw/workspace`
 - Deleted Daytona sandboxes now degrade to stale run records instead of breaking bundle/run pages
 - Bundle detail now loads order data independently from runs/download grants, so provider-side run failures no longer masquerade as “bundle not found”
 - Run detail timeline now visually reflects created/started/updated/completed state instead of rendering every row as the same muted style
