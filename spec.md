@@ -60,6 +60,7 @@ Implemented in the current mock app:
 - Backend commerce snapshot/mapping utilities now exist in `server/services/commerce.utils.ts`
 - Backend catalog service now exists in `server/services/catalog.service.ts` with DB + mock fallback logic
 - Local agent folders under `agents_file/` now upsert into the catalog tables on read, so catalog/cart/order flows stay DB-first while preserving a source pointer for later sandbox staging
+- Cart item rows now render agent thumbnails when `thumbnailUrl` exists, with the existing package icon as fallback
 - Backend cart service now exists in `server/services/cart.service.ts` with DB-backed cart summary recalculation
 - Backend order service now exists in `server/services/order.service.ts` with paid-order creation and signed-download helpers
 - Backend checkout service now exists in `server/services/checkout.service.ts` with Stripe session creation and paid-session reconciliation helpers
