@@ -50,6 +50,7 @@ Implemented in the current mock app:
 - Daytona bootstrap now copies staged agent files into the final configured OpenClaw workspace path instead of always using the default `~/.openclaw/workspace`
 - Daytona now uploads the entire DB-sourced agent folder into each agent workspace, preserving root files and nested folders instead of privileging a `workspace/` subfolder
 - Daytona now forces `agents.defaults.skipBootstrap=true` whenever uploaded agent workspace files already include OpenClaw bootstrap files like `IDENTITY.md` or `SOUL.md`, so OpenClaw does not regenerate defaults on top of staged agent content
+- Daytona multi-agent runs now set per-agent `agentDir` paths under `~/.openclaw/agents/<agent-id>/agent` and precreate those directories alongside each agent workspace, matching OpenClaw’s multi-agent registration model instead of relying on workspace paths alone
 - Deleted Daytona sandboxes now degrade to stale run records instead of breaking bundle/run pages
 - Bundle detail now loads order data independently from runs/download grants, so provider-side run failures no longer masquerade as “bundle not found”
 - Run detail timeline now visually reflects created/started/updated/completed state instead of rendering every row as the same muted style

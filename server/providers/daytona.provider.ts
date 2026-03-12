@@ -934,18 +934,35 @@ function buildAgentWorkspacePath(baseWorkspace: string | null | undefined, slug:
   return `${base}-${safeSlug}`
 }
 
+function buildAgentDirPath(slug: string, homeDir: string) {
+  const safeSlug = slug.replace(/[^a-z0-9-]/gi, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').toLowerCase()
+  return path.posix.join(homeDir, '.openclaw', 'agents', safeSlug, 'agent')
+}
+
+function buildAgentSessionsPath(slug: string, homeDir: string) {
+  const safeSlug = slug.replace(/[^a-z0-9-]/gi, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').toLowerCase()
+  return path.posix.join(homeDir, '.openclaw', 'agents', safeSlug, 'sessions')
+}
+
 function buildOpenClawAgentsListConfig(
   order: Order,
   homeDir: string,
   agentSetup?: AgentSetup | null,
 ) {
   const workspaceBase = agentSetup?.workspace
+  const agentDirByAgentVersionId: Record<string, string> = {}
+  const agentSessionsByAgentVersionId: Record<string, string> = {}
   const workspaceByAgentVersionId: Record<string, string> = {}
   const list = order.items.map((item, index) => {
     const workspace = buildAgentWorkspacePath(workspaceBase, item.agent.slug, homeDir)
+    const agentDir = buildAgentDirPath(item.agent.slug, homeDir)
+    const sessionDir = buildAgentSessionsPath(item.agent.slug, homeDir)
+    agentDirByAgentVersionId[item.agentVersion.id] = agentDir
+    agentSessionsByAgentVersionId[item.agentVersion.id] = sessionDir
     workspaceByAgentVersionId[item.agentVersion.id] = workspace
 
     return {
+      agentDir,
       default: index === 0,
       id: item.agent.slug,
       name: item.agent.title,
@@ -954,6 +971,8 @@ function buildOpenClawAgentsListConfig(
   })
 
   return {
+    agentDirByAgentVersionId,
+    agentSessionsByAgentVersionId,
     list,
     workspaceByAgentVersionId,
   }
@@ -1009,7 +1028,7 @@ export class DaytonaRunProvider implements RunProvider {
     )
 
     const homeDir = await resolveUserHomeDir(sandbox)
-    const { list: agentListConfig, workspaceByAgentVersionId } = buildOpenClawAgentsListConfig(
+    const { agentDirByAgentVersionId, agentSessionsByAgentVersionId, list: agentListConfig, workspaceByAgentVersionId } = buildOpenClawAgentsListConfig(
       order,
       homeDir,
       order.agentSetup ?? null,
@@ -1044,6 +1063,8 @@ export class DaytonaRunProvider implements RunProvider {
       `bash -lc ${shellQuote(
         `mkdir -p ${DAYTONA_ROOT} ${STAGED_WORKSPACE_ROOT} ${homeDir}/.openclaw ${[
           workspaceDir,
+          ...Object.values(agentDirByAgentVersionId),
+          ...Object.values(agentSessionsByAgentVersionId),
           ...Object.values(workspaceByAgentVersionId),
         ].join(' ')}`,
       )}`,
@@ -1200,7 +1221,7 @@ export class DaytonaRunProvider implements RunProvider {
     const manifest = await downloadJsonFile<DaytonaRunManifest>(sandbox, MANIFEST_PATH)
     const telegramChannelConfig = await buildOpenClawTelegramChannelConfig(order.channelConfig)
     const agentDefaultsConfig = buildOpenClawAgentDefaultsConfig(order.agentSetup ?? null)
-    const { list: agentListConfig, workspaceByAgentVersionId } = buildOpenClawAgentsListConfig(
+    const { agentDirByAgentVersionId, agentSessionsByAgentVersionId, list: agentListConfig, workspaceByAgentVersionId } = buildOpenClawAgentsListConfig(
       order,
       homeDir,
       order.agentSetup ?? null,
@@ -1238,7 +1259,12 @@ export class DaytonaRunProvider implements RunProvider {
     )
     await sandbox.process.executeCommand(
       `bash -lc ${shellQuote(
-        `mkdir -p ${[workspaceDir, ...Object.values(workspaceByAgentVersionId)].join(' ')}`,
+        `mkdir -p ${[
+          workspaceDir,
+          ...Object.values(agentDirByAgentVersionId),
+          ...Object.values(agentSessionsByAgentVersionId),
+          ...Object.values(workspaceByAgentVersionId),
+        ].join(' ')}`,
       )}`,
       undefined,
       undefined,

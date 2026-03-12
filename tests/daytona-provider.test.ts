@@ -36,6 +36,28 @@ afterEach(async () => {
   )
 })
 
+async function createLocalAgentFixture(rootDir: string, slug: string, options: { locale?: string } = {}) {
+  const agentDir = path.join(rootDir, slug)
+  await mkdir(path.join(agentDir, 'avatars'), { recursive: true })
+  await mkdir(path.join(agentDir, 'workspace'), { recursive: true })
+  await writeFile(path.join(agentDir, 'IDENTITY.md'), `# ${slug} identity`)
+  await writeFile(path.join(agentDir, 'SOUL.md'), `# ${slug} soul`)
+  await writeFile(path.join(agentDir, 'avatars', 'avatar.png'), `${slug}-png`)
+  await writeFile(
+    path.join(agentDir, 'openclaw.json'),
+    JSON.stringify({
+      agents: {
+        defaults: {
+          ...(options.locale ? { locale: options.locale } : {}),
+        },
+      },
+    }),
+  )
+  await writeFile(path.join(agentDir, 'workspace', 'README.md'), `# ${slug} hello`)
+
+  return agentDir
+}
+
 const order: Order = {
   amountCents: 2900,
   bundleRisk: {
@@ -376,23 +398,7 @@ test('daytona run provider stages OpenClaw and returns a signed control ui link'
 test('daytona run provider stages DB-sourced local agent assets into the sandbox workspace', async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), 'daytona-local-agent-'))
   tempDirs.push(rootDir)
-  const agentDir = path.join(rootDir, 'test-writer')
-  await mkdir(path.join(agentDir, 'avatars'), { recursive: true })
-  await mkdir(path.join(agentDir, 'workspace'), { recursive: true })
-  await writeFile(path.join(agentDir, 'IDENTITY.md'), '# identity')
-  await writeFile(path.join(agentDir, 'SOUL.md'), '# soul')
-  await writeFile(path.join(agentDir, 'avatars', 'avatar.png'), 'png')
-  await writeFile(
-    path.join(agentDir, 'openclaw.json'),
-    JSON.stringify({
-      agents: {
-        defaults: {
-          locale: 'en-US',
-        },
-      },
-    }),
-  )
-  await writeFile(path.join(agentDir, 'workspace', 'README.md'), '# hello')
+  const agentDir = await createLocalAgentFixture(rootDir, 'test-writer', { locale: 'en-US' })
 
   const localOrder: Order = {
     ...order,
@@ -418,19 +424,25 @@ test('daytona run provider stages DB-sourced local agent assets into the sandbox
     })),
   }
 
-  const sandboxes = new Map<string, Record<string, string>>()
+  const sandboxes = new Map<
+    string,
+    {
+      files: Record<string, string>
+      processCommands: string[]
+    }
+  >()
   const provider = new DaytonaRunProvider({
     apiKey: 'daytona-test',
     clientFactory: () => ({
       async create(params) {
         const runId = String(params?.name)
-        sandboxes.set(runId, {})
+        sandboxes.set(runId, { files: {}, processCommands: [] })
 
         return {
           createdAt: new Date().toISOString(),
           fs: {
             async downloadFile(filePath: string) {
-              const value = sandboxes.get(runId)?.[filePath]
+              const value = sandboxes.get(runId)?.files[filePath]
               if (value === undefined) {
                 const error = new Error(`404 ${filePath}`)
                 ;(error as Error & { status: number }).status = 404
@@ -442,7 +454,7 @@ test('daytona run provider stages DB-sourced local agent assets into the sandbox
             async uploadFile(file: Buffer, filePath: string) {
               const sandbox = sandboxes.get(runId)
               if (sandbox) {
-                sandbox[filePath] = file.toString('utf8')
+                sandbox.files[filePath] = file.toString('utf8')
               }
             },
           },
@@ -452,10 +464,11 @@ test('daytona run provider stages DB-sourced local agent assets into the sandbox
           id: runId,
           process: {
             async executeCommand(command: string) {
+              sandboxes.get(runId)?.processCommands.push(command)
               if (command.includes('nohup /tmp/agent-roster/bootstrap-openclaw.sh')) {
                 const sandbox = sandboxes.get(runId)
                 if (sandbox) {
-                  sandbox['/tmp/agent-roster/status.json'] = JSON.stringify({
+                  sandbox.files['/tmp/agent-roster/status.json'] = JSON.stringify({
                     completedAt: new Date().toISOString(),
                     resultSummary:
                       'Managed runtime is ready for bundle order-test-1. Open Control UI to continue.',
@@ -463,7 +476,7 @@ test('daytona run provider stages DB-sourced local agent assets into the sandbox
                     status: 'completed',
                     updatedAt: new Date().toISOString(),
                   })
-                  sandbox['/tmp/agent-roster/result.json'] = JSON.stringify({
+                  sandbox.files['/tmp/agent-roster/result.json'] = JSON.stringify({
                     artifacts: [],
                     summary:
                       'Managed runtime is ready for bundle order-test-1. Open Control UI to continue.',
@@ -484,24 +497,33 @@ test('daytona run provider stages DB-sourced local agent assets into the sandbox
   })
 
   const created = await provider.createRun(localOrder, 'run-local-assets')
-  const sandboxFiles = sandboxes.get(created.id) ?? {}
+  const sandboxState = sandboxes.get(created.id)
+  assert.ok(sandboxState)
+  const sandboxFiles = sandboxState.files
   const uploadedConfig = JSON.parse(sandboxFiles['/home/daytona/.openclaw/openclaw.json'] ?? '{}')
 
   assert.equal(uploadedConfig.agents?.defaults?.locale, 'en-US')
   assert.equal(uploadedConfig.agents?.defaults?.skipBootstrap, true)
+  assert.equal(uploadedConfig.agents?.list?.[0]?.agentDir, '/home/daytona/.openclaw/agents/test-writer/agent')
   assert.equal(
     sandboxFiles['/home/daytona/workspace/custom-test-writer/README.md'],
     undefined,
   )
   assert.equal(
     sandboxFiles['/home/daytona/workspace/custom-test-writer/workspace/README.md'],
-    '# hello',
+    '# test-writer hello',
   )
-  assert.equal(sandboxFiles['/home/daytona/workspace/custom-test-writer/IDENTITY.md'], '# identity')
-  assert.equal(sandboxFiles['/home/daytona/workspace/custom-test-writer/SOUL.md'], '# soul')
+  assert.equal(
+    sandboxFiles['/home/daytona/workspace/custom-test-writer/IDENTITY.md'],
+    '# test-writer identity',
+  )
+  assert.equal(
+    sandboxFiles['/home/daytona/workspace/custom-test-writer/SOUL.md'],
+    '# test-writer soul',
+  )
   assert.equal(
     sandboxFiles['/home/daytona/workspace/custom-test-writer/avatars/avatar.png'],
-    'png',
+    'test-writer-png',
   )
   assert.equal(
     sandboxFiles['/home/daytona/workspace/custom-test-writer/openclaw.json'],
@@ -514,6 +536,194 @@ test('daytona run provider stages DB-sourced local agent assets into the sandbox
     }),
   )
   assert.equal(uploadedConfig.agents?.list?.[0]?.workspace, '/home/daytona/workspace/custom-test-writer')
+  assert.match(
+    sandboxState.processCommands.find((command) => command.includes('mkdir -p')) ?? '',
+    /\/home\/daytona\/\.openclaw\/agents\/test-writer\/agent/,
+  )
+})
+
+test('daytona run provider registers multiple purchased agents with agent dirs and workspaces', async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), 'daytona-local-agents-'))
+  tempDirs.push(rootDir)
+  const writerDir = await createLocalAgentFixture(rootDir, 'test-writer', { locale: 'en-US' })
+  const architectDir = await createLocalAgentFixture(rootDir, 'backend-architect')
+
+  const multiAgentOrder: Order = {
+    ...order,
+    amountCents: 5800,
+    bundleRisk: {
+      highestRiskDriver: 'Backend Architect',
+      level: 'medium',
+      summary: 'Multi-agent test order.',
+    },
+    items: [
+      {
+        ...order.items[0],
+        id: 'order-item-writer',
+        priceCents: 2900,
+        agent: {
+          ...order.items[0].agent,
+          id: 'agent-writer',
+          slug: 'test-writer',
+          title: 'Test Writer',
+        },
+        agentVersion: {
+          ...order.items[0].agentVersion,
+          id: 'ver-writer',
+          agentId: 'agent-writer',
+          runConfigSnapshot: JSON.stringify({
+            source: {
+              kind: 'local-folder',
+              slug: 'test-writer',
+              sourceRootRelativePath: path.relative(process.cwd(), writerDir).split(path.sep).join('/'),
+              openClawConfigRelativePath: 'openclaw.json',
+              stagingRelativePath: 'agents/test-writer',
+              avatarRelativePath: null,
+            },
+          }),
+        },
+      },
+      {
+        ...order.items[0],
+        id: 'order-item-architect',
+        priceCents: 2900,
+        agent: {
+          ...order.items[0].agent,
+          id: 'agent-architect',
+          slug: 'backend-architect',
+          title: 'Backend Architect',
+        },
+        agentVersion: {
+          ...order.items[0].agentVersion,
+          id: 'ver-architect',
+          agentId: 'agent-architect',
+          runConfigSnapshot: JSON.stringify({
+            source: {
+              kind: 'local-folder',
+              slug: 'backend-architect',
+              sourceRootRelativePath: path.relative(process.cwd(), architectDir).split(path.sep).join('/'),
+              openClawConfigRelativePath: 'openclaw.json',
+              stagingRelativePath: 'agents/backend-architect',
+              avatarRelativePath: null,
+            },
+          }),
+        },
+      },
+    ],
+  }
+
+  const sandboxes = new Map<
+    string,
+    {
+      files: Record<string, string>
+      processCommands: string[]
+    }
+  >()
+
+  const provider = new DaytonaRunProvider({
+    apiKey: 'daytona-test',
+    clientFactory: () => ({
+      async create(params) {
+        const runId = String(params?.name)
+        sandboxes.set(runId, { files: {}, processCommands: [] })
+
+        return {
+          createdAt: new Date().toISOString(),
+          fs: {
+            async downloadFile(filePath: string) {
+              const value = sandboxes.get(runId)?.files[filePath]
+              if (value === undefined) {
+                const error = new Error(`404 ${filePath}`)
+                ;(error as Error & { status: number }).status = 404
+                throw error
+              }
+
+              return Buffer.from(value, 'utf8')
+            },
+            async uploadFile(file: Buffer, filePath: string) {
+              const sandbox = sandboxes.get(runId)
+              if (sandbox) {
+                sandbox.files[filePath] = file.toString('utf8')
+              }
+            },
+          },
+          getSignedPreviewUrl: async () => ({
+            url: 'https://18789-demo.proxy.daytona.works',
+          }),
+          id: runId,
+          process: {
+            async executeCommand(command: string) {
+              sandboxes.get(runId)?.processCommands.push(command)
+              if (command.includes('nohup /tmp/agent-roster/bootstrap-openclaw.sh')) {
+                const sandbox = sandboxes.get(runId)
+                if (sandbox) {
+                  sandbox.files['/tmp/agent-roster/status.json'] = JSON.stringify({
+                    completedAt: new Date().toISOString(),
+                    resultSummary:
+                      'Managed runtime is ready for bundle order-test-1. Open Control UI to continue.',
+                    startedAt: new Date().toISOString(),
+                    status: 'completed',
+                    updatedAt: new Date().toISOString(),
+                  })
+                  sandbox.files['/tmp/agent-roster/result.json'] = JSON.stringify({
+                    artifacts: [],
+                    summary:
+                      'Managed runtime is ready for bundle order-test-1. Open Control UI to continue.',
+                  })
+                }
+              }
+
+              return { exitCode: 0, result: '' }
+            },
+          },
+          state: SandboxState.STARTED,
+        }
+      },
+      async get() {
+        throw new Error('not used')
+      },
+    }),
+  })
+
+  const created = await provider.createRun(multiAgentOrder, 'run-multi-agent-assets')
+  const sandboxState = sandboxes.get(created.id)
+  assert.ok(sandboxState)
+  const uploadedConfig = JSON.parse(
+    sandboxState.files['/home/daytona/.openclaw/openclaw.json'] ?? '{}',
+  )
+
+  assert.equal(uploadedConfig.agents?.list?.length, 2)
+  assert.deepEqual(
+    uploadedConfig.agents?.list?.map((agent: { id?: string; workspace?: string; agentDir?: string }) => ({
+      agentDir: agent.agentDir,
+      id: agent.id,
+      workspace: agent.workspace,
+    })),
+    [
+      {
+        agentDir: '/home/daytona/.openclaw/agents/test-writer/agent',
+        id: 'test-writer',
+        workspace: '/home/daytona/workspace/custom-test-writer',
+      },
+      {
+        agentDir: '/home/daytona/.openclaw/agents/backend-architect/agent',
+        id: 'backend-architect',
+        workspace: '/home/daytona/workspace/custom-backend-architect',
+      },
+    ],
+  )
+  assert.equal(
+    sandboxState.files['/home/daytona/workspace/custom-test-writer/IDENTITY.md'],
+    '# test-writer identity',
+  )
+  assert.equal(
+    sandboxState.files['/home/daytona/workspace/custom-backend-architect/IDENTITY.md'],
+    '# backend-architect identity',
+  )
+  assert.match(
+    sandboxState.processCommands.find((command) => command.includes('mkdir -p')) ?? '',
+    /\/home\/daytona\/\.openclaw\/agents\/backend-architect\/agent/,
+  )
 })
 
 test('daytona run provider tolerates deleted sandboxes', async () => {
