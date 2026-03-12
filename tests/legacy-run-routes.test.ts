@@ -162,6 +162,9 @@ function installServiceStubs() {
     async listOrdersForUser() {
       return [fixtureOrder]
     },
+    async updateOrderAgentSetupForUser() {
+      return fixtureOrder
+    },
     async resolveSignedDownload() {
       return '/downloads/agent-test.zip'
     },
