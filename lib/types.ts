@@ -6,6 +6,7 @@ export type RiskLevel = 'low' | 'medium' | 'high'
 // Run statuses
 export type RunStatus = 'provisioning' | 'running' | 'completed' | 'failed'
 export type AgentTimeFormat = 'auto' | '12' | '24'
+export type AgentProviderKeyName = 'anthropic' | 'google' | 'openai' | 'openrouter'
 
 // Order statuses
 export type OrderStatus = 'pending' | 'paid' | 'failed' | 'refunded'
@@ -120,11 +121,13 @@ export interface RunChannelConfig {
 }
 
 export interface AgentSetup {
+  defaultAgentSlug: string | null
   workspace: string | null
   timeFormat: AgentTimeFormat
   modelPrimary: string | null
   modelFallbacks: string[]
   subagentsMaxConcurrent: number | null
+  providerKeyStatus: Record<AgentProviderKeyName, boolean>
 }
 
 // Order

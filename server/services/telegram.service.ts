@@ -1,9 +1,10 @@
-import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes } from 'node:crypto'
+import { createHmac } from 'node:crypto'
 
 import { and, eq } from 'drizzle-orm'
 
 import { createDb, type DbClient } from '../db'
 import { orders, runChannelConfigs } from '../db/schema'
+import { EncryptedSecretStore } from '../lib/encrypted-secret-store'
 import { HttpError } from '../lib/http'
 import type { RunChannelConfig } from '@/lib/types'
 
@@ -189,48 +190,6 @@ class DatabaseTelegramRepository implements TelegramRepository {
   }
 }
 
-class EnvSecretStore implements SecretStore {
-  private readonly key: Buffer
-
-  constructor(secretSeed: string) {
-    this.key = createHash('sha256').update(secretSeed).digest()
-  }
-
-  async write(value: string) {
-    const iv = randomBytes(12)
-    const cipher = createCipheriv('aes-256-gcm', this.key, iv)
-    const encrypted = Buffer.concat([cipher.update(value, 'utf8'), cipher.final()])
-    const tag = cipher.getAuthTag()
-
-    return ['enc', iv.toString('base64url'), tag.toString('base64url'), encrypted.toString('base64url')].join(':')
-  }
-
-  async read(ref: string) {
-    const [prefix, ivPart, tagPart, dataPart] = ref.split(':')
-
-    if (prefix !== 'enc' || !ivPart || !tagPart || !dataPart) {
-      throw new HttpError(500, 'Stored Telegram secret is invalid.')
-    }
-
-    try {
-      const decipher = createDecipheriv('aes-256-gcm', this.key, Buffer.from(ivPart, 'base64url'))
-      decipher.setAuthTag(Buffer.from(tagPart, 'base64url'))
-
-      const decrypted = Buffer.concat([
-        decipher.update(Buffer.from(dataPart, 'base64url')),
-        decipher.final(),
-      ])
-
-      return decrypted.toString('utf8')
-    } catch {
-      throw new HttpError(
-        409,
-        'Stored Telegram bot credentials can no longer be decrypted. Disconnect and reconnect the bot.',
-      )
-    }
-  }
-}
-
 function resolveTelegramSecretSeed(secretSeed?: string) {
   const resolved = secretSeed ?? process.env.TELEGRAM_SECRET_SEED ?? process.env.AUTH_SECRET
 
@@ -370,7 +329,12 @@ export function createTelegramService(options: CreateTelegramServiceOptions = {}
   const requiredSecretSeed = secretSeed
 
   const repository = options.repository ?? new DatabaseTelegramRepository()
-  const secretStore = options.secretStore ?? new EnvSecretStore(secretSeed)
+  const secretStore =
+    options.secretStore ??
+    new EncryptedSecretStore(
+      secretSeed,
+      'Stored Telegram bot credentials can no longer be decrypted. Disconnect and reconnect the bot.',
+    )
   const apiClient = options.apiClient ?? new TelegramFetchClient()
 
   async function refreshPendingPairing(context: OrderChannelContext) {
@@ -574,7 +538,10 @@ export async function buildOpenClawTelegramChannelConfig(
     return null
   }
 
-  const secretStore = new EnvSecretStore(resolveTelegramSecretSeed(options.secretSeed))
+  const secretStore = new EncryptedSecretStore(
+    resolveTelegramSecretSeed(options.secretSeed),
+    'Stored Telegram bot credentials can no longer be decrypted. Disconnect and reconnect the bot.',
+  )
   const botToken = await secretStore.read(config.botTokenSecretRef)
 
   return {

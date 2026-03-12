@@ -1,15 +1,15 @@
 import type { Order, Run, RunLog, RunResult } from '@/lib/types'
 
 import { MockRunProvider } from './mock.provider'
-import type { RunProvider } from './run-provider.interface'
+import type { RunProvider, RunProviderRuntimeConfig } from './run-provider.interface'
 
 export class OpenClawRunProvider implements RunProvider {
   readonly name = 'openclaw'
 
   private readonly fallback = new MockRunProvider()
 
-  async createRun(order: Order, runId?: string): Promise<Run> {
-    return this.fallback.createRun(order, runId)
+  async createRun(order: Order, runId?: string, runtimeConfig?: RunProviderRuntimeConfig): Promise<Run> {
+    return this.fallback.createRun(order, runId, runtimeConfig)
   }
 
   async getStatus(runId: string): Promise<Run | null> {

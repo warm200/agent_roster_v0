@@ -1,4 +1,4 @@
-import type { Agent, AgentSetup, Order, RunChannelConfig } from '@/lib/types'
+import type { Agent, AgentProviderKeyName, AgentSetup, Order, RunChannelConfig } from '@/lib/types'
 
 import { getJson, patchJson, postJson } from './api'
 
@@ -32,9 +32,21 @@ export async function getOrder(orderId: string) {
   return getJson<Order>(`/api/me/orders/${orderId}`)
 }
 
-export async function updateOrderAgentSetup(orderId: string, agentSetup: AgentSetup) {
-  return patchJson<Order, { agentSetup: AgentSetup }>(`/api/me/orders/${orderId}`, {
-    agentSetup,
+export async function updateOrderAgentSetup(
+  orderId: string,
+  payload: {
+    agentSetup: Omit<AgentSetup, 'providerKeyStatus'>
+    vendorApiKeys?: Partial<Record<AgentProviderKeyName, string>>
+  },
+) {
+  return patchJson<
+    Order,
+    {
+      agentSetup: Omit<AgentSetup, 'providerKeyStatus'>
+      vendorApiKeys?: Partial<Record<AgentProviderKeyName, string>>
+    }
+  >(`/api/me/orders/${orderId}`, {
+    ...payload,
   })
 }
 

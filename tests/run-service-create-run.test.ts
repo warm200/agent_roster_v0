@@ -152,6 +152,10 @@ test('run service refreshes telegram pairing state before launch checks', async 
       calls.push('loadOrder')
       return order
     },
+    getOrderProviderApiKeysForUser: async () => {
+      calls.push('loadProviderKeys')
+      return {}
+    },
     getRunProvider: () => ({
       name: 'test',
       createRun: async (_order, runId) => {
@@ -181,5 +185,10 @@ test('run service refreshes telegram pairing state before launch checks', async 
   assert.match(run.id, /^run-/)
   assert.equal(run.status, 'provisioning')
   assert.equal(run.orderId, 'order-test-1')
-  assert.deepEqual(calls, ['telegram.getChannelConfig', 'loadOrder', 'provider.createRun'])
+  assert.deepEqual(calls, [
+    'telegram.getChannelConfig',
+    'loadOrder',
+    'loadProviderKeys',
+    'provider.createRun',
+  ])
 })

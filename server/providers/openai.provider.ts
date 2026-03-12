@@ -1,7 +1,7 @@
 import type { Order, Run, RunArtifact, RunLog, RunResult } from '@/lib/types'
 
 import { HttpError } from '../lib/http'
-import type { RunProvider } from './run-provider.interface'
+import type { RunProvider, RunProviderRuntimeConfig } from './run-provider.interface'
 
 type OpenAIResponseStatus =
   | 'queued'
@@ -155,7 +155,11 @@ export class OpenAIRunProvider implements RunProvider {
     this.model = options.model ?? process.env.OPENAI_RUN_MODEL ?? 'gpt-5'
   }
 
-  async createRun(order: Order, runId = `run-${Date.now()}`): Promise<Run> {
+  async createRun(
+    order: Order,
+    runId = `run-${Date.now()}`,
+    _runtimeConfig?: RunProviderRuntimeConfig,
+  ): Promise<Run> {
     const createdAt = new Date().toISOString()
     const baseRun = buildRun(order, runId, createdAt)
     const response = await this.request<OpenAIResponsePayload>('/responses', {

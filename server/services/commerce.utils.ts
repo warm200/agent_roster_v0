@@ -8,6 +8,7 @@ import {
   cartSchema,
   orderItemSchema,
   orderSchema,
+  providerKeyStatusSchema,
   runChannelConfigSchema,
 } from '@/lib/schemas'
 import type {
@@ -176,7 +177,28 @@ export function buildAgentSetupSnapshot(config: Record<string, unknown> | null):
     return null
   }
 
-  return agentSetupSchema.parse(config)
+  const providerApiKeySecretRefs =
+    config.providerApiKeySecretRefs &&
+    typeof config.providerApiKeySecretRefs === 'object' &&
+    !Array.isArray(config.providerApiKeySecretRefs)
+      ? (config.providerApiKeySecretRefs as Record<string, unknown>)
+      : {}
+
+  return agentSetupSchema.parse({
+    defaultAgentSlug: typeof config.defaultAgentSlug === 'string' ? config.defaultAgentSlug : null,
+    workspace: typeof config.workspace === 'string' ? config.workspace : null,
+    timeFormat: config.timeFormat,
+    modelPrimary: typeof config.modelPrimary === 'string' ? config.modelPrimary : null,
+    modelFallbacks: Array.isArray(config.modelFallbacks) ? config.modelFallbacks : [],
+    subagentsMaxConcurrent:
+      typeof config.subagentsMaxConcurrent === 'number' ? config.subagentsMaxConcurrent : null,
+    providerKeyStatus: providerKeyStatusSchema.parse({
+      anthropic: Boolean(providerApiKeySecretRefs.anthropic),
+      google: Boolean(providerApiKeySecretRefs.google),
+      openai: Boolean(providerApiKeySecretRefs.openai),
+      openrouter: Boolean(providerApiKeySecretRefs.openrouter),
+    }),
+  })
 }
 
 export function buildCartItemSnapshot(row: CartItemRow): CartItem {

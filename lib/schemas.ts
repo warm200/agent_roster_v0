@@ -2,6 +2,7 @@ import { z } from 'zod'
 
 import {
   AGENT_CATEGORIES,
+  AGENT_PROVIDER_KEY_NAMES,
   AGENT_STATUSES,
   AGENT_TIME_FORMATS,
   CART_STATUSES,
@@ -31,6 +32,7 @@ export const channelTypeSchema = z.enum(CHANNEL_TYPES)
 export const channelScopeSchema = z.enum(CHANNEL_SCOPES)
 export const logLevelSchema = z.enum(LOG_LEVELS)
 export const messageRoleSchema = z.enum(MESSAGE_ROLES)
+export const agentProviderKeyNameSchema = z.enum(AGENT_PROVIDER_KEY_NAMES)
 
 export const riskProfileSchema = z.object({
   id: z.string().min(1),
@@ -123,12 +125,31 @@ export const runChannelConfigSchema = z.object({
   updatedAt: timestampSchema,
 })
 
-export const agentSetupSchema = z.object({
+export const providerKeyStatusSchema = z.object({
+  anthropic: z.boolean(),
+  google: z.boolean(),
+  openai: z.boolean(),
+  openrouter: z.boolean(),
+})
+
+export const providerApiKeysUpdateSchema = z.object({
+  anthropic: z.string().min(1).max(4096).optional(),
+  google: z.string().min(1).max(4096).optional(),
+  openai: z.string().min(1).max(4096).optional(),
+  openrouter: z.string().min(1).max(4096).optional(),
+})
+
+export const agentSetupUpdateSchema = z.object({
+  defaultAgentSlug: z.string().min(1).nullable(),
   workspace: z.string().min(1).nullable(),
   timeFormat: agentTimeFormatSchema,
   modelPrimary: z.string().min(1).nullable(),
   modelFallbacks: z.array(z.string().min(1)),
   subagentsMaxConcurrent: z.number().int().positive().max(16).nullable(),
+})
+
+export const agentSetupSchema = agentSetupUpdateSchema.extend({
+  providerKeyStatus: providerKeyStatusSchema,
 })
 
 export const orderSchema = z.object({
@@ -233,7 +254,8 @@ export const previewInterviewRequestSchema = z.object({
 })
 
 export const updateOrderAgentSetupRequestSchema = z.object({
-  agentSetup: agentSetupSchema,
+  agentSetup: agentSetupUpdateSchema,
+  vendorApiKeys: providerApiKeysUpdateSchema.optional(),
 })
 
 export const apiErrorSchema = z.object({

@@ -67,10 +67,17 @@ const order: Order = {
   },
   cartId: 'cart-test-1',
   agentSetup: {
+    defaultAgentSlug: 'inbox-triage',
     workspace: '/home/daytona/workspace/custom',
     timeFormat: '24',
     modelPrimary: 'anthropic/claude-sonnet-4-5',
     modelFallbacks: ['openai/gpt-5-mini'],
+    providerKeyStatus: {
+      anthropic: true,
+      google: false,
+      openai: true,
+      openrouter: false,
+    },
     subagentsMaxConcurrent: 2,
   },
   channelConfig: {
@@ -335,7 +342,12 @@ test('daytona run provider stages OpenClaw and returns a signed control ui link'
     }),
   })
 
-  const created = await provider.createRun(order)
+  const created = await provider.createRun(order, undefined, {
+    providerApiKeys: {
+      anthropic: 'sk-ant-runtime',
+      openai: 'sk-openai-runtime',
+    },
+  })
   assert.equal(created.status, 'provisioning')
   assert.equal(created.usesRealWorkspace, true)
   assert.equal(created.networkEnabled, true)
@@ -367,8 +379,11 @@ test('daytona run provider stages OpenClaw and returns a signed control ui link'
   assert.equal(uploadedConfig.agents?.defaults?.model?.primary, 'anthropic/claude-sonnet-4-5')
   assert.deepEqual(uploadedConfig.agents?.defaults?.model?.fallbacks, ['openai/gpt-5-mini'])
   assert.equal(uploadedConfig.agents?.defaults?.subagents?.maxConcurrent, 2)
+  assert.equal(uploadedConfig.agents?.list?.[0]?.default, true)
   assert.equal(uploadedConfig.agents?.list?.[0]?.workspace, '/home/daytona/workspace/custom-inbox-triage')
   assert.equal(uploadedConfig.agents?.list?.[0]?.id, 'inbox-triage')
+  assert.equal(uploadedConfig.env?.ANTHROPIC_API_KEY, 'sk-ant-runtime')
+  assert.equal(uploadedConfig.env?.OPENAI_API_KEY, 'sk-openai-runtime')
   assert.equal(uploadedConfig.channels?.telegram?.botToken, '123456:telegram-bot-token')
   assert.equal(uploadedConfig.channels?.telegram?.dmPolicy, 'allowlist')
   assert.deepEqual(uploadedConfig.channels?.telegram?.allowFrom, ['tg:77'])
@@ -550,6 +565,20 @@ test('daytona run provider registers multiple purchased agents with agent dirs a
 
   const multiAgentOrder: Order = {
     ...order,
+    agentSetup: {
+      defaultAgentSlug: 'backend-architect',
+      workspace: order.agentSetup?.workspace ?? null,
+      timeFormat: order.agentSetup?.timeFormat ?? 'auto',
+      modelPrimary: order.agentSetup?.modelPrimary ?? null,
+      modelFallbacks: order.agentSetup?.modelFallbacks ?? [],
+      providerKeyStatus: order.agentSetup?.providerKeyStatus ?? {
+        anthropic: false,
+        google: false,
+        openai: false,
+        openrouter: false,
+      },
+      subagentsMaxConcurrent: order.agentSetup?.subagentsMaxConcurrent ?? null,
+    },
     amountCents: 5800,
     bundleRisk: {
       highestRiskDriver: 'Backend Architect',
@@ -714,6 +743,8 @@ test('daytona run provider registers multiple purchased agents with agent dirs a
   )
   assert.deepEqual(uploadedConfig.tools?.agentToAgent?.allow, ['test-writer', 'backend-architect'])
   assert.equal(uploadedConfig.tools?.agentToAgent?.enabled, true)
+  assert.equal(uploadedConfig.agents?.list?.[0]?.default, false)
+  assert.equal(uploadedConfig.agents?.list?.[1]?.default, true)
   assert.deepEqual(uploadedConfig.agents?.list?.[0]?.subagents?.allowAgents, [
     'test-writer',
     'backend-architect',

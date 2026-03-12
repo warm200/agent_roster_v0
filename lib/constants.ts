@@ -12,6 +12,7 @@ export const CHANNEL_TYPES = ['telegram'] as const
 export const CHANNEL_SCOPES = ['run'] as const
 export const LOG_LEVELS = ['info', 'warn', 'error', 'debug'] as const
 export const MESSAGE_ROLES = ['user', 'assistant'] as const
+export const AGENT_PROVIDER_KEY_NAMES = ['anthropic', 'google', 'openai', 'openrouter'] as const
 
 export const DEFAULT_CURRENCY = 'USD'
 

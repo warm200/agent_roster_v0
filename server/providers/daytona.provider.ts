@@ -9,7 +9,7 @@ import type { AgentSetup, Order, Run, RunLog, RunResult, RunStatus } from '@/lib
 import { HttpError, logServerError } from '../lib/http'
 import { loadRuntimeAssetsFromSnapshot } from '../services/local-agent-files'
 import { buildOpenClawTelegramChannelConfig } from '../services/telegram.service'
-import type { RunControlUiLink, RunProvider } from './run-provider.interface'
+import type { RunControlUiLink, RunProvider, RunProviderRuntimeConfig } from './run-provider.interface'
 
 type DaytonaRunManifest = {
   agentWorkspaces: Record<string, string>
@@ -816,6 +816,7 @@ function buildOpenClawConfig(
   telegramChannelConfig?: Record<string, unknown> | null,
   agentDefaultsConfig?: Record<string, unknown> | null,
   agentListConfig?: Array<Record<string, unknown>> | null,
+  providerEnvConfig?: Record<string, string> | null,
   multiAgentToolsConfig?: Record<string, unknown> | null,
   skipBootstrap = false,
 ) {
@@ -864,6 +865,12 @@ function buildOpenClawConfig(
   if (multiAgentToolsConfig) {
     runtimeConfig = deepMerge(runtimeConfig, {
       tools: multiAgentToolsConfig,
+    })
+  }
+
+  if (providerEnvConfig) {
+    runtimeConfig = deepMerge(runtimeConfig, {
+      env: providerEnvConfig,
     })
   }
 
@@ -926,6 +933,34 @@ function buildOpenClawAgentDefaultsConfig(agentSetup?: AgentSetup | null) {
   return Object.keys(defaults).length > 0 ? defaults : null
 }
 
+function buildOpenClawProviderEnvConfig(runtimeConfig?: RunProviderRuntimeConfig) {
+  const providerApiKeys = runtimeConfig?.providerApiKeys
+
+  if (!providerApiKeys) {
+    return null
+  }
+
+  const env: Record<string, string> = {}
+
+  if (providerApiKeys.anthropic) {
+    env.ANTHROPIC_API_KEY = providerApiKeys.anthropic
+  }
+
+  if (providerApiKeys.google) {
+    env.GEMINI_API_KEY = providerApiKeys.google
+  }
+
+  if (providerApiKeys.openai) {
+    env.OPENAI_API_KEY = providerApiKeys.openai
+  }
+
+  if (providerApiKeys.openrouter) {
+    env.OPENROUTER_API_KEY = providerApiKeys.openrouter
+  }
+
+  return Object.keys(env).length > 0 ? env : null
+}
+
 function buildAgentWorkspacePath(baseWorkspace: string | null | undefined, slug: string, homeDir: string) {
   const safeSlug = slug.replace(/[^a-z0-9-]/gi, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').toLowerCase()
   const base = baseWorkspace?.trim() || '~/.openclaw/workspace'
@@ -957,11 +992,15 @@ function buildOpenClawAgentsListConfig(
   agentSetup?: AgentSetup | null,
 ) {
   const agentIds = order.items.map((item) => item.agent.slug)
+  const selectedDefaultAgentSlug =
+    agentSetup?.defaultAgentSlug && agentIds.includes(agentSetup.defaultAgentSlug)
+      ? agentSetup.defaultAgentSlug
+      : (agentIds[0] ?? null)
   const workspaceBase = agentSetup?.workspace
   const agentDirByAgentVersionId: Record<string, string> = {}
   const agentSessionsByAgentVersionId: Record<string, string> = {}
   const workspaceByAgentVersionId: Record<string, string> = {}
-  const list = order.items.map((item, index) => {
+  const list = order.items.map((item) => {
     const workspace = buildAgentWorkspacePath(workspaceBase, item.agent.slug, homeDir)
     const agentDir = buildAgentDirPath(item.agent.slug, homeDir)
     const sessionDir = buildAgentSessionsPath(item.agent.slug, homeDir)
@@ -971,7 +1010,7 @@ function buildOpenClawAgentsListConfig(
 
     return {
       agentDir,
-      default: index === 0,
+      default: item.agent.slug === selectedDefaultAgentSlug,
       id: item.agent.slug,
       name: item.agent.title,
       ...(agentIds.length > 1
@@ -1033,7 +1072,11 @@ export class DaytonaRunProvider implements RunProvider {
     this.openClawPackage = process.env.OPENCLAW_PACKAGE ?? DEFAULT_OPENCLAW_PACKAGE
   }
 
-  async createRun(order: Order, runId = `run-${Date.now()}`): Promise<Run> {
+  async createRun(
+    order: Order,
+    runId = `run-${Date.now()}`,
+    runtimeConfig?: RunProviderRuntimeConfig,
+  ): Promise<Run> {
     const createdAt = nowIso()
     const gatewayToken = randomBytes(24).toString('hex')
     const envVars = await readOptionalEnvFile(this.envSandboxPath)
@@ -1071,6 +1114,7 @@ export class DaytonaRunProvider implements RunProvider {
     )
     const telegramChannelConfig = await buildOpenClawTelegramChannelConfig(order.channelConfig)
     const agentDefaultsConfig = buildOpenClawAgentDefaultsConfig(order.agentSetup ?? null)
+    const providerEnvConfig = buildOpenClawProviderEnvConfig(runtimeConfig)
     const multiAgentToolsConfig = buildOpenClawMultiAgentToolsConfig(order)
     const skipBootstrap = shouldSkipOpenClawBootstrap(template.workspaceFiles)
     const openClawConfig = buildOpenClawConfig(
@@ -1080,6 +1124,7 @@ export class DaytonaRunProvider implements RunProvider {
       telegramChannelConfig,
       agentDefaultsConfig,
       agentListConfig,
+      providerEnvConfig,
       multiAgentToolsConfig,
       skipBootstrap,
     )
@@ -1238,7 +1283,12 @@ export class DaytonaRunProvider implements RunProvider {
     }
   }
 
-  async restartRun(runId: string, order: Order, fallbackRun?: Run): Promise<Run | null> {
+  async restartRun(
+    runId: string,
+    order: Order,
+    fallbackRun?: Run,
+    runtimeConfig?: RunProviderRuntimeConfig,
+  ): Promise<Run | null> {
     const sandbox = await this.getSandbox(runId)
 
     if (!sandbox) {
@@ -1253,6 +1303,7 @@ export class DaytonaRunProvider implements RunProvider {
     const manifest = await downloadJsonFile<DaytonaRunManifest>(sandbox, MANIFEST_PATH)
     const telegramChannelConfig = await buildOpenClawTelegramChannelConfig(order.channelConfig)
     const agentDefaultsConfig = buildOpenClawAgentDefaultsConfig(order.agentSetup ?? null)
+    const providerEnvConfig = buildOpenClawProviderEnvConfig(runtimeConfig)
     const { agentDirByAgentVersionId, agentSessionsByAgentVersionId, list: agentListConfig, workspaceByAgentVersionId } = buildOpenClawAgentsListConfig(
       order,
       homeDir,
@@ -1272,6 +1323,7 @@ export class DaytonaRunProvider implements RunProvider {
       telegramChannelConfig,
       agentDefaultsConfig,
       agentListConfig,
+      providerEnvConfig,
       multiAgentToolsConfig,
       skipBootstrap,
     )

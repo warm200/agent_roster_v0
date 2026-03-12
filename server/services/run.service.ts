@@ -5,7 +5,7 @@ import { HttpError } from '../lib/http'
 import { scanAgentVersion as scanAgentVersionRiskProfile } from '../lib/risk-engine'
 import { getRunProvider } from '../providers'
 import type { RunControlUiLink } from '../providers/run-provider.interface'
-import { getOrderByIdForUser } from './order.service'
+import { getOrderByIdForUser, getOrderProviderApiKeysForUser } from './order.service'
 import { RunRepository } from './run.repository'
 import { getTelegramService } from './telegram.service'
 
@@ -139,6 +139,9 @@ export class RunService {
   async createRun(userId: string, orderId: string) {
     await runServiceDeps.getTelegramService().getChannelConfig({ orderId, userId })
     const order = await runServiceDeps.getOrderByIdForUser({ orderId, userId })
+    const providerApiKeys = runServiceDeps.getOrderProviderApiKeysForUser
+      ? await runServiceDeps.getOrderProviderApiKeysForUser({ orderId, userId })
+      : {}
     ensureLaunchable(order)
 
     const provider = runServiceDeps.getRunProvider()
@@ -147,7 +150,9 @@ export class RunService {
     const createdRun = await this.repository.createRun(pendingRun)
 
     void provider
-      .createRun(order, runId)
+      .createRun(order, runId, {
+        providerApiKeys,
+      })
       .then(async (providerRun) => {
         await this.repository.updateRun(runId, {
           ...providerRun,
@@ -272,7 +277,15 @@ export class RunService {
         orderId: run.orderId,
         userId,
       })
-      const restarted = await provider.restartRun(run.id, order, run)
+      const providerApiKeys = runServiceDeps.getOrderProviderApiKeysForUser
+        ? await runServiceDeps.getOrderProviderApiKeysForUser({
+            orderId: run.orderId,
+            userId,
+          })
+        : {}
+      const restarted = await provider.restartRun(run.id, order, run, {
+        providerApiKeys,
+      })
 
       if (!restarted) {
         throw new HttpError(409, 'Managed runtime sandbox could not be restarted.')
@@ -361,6 +374,7 @@ export class RunService {
 let runServiceOverride: RunService | null = null
 const defaultRunServiceDeps = {
   getOrderByIdForUser,
+  getOrderProviderApiKeysForUser,
   getRunProvider,
   getTelegramService,
 }

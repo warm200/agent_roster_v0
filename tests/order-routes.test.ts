@@ -110,11 +110,7 @@ test('order detail route returns 404 from service http errors', async () => {
 
 test('order detail patch route forwards agent setup updates', async () => {
   let received:
-    | {
-        orderId: string
-        userId: string
-        agentSetup: AgentSetup
-      }
+    | Parameters<NonNullable<OrderService['updateOrderAgentSetupForUser']>>[0]
     | undefined
 
   setRequestUserIdForTesting(() => 'user-test-1')
@@ -138,7 +134,15 @@ test('order detail patch route forwards agent setup updates', async () => {
       received = input
       return {
         ...order,
-        agentSetup: input.agentSetup,
+        agentSetup: {
+          ...input.agentSetup,
+          providerKeyStatus: {
+            anthropic: Boolean(input.vendorApiKeys?.anthropic),
+            google: Boolean(input.vendorApiKeys?.google),
+            openai: Boolean(input.vendorApiKeys?.openai),
+            openrouter: Boolean(input.vendorApiKeys?.openrouter),
+          },
+        },
       }
     },
   } satisfies OrderService)
@@ -147,11 +151,15 @@ test('order detail patch route forwards agent setup updates', async () => {
     new NextRequest('http://localhost/api/me/orders/order-test-1', {
       body: JSON.stringify({
         agentSetup: {
+          defaultAgentSlug: 'agent-test-default',
           workspace: '~/.openclaw/workspace',
           timeFormat: '24',
           modelPrimary: 'anthropic/claude-sonnet-4-5',
           modelFallbacks: ['openai/gpt-5-mini'],
           subagentsMaxConcurrent: 2,
+        },
+        vendorApiKeys: {
+          anthropic: 'sk-ant-api03-test',
         },
       }),
       method: 'PATCH',
@@ -167,14 +175,20 @@ test('order detail patch route forwards agent setup updates', async () => {
     orderId: 'order-test-1',
     userId: 'user-test-1',
     agentSetup: {
+      defaultAgentSlug: 'agent-test-default',
       workspace: '~/.openclaw/workspace',
       timeFormat: '24',
       modelPrimary: 'anthropic/claude-sonnet-4-5',
       modelFallbacks: ['openai/gpt-5-mini'],
       subagentsMaxConcurrent: 2,
     },
+    vendorApiKeys: {
+      anthropic: 'sk-ant-api03-test',
+    },
   })
   assert.equal(payload.agentSetup.modelPrimary, 'anthropic/claude-sonnet-4-5')
+  assert.equal(payload.agentSetup.defaultAgentSlug, 'agent-test-default')
+  assert.equal(payload.agentSetup.providerKeyStatus.anthropic, true)
 })
 
 test('order download route forwards baseUrl and userId', async () => {

@@ -2,7 +2,7 @@ import { mockRunLogs, mockRuns } from '@/lib/mock-data'
 import { createMockRun, getOrderById, getRunById } from '@/lib/mock-selectors'
 import type { Order, Run, RunLog, RunResult } from '@/lib/types'
 
-import type { RunProvider } from './run-provider.interface'
+import type { RunProvider, RunProviderRuntimeConfig } from './run-provider.interface'
 
 function buildResult(run: Run): RunResult | null {
   if (!run.resultSummary) {
@@ -18,7 +18,7 @@ function buildResult(run: Run): RunResult | null {
 export class MockRunProvider implements RunProvider {
   readonly name = 'mock'
 
-  async createRun(order: Order, runId?: string) {
+  async createRun(order: Order, runId?: string, _runtimeConfig?: RunProviderRuntimeConfig) {
     const run = createMockRun(order)
 
     if (runId) {
@@ -55,7 +55,12 @@ export class MockRunProvider implements RunProvider {
     return buildResult(run)
   }
 
-  async restartRun(runId: string, _order: Order, fallbackRun?: Run) {
+  async restartRun(
+    runId: string,
+    _order: Order,
+    fallbackRun?: Run,
+    _runtimeConfig?: RunProviderRuntimeConfig,
+  ) {
     const run = getRunById(runId) ?? fallbackRun ?? null
     if (!run) {
       return null

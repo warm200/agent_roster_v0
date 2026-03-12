@@ -2,9 +2,10 @@ import { createHmac, timingSafeEqual } from 'node:crypto'
 
 import { and, desc, eq } from 'drizzle-orm'
 
-import type { AgentSetup } from '@/lib/types'
+import type { AgentProviderKeyName, AgentSetup } from '@/lib/types'
 import { createDb, type DbClient } from '../db'
 import { agents, agentVersions, cartItems, carts, orderItems, orders, riskProfiles, runChannelConfigs } from '../db/schema'
+import { EncryptedSecretStore } from '../lib/encrypted-secret-store'
 import { HttpError } from '../lib/http'
 import { buildOrderSnapshot, type OrderItemRow } from './commerce.utils'
 
@@ -18,6 +19,12 @@ type PaymentInput = {
   paymentProvider: string
   paymentReference: string | null
 }
+
+type AgentSetupUpdateInput = Omit<AgentSetup, 'providerKeyStatus'>
+type ProviderApiKeysInput = Partial<Record<AgentProviderKeyName, string | undefined>>
+type ProviderApiKeySecretRefs = Partial<Record<AgentProviderKeyName, string | null>>
+
+const AGENT_PROVIDER_KEY_NAMES = ['anthropic', 'google', 'openai', 'openrouter'] as const
 
 let dbClient: DbClient | null = null
 
@@ -34,6 +41,82 @@ function getSigningSecret() {
   }
 
   return secret
+}
+
+function getAgentSetupSecretSeed() {
+  const secret = process.env.AGENT_SETUP_SECRET_SEED || process.env.AUTH_SECRET
+
+  if (!secret) {
+    throw new Error('AGENT_SETUP_SECRET_SEED or AUTH_SECRET is required')
+  }
+
+  return secret
+}
+
+function getAgentSetupSecretStore() {
+  return new EncryptedSecretStore(
+    getAgentSetupSecretSeed(),
+    'Stored provider API credentials can no longer be decrypted. Re-enter them in Agent Setup.',
+  )
+}
+
+function extractProviderApiKeySecretRefs(
+  config: Record<string, unknown> | null | undefined,
+): ProviderApiKeySecretRefs {
+  const candidate = config?.providerApiKeySecretRefs
+
+  if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
+    return {}
+  }
+
+  const refs: ProviderApiKeySecretRefs = {}
+
+  for (const key of AGENT_PROVIDER_KEY_NAMES) {
+    const value = (candidate as Record<string, unknown>)[key]
+    refs[key] = typeof value === 'string' && value.trim() ? value : null
+  }
+
+  return refs
+}
+
+async function materializeProviderApiKeys(secretRefs: ProviderApiKeySecretRefs) {
+  const secretStore = getAgentSetupSecretStore()
+  const keys: Partial<Record<AgentProviderKeyName, string>> = {}
+
+  for (const provider of AGENT_PROVIDER_KEY_NAMES) {
+    const ref = secretRefs[provider]
+    if (!ref) {
+      continue
+    }
+
+    keys[provider] = await secretStore.read(ref)
+  }
+
+  return keys
+}
+
+async function mergeProviderApiKeySecretRefs(
+  existingRefs: ProviderApiKeySecretRefs,
+  vendorApiKeys?: ProviderApiKeysInput,
+) {
+  if (!vendorApiKeys) {
+    return existingRefs
+  }
+
+  const secretStore = getAgentSetupSecretStore()
+  const merged: ProviderApiKeySecretRefs = { ...existingRefs }
+
+  for (const provider of AGENT_PROVIDER_KEY_NAMES) {
+    const nextValue = vendorApiKeys[provider]
+
+    if (nextValue === undefined) {
+      continue
+    }
+
+    merged[provider] = await secretStore.write(nextValue.trim())
+  }
+
+  return merged
 }
 
 function signDownloadPayload(payload: string) {
@@ -172,13 +255,45 @@ export async function listOrdersForUser(userId: string) {
 export async function updateOrderAgentSetupForUser(input: {
   orderId: string
   userId: string
-  agentSetup: AgentSetup
+  agentSetup: AgentSetupUpdateInput
+  vendorApiKeys?: ProviderApiKeysInput
 }) {
   const db = getDb()
+  const base = await loadOrderBase({
+    orderId: input.orderId,
+    userId: input.userId,
+  })
+
+  if (!base) {
+    throw new HttpError(404, 'Order not found.')
+  }
+
+  const items = await loadOrderItems(input.orderId)
+
+  if (
+    input.agentSetup.defaultAgentSlug &&
+    !items.some((item) => item.agent.slug === input.agentSetup.defaultAgentSlug)
+  ) {
+    throw new HttpError(400, 'Default agent must be one of the purchased agents.')
+  }
+
+  const existingSetup =
+    base.order.agentSetup && typeof base.order.agentSetup === 'object' && !Array.isArray(base.order.agentSetup)
+      ? (base.order.agentSetup as Record<string, unknown>)
+      : null
+  const providerApiKeySecretRefs = await mergeProviderApiKeySecretRefs(
+    extractProviderApiKeySecretRefs(existingSetup),
+    input.vendorApiKeys,
+  )
+  const storedSetup = {
+    ...input.agentSetup,
+    providerApiKeySecretRefs,
+  } satisfies Record<string, unknown>
+
   const [updated] = await db
     .update(orders)
     .set({
-      agentSetup: input.agentSetup as unknown as Record<string, unknown>,
+      agentSetup: storedSetup,
       updatedAt: new Date(),
     })
     .where(and(eq(orders.id, input.orderId), eq(orders.userId, input.userId)))
@@ -192,6 +307,24 @@ export async function updateOrderAgentSetupForUser(input: {
     orderId: input.orderId,
     userId: input.userId,
   })
+}
+
+export async function getOrderProviderApiKeysForUser(input: {
+  orderId: string
+  userId: string
+}) {
+  const base = await loadOrderBase(input)
+
+  if (!base) {
+    throw new HttpError(404, 'Order not found.')
+  }
+
+  const setup =
+    base.order.agentSetup && typeof base.order.agentSetup === 'object' && !Array.isArray(base.order.agentSetup)
+      ? (base.order.agentSetup as Record<string, unknown>)
+      : null
+
+  return materializeProviderApiKeys(extractProviderApiKeySecretRefs(setup))
 }
 
 export async function createPaidOrderFromCart(input: {
@@ -348,6 +481,7 @@ export async function getSignedDownloadsForOrder(input: {
 export type OrderService = {
   createPaidOrderFromCart: typeof createPaidOrderFromCart
   getOrderByIdForUser: typeof getOrderByIdForUser
+  getOrderProviderApiKeysForUser?: typeof getOrderProviderApiKeysForUser
   getSignedDownloadsForOrder: typeof getSignedDownloadsForOrder
   listOrdersForUser: typeof listOrdersForUser
   resolveSignedDownload: typeof resolveSignedDownload
@@ -364,6 +498,7 @@ export function getOrderService(): OrderService {
   return {
     createPaidOrderFromCart,
     getOrderByIdForUser,
+    getOrderProviderApiKeysForUser,
     getSignedDownloadsForOrder,
     listOrdersForUser,
     resolveSignedDownload,

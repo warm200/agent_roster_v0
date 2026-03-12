@@ -168,6 +168,7 @@ export default function BundleDetailPage({ params }: PageProps) {
     )
 
   const canLaunchRun = order.status === 'paid' && hasTelegramSetup
+  const effectiveDefaultAgentSlug = order.agentSetup?.defaultAgentSlug ?? order.items[0]?.agent.slug ?? null
 
   const handleLaunchRun = async () => {
     if (!canLaunchRun || isLaunching) return
@@ -265,6 +266,13 @@ export default function BundleDetailPage({ params }: PageProps) {
 
           <AgentSetupCard
             orderId={order.id}
+            availableAgents={order.items.map((item) => ({
+              riskLevel: item.agentVersion.riskProfile.riskLevel,
+              slug: item.agent.slug,
+              summary: item.agent.summary,
+              title: item.agent.title,
+              version: item.agentVersion.version,
+            }))}
             initialSetup={order.agentSetup ?? null}
             onSaved={handleAgentSetupSaved}
           />
@@ -277,6 +285,9 @@ export default function BundleDetailPage({ params }: PageProps) {
                     <div>
                       <div className="flex items-center gap-3 mb-2">
                         <h3 className="font-semibold">{item.agent.title}</h3>
+                        {effectiveDefaultAgentSlug === item.agent.slug ? (
+                          <Badge variant="default">Default</Badge>
+                        ) : null}
                         <RiskBadge level={item.agentVersion.riskProfile.riskLevel} size="sm" />
                       </div>
                       <p className="text-sm text-muted-foreground mb-3">{item.agent.summary}</p>

@@ -35,6 +35,7 @@ export async function PATCH(
       orderId,
       userId,
       agentSetup: payload.agentSetup,
+      vendorApiKeys: payload.vendorApiKeys,
     })
     return NextResponse.json(order)
   } catch (error) {

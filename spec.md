@@ -52,6 +52,9 @@ Implemented in the current mock app:
 - Daytona now forces `agents.defaults.skipBootstrap=true` whenever uploaded agent workspace files already include OpenClaw bootstrap files like `IDENTITY.md` or `SOUL.md`, so OpenClaw does not regenerate defaults on top of staged agent content
 - Daytona multi-agent runs now set per-agent `agentDir` paths under `~/.openclaw/agents/<agent-id>/agent` and precreate those directories alongside each agent workspace, matching OpenClaw’s multi-agent registration model instead of relying on workspace paths alone
 - Daytona multi-agent runs now also enable OpenClaw cross-agent routing by setting `tools.agentToAgent.enabled=true` with a purchased-agent allowlist, and by allowlisting the same purchased agent ids under each agent’s `subagents.allowAgents`
+- Bundle detail agent setup now lets users choose which purchased agent is OpenClaw’s default inbound agent instead of hardcoding the first item forever
+- Bundle detail agent setup now accepts masked BYOK provider keys for Anthropic, OpenAI, OpenRouter, and Google Gemini; keys are stored encrypted server-side, only “saved/not set” state is returned to the UI, and Daytona injects them into OpenClaw `env` at launch/restart
+- Bundle detail model fields now link directly to the relevant OpenClaw docs so users can copy the expected `provider/model` format instead of guessing
 - Deleted Daytona sandboxes now degrade to stale run records instead of breaking bundle/run pages
 - Bundle detail now loads order data independently from runs/download grants, so provider-side run failures no longer masquerade as “bundle not found”
 - Run detail timeline now visually reflects created/started/updated/completed state instead of rendering every row as the same muted style
@@ -229,7 +232,7 @@ v0_version/                        # Next.js 16 full-stack
 | Checkout | `app/checkout/page.tsx` | Partial: creates a Stripe checkout session via API, enforces auth when OAuth is enabled, and success reconciles the returned `session_id` into an order |
 | Dashboard | `app/app/page.tsx` | Done: API-backed stats and recent activity |
 | Bundles List | `app/app/bundles/page.tsx` | Done: API-backed bundles list |
-| Bundle Detail | `app/app/bundles/[orderId]/page.tsx` | Partial: API-backed bundle detail, Telegram setup with local polling fallback and bot reset support, stable run-launch redirect, downloads, and Daytona-backed run launch |
+| Bundle Detail | `app/app/bundles/[orderId]/page.tsx` | Partial: API-backed bundle detail, Telegram setup with local polling fallback and bot reset support, default-agent + BYOK setup, stable run-launch redirect, downloads, and Daytona-backed run launch |
 | Runs List | `app/app/runs/page.tsx` | Done: API-backed runs list with filters/loading/error states |
 | Run Detail | `app/app/runs/[runId]/page.tsx` | Done: API-backed detail with logs/results/artifacts/runtime disclosure/risk/retry/cancel |
 
