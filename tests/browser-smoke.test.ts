@@ -432,6 +432,159 @@ if (!chromePath) {
   )
 
   test(
+    'browser smoke reconciles checkout before clearing the cart',
+    { timeout: 120_000 },
+    async () => {
+      assert.ok(browser, 'Browser failed to launch')
+      const page = await browser.newPage()
+      const requestOrder: string[] = []
+
+      try {
+        await authenticatePage(page, {
+          sub: 'user-1',
+          email: 'user-1@demo.local',
+          name: 'Demo User',
+        })
+        await page.goto(`${BASE_URL}/agents`, { waitUntil: 'domcontentloaded' })
+        await page.evaluate(() => {
+          window.localStorage.setItem(
+            'agent-roster-cart:v1',
+            JSON.stringify([
+              {
+                id: 'cart-item-checkout-smoke',
+                cartId: 'cart-checkout-smoke',
+                agent: {
+                  category: 'automation',
+                  createdAt: new Date().toISOString(),
+                  currency: 'USD',
+                  currentVersion: {
+                    agentId: 'agent-1',
+                    changelogMarkdown: '',
+                    createdAt: new Date().toISOString(),
+                    id: 'agent-version-1',
+                    installPackageUrl: 'https://example.com/install.zip',
+                    installScriptMarkdown: '',
+                    previewPromptSnapshot: 'Preview',
+                    releaseNotes: '',
+                    riskProfile: {
+                      agentVersionId: 'agent-version-1',
+                      chatOnly: true,
+                      createdAt: new Date().toISOString(),
+                      id: 'risk-1',
+                      network: false,
+                      readFiles: false,
+                      riskLevel: 'low',
+                      scanSummary: 'Low risk',
+                      shell: false,
+                      writeFiles: false,
+                    },
+                    runConfigSnapshot: '{}',
+                    version: '1.0.0',
+                  },
+                  descriptionMarkdown: 'desc',
+                  id: 'agent-1',
+                  priceCents: 2900,
+                  slug: 'checkout-smoke-agent',
+                  status: 'active',
+                  summary: 'Checkout smoke agent',
+                  title: 'Checkout Smoke Agent',
+                  updatedAt: new Date().toISOString(),
+                },
+                agentVersion: {
+                  agentId: 'agent-1',
+                  changelogMarkdown: '',
+                  createdAt: new Date().toISOString(),
+                  id: 'agent-version-1',
+                  installPackageUrl: 'https://example.com/install.zip',
+                  installScriptMarkdown: '',
+                  previewPromptSnapshot: 'Preview',
+                  releaseNotes: '',
+                  riskProfile: {
+                    agentVersionId: 'agent-version-1',
+                    chatOnly: true,
+                    createdAt: new Date().toISOString(),
+                    id: 'risk-1',
+                    network: false,
+                    readFiles: false,
+                    riskLevel: 'low',
+                    scanSummary: 'Low risk',
+                    shell: false,
+                    writeFiles: false,
+                  },
+                  runConfigSnapshot: '{}',
+                  version: '1.0.0',
+                },
+                createdAt: new Date().toISOString(),
+              },
+            ]),
+          )
+        })
+
+        await page.setRequestInterception(true)
+        page.on('request', (request) => {
+          const url = request.url()
+          const method = request.method()
+
+          if (url === `${BASE_URL}/api/checkout/session/cs_test_checkout_success` && method === 'POST') {
+            requestOrder.push('reconcile')
+            void request.respond({
+              body: JSON.stringify({ id: 'order-checkout-smoke' }),
+              contentType: 'application/json',
+              status: 200,
+            })
+            return
+          }
+
+          if (url === `${BASE_URL}/api/cart` && method === 'PUT') {
+            const rawBody = request.postData()
+            const body = rawBody ? (JSON.parse(rawBody) as { agentIds?: string[] }) : undefined
+            requestOrder.push(body?.agentIds?.length ? 'sync-cart' : 'clear-cart')
+            void request.respond({
+              body: JSON.stringify({
+                bundleRisk: {
+                  highestRiskDriver: null,
+                  level: 'low',
+                  summary: 'No agents selected',
+                },
+                createdAt: new Date().toISOString(),
+                currency: 'USD',
+                id: 'cart-checkout-smoke',
+                items: [],
+                status: 'active',
+                totalCents: 0,
+                updatedAt: new Date().toISOString(),
+                userId: 'user-1',
+              }),
+              contentType: 'application/json',
+              status: 200,
+            })
+            return
+          }
+
+          void request.continue()
+        })
+
+        await page.goto(`${BASE_URL}/checkout/success?session_id=cs_test_checkout_success`, {
+          waitUntil: 'domcontentloaded',
+        })
+        await waitForText(page, 'Purchase Complete')
+        await new Promise((resolve) => setTimeout(resolve, 250))
+
+        const reconcileIndex = requestOrder.indexOf('reconcile')
+        const clearCartIndex = requestOrder.indexOf('clear-cart')
+
+        assert.notEqual(reconcileIndex, -1, 'Expected checkout reconcile request')
+        assert.ok(
+          clearCartIndex === -1 || reconcileIndex < clearCartIndex,
+          `Expected cart clear to happen only after reconcile. Saw request order: ${requestOrder.join(', ')}`,
+        )
+      } finally {
+        await page.close()
+      }
+    },
+  )
+
+  test(
     'browser smoke covers seeded bundle detail and run launch',
     { timeout: 120_000, skip: !dockerAvailable ? 'Docker not available' : undefined },
     async () => {

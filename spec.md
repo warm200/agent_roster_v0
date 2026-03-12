@@ -71,7 +71,7 @@ Implemented in the current mock app:
 - `POST /api/interviews/preview` now routes through `server/services/catalog.service.ts`
 - `/api/cart`, `/api/cart/items`, and `/api/cart/items/[id]` now route through `server/services/cart.service.ts` using the cart cookie
 - `POST /api/checkout/session` now routes through `server/services/checkout.service.ts`
-- Checkout now creates Stripe checkout sessions, requires auth when OAuth providers are configured, and the success page reconciles `session_id` values back into orders
+- Checkout now creates Stripe checkout sessions, requires auth when OAuth providers are configured, and the success page reconciles `session_id` values back into orders before clearing the cart
 - `POST /api/webhooks/telegram` now routes through `server/services/telegram.service.ts`
 - `POST /api/webhooks/stripe` now routes through `server/services/checkout.service.ts`
 - Telegram channel config now supports explicit disconnect/reset so users can unlink a bot and connect a different one
@@ -98,6 +98,7 @@ Implemented in the current mock app:
 - `npm test` now runs smoke regression coverage for the preview route and auth proxy
 - Browser smoke coverage now exists for catalog-to-cart, protected-app redirect, signed-in dashboard access, authenticated bundle/run page-access flows, and protected app navigation flows
 - Browser smoke coverage now exists for checkout-success handoff and its post-purchase CTA paths
+- Browser smoke coverage now also verifies `/checkout/success?session_id=...` reconciles before the cart-clear API call
 - Browser smoke coverage now exists for seeded bundle detail access and real run launch into run detail
 - Browser smoke coverage now exists for seeded run detail content
 - Browser smoke coverage now exists for seeded Telegram-ready bundle listing

@@ -23,14 +23,11 @@ export default function CheckoutSuccessPage({
   const [loadError, setLoadError] = useState<string | null>(null)
 
   useEffect(() => {
-    clearCart()
-  }, [clearCart])
-
-  useEffect(() => {
     let isMounted = true
 
     async function resolveOrderId() {
       if (params.orderId) {
+        clearCart()
         setOrderId(params.orderId)
         setIsLoading(false)
         return
@@ -44,6 +41,7 @@ export default function CheckoutSuccessPage({
       try {
         const payload = await reconcileCheckoutSession(params.session_id)
         if (isMounted) {
+          clearCart()
           setOrderId(payload.id)
         }
       } catch (error) {
@@ -71,7 +69,7 @@ export default function CheckoutSuccessPage({
     return () => {
       isMounted = false
     }
-  }, [params.orderId, params.session_id, router])
+  }, [clearCart, params.orderId, params.session_id, router])
 
   if (isLoading) {
     return (
