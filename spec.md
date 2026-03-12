@@ -87,6 +87,7 @@ Implemented in the current mock app:
 - Telegram setup UI now exposes a disconnect/reset action to swap bots without editing database state manually
 - Catalog, dashboard, bundles, bundle detail, and runs pages now call shared frontend API clients instead of raw `fetch`
 - Catalog and agent detail now render local-agent thumbnails when the DB snapshot includes an avatar source path
+- Catalog cards now use a thumbnail-first flip interaction on desktop, while small screens default to the spec/action face for touch usability
 - Route-level error boundaries now exist for the public shell and the authenticated app shell
 - Route-level loading skeletons now exist for catalog, agent detail, dashboard, bundles, bundle detail, runs, and run detail
 - `npm test` now runs smoke regression coverage for the preview route and auth proxy
