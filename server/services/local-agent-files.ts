@@ -1,6 +1,9 @@
+import { execFile as execFileCallback } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { promises as fs } from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
+import { promisify } from 'node:util'
 
 import { and, desc, eq } from 'drizzle-orm'
 
@@ -35,9 +38,29 @@ type RuntimeAssetBundle = {
 }
 
 const LOCAL_AGENTS_ROOT = path.resolve(process.cwd(), 'agents_file')
+const execFile = promisify(execFileCallback)
 
 let dbClient: DbClient | null = null
 let lastSyncedFingerprint: string | null = null
+let localAgentsRootOverride: string | null = null
+
+function getLocalAgentsRoot(rootDir = LOCAL_AGENTS_ROOT) {
+  return localAgentsRootOverride ?? rootDir
+}
+
+function resolveTrustedSourceRoot(sourceRootRelativePath: string) {
+  const sourceRoot = path.resolve(process.cwd(), sourceRootRelativePath)
+  const localAgentsRoot = getLocalAgentsRoot()
+  const normalizedRoot = localAgentsRoot.endsWith(path.sep)
+    ? localAgentsRoot
+    : `${localAgentsRoot}${path.sep}`
+
+  if (sourceRoot !== localAgentsRoot && !sourceRoot.startsWith(normalizedRoot)) {
+    throw new Error('Local agent source must stay inside agents_file.')
+  }
+
+  return sourceRoot
+}
 
 function getDb() {
   dbClient ??= createDb()
@@ -437,19 +460,21 @@ export function buildLocalAgentThumbnailUrl(snapshot: string, slug: string) {
 }
 
 export async function loadLocalAgentDefinitions(rootDir = LOCAL_AGENTS_ROOT) {
-  const directories = await listLocalAgentDirectories(rootDir)
+  const resolvedRootDir = getLocalAgentsRoot(rootDir)
+  const directories = await listLocalAgentDirectories(resolvedRootDir)
   const definitions = await Promise.all(directories.map((directory) => buildLocalAgentDefinition(directory)))
   return definitions.filter((definition): definition is LocalAgentDefinition => Boolean(definition))
 }
 
 export async function syncLocalAgentsToDb(rootDir = LOCAL_AGENTS_ROOT, db = getDb()) {
-  const fingerprint = await buildLocalAgentsFingerprint(rootDir)
+  const resolvedRootDir = getLocalAgentsRoot(rootDir)
+  const fingerprint = await buildLocalAgentsFingerprint(resolvedRootDir)
 
   if (fingerprint === lastSyncedFingerprint) {
     return
   }
 
-  const definitions = await loadLocalAgentDefinitions(rootDir)
+  const definitions = await loadLocalAgentDefinitions(resolvedRootDir)
 
   for (const definition of definitions) {
     await db
@@ -506,7 +531,7 @@ export async function syncLocalAgentsToDb(rootDir = LOCAL_AGENTS_ROOT, db = getD
 }
 
 export async function getLocalAgentRuntimeSourceBySlug(slug: string, db = getDb()) {
-  await syncLocalAgentsToDb(LOCAL_AGENTS_ROOT, db)
+  await syncLocalAgentsToDb(getLocalAgentsRoot(), db)
 
   const [row] = await db
     .select({
@@ -528,12 +553,74 @@ export async function getLocalAgentThumbnail(slug: string) {
     return null
   }
 
-  const absolutePath = path.resolve(process.cwd(), source.sourceRootRelativePath, source.avatarRelativePath)
+  const absolutePath = path.resolve(
+    resolveTrustedSourceRoot(source.sourceRootRelativePath),
+    source.avatarRelativePath,
+  )
   const contents = await fs.readFile(absolutePath)
   return {
     absolutePath,
     contents,
   }
+}
+
+export async function buildLocalAgentArchiveFromSnapshot(snapshot: string) {
+  const source = parseLocalAgentRuntimeSource(snapshot)
+
+  if (!source) {
+    return null
+  }
+
+  const sourceRoot = resolveTrustedSourceRoot(source.sourceRootRelativePath)
+
+  try {
+    await fs.access(sourceRoot)
+  } catch (error) {
+    const candidate = error as NodeJS.ErrnoException
+    if (candidate.code === 'ENOENT') {
+      return null
+    }
+
+    throw error
+  }
+
+  const workspaceFiles = await collectWorkspaceFiles(sourceRoot, sourceRoot, new Set<string>())
+  const stagingRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-download-stage-'))
+
+  try {
+    for (const file of workspaceFiles) {
+      const destination = path.join(stagingRoot, file.relativePath)
+      await fs.mkdir(path.dirname(destination), { recursive: true })
+      await fs.writeFile(destination, file.contents)
+    }
+
+    const { stdout } = await execFile('tar', ['-czf', '-', '-C', stagingRoot, '.'], {
+      encoding: 'buffer',
+      maxBuffer: 32 * 1024 * 1024,
+    })
+
+    return {
+      contents: stdout,
+      fileName: `${source.slug || 'agent'}.tar.gz`,
+    }
+  } finally {
+    await fs.rm(stagingRoot, { force: true, recursive: true })
+  }
+}
+
+export async function getLocalAgentArchive(slug: string, db = getDb()) {
+  const source = await getLocalAgentRuntimeSourceBySlug(slug, db)
+
+  if (!source) {
+    return null
+  }
+
+  return buildLocalAgentArchiveFromSnapshot(JSON.stringify({ source }))
+}
+
+export function setLocalAgentsRootForTesting(rootDir: string | null) {
+  localAgentsRootOverride = rootDir ? path.resolve(rootDir) : null
+  lastSyncedFingerprint = null
 }
 
 export async function loadRuntimeAssetsFromSnapshot(
@@ -549,7 +636,7 @@ export async function loadRuntimeAssetsFromSnapshot(
     }
   }
 
-  const sourceRoot = path.resolve(process.cwd(), source.sourceRootRelativePath)
+  const sourceRoot = resolveTrustedSourceRoot(source.sourceRootRelativePath)
   const configPath = source.openClawConfigRelativePath
     ? path.resolve(sourceRoot, source.openClawConfigRelativePath)
     : null

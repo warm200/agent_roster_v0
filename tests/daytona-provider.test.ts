@@ -6,6 +6,7 @@ import path from 'node:path'
 import { afterEach, test } from 'node:test'
 
 import type { Order } from '@/lib/types'
+import { setLocalAgentsRootForTesting } from '@/server/services/local-agent-files'
 import { DaytonaRunProvider } from '@/server/providers/daytona.provider'
 import { DaytonaNotFoundError, SandboxState } from '@daytonaio/sdk'
 
@@ -31,6 +32,7 @@ process.env.TELEGRAM_SECRET_SEED ??= TEST_TELEGRAM_SECRET_SEED
 const tempDirs: string[] = []
 
 afterEach(async () => {
+  setLocalAgentsRootForTesting(null)
   await Promise.all(
     tempDirs.splice(0).map((directory) => rm(directory, { force: true, recursive: true })),
   )
@@ -413,6 +415,7 @@ test('daytona run provider stages OpenClaw and returns a signed control ui link'
 test('daytona run provider stages DB-sourced local agent assets into the sandbox workspace', async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), 'daytona-local-agent-'))
   tempDirs.push(rootDir)
+  setLocalAgentsRootForTesting(rootDir)
   const agentDir = await createLocalAgentFixture(rootDir, 'test-writer', { locale: 'en-US' })
 
   const localOrder: Order = {
@@ -560,6 +563,7 @@ test('daytona run provider stages DB-sourced local agent assets into the sandbox
 test('daytona run provider registers multiple purchased agents with agent dirs and workspaces', async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), 'daytona-local-agents-'))
   tempDirs.push(rootDir)
+  setLocalAgentsRootForTesting(rootDir)
   const writerDir = await createLocalAgentFixture(rootDir, 'test-writer', { locale: 'en-US' })
   const architectDir = await createLocalAgentFixture(rootDir, 'backend-architect')
 

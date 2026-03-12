@@ -5,15 +5,18 @@ import path from 'node:path'
 import { afterEach, test } from 'node:test'
 
 import {
+  buildLocalAgentArchiveFromSnapshot,
   buildLocalAgentThumbnailUrl,
   loadLocalAgentDefinitions,
   loadRuntimeAssetsFromSnapshot,
   parseLocalAgentRuntimeSource,
+  setLocalAgentsRootForTesting,
 } from '@/server/services/local-agent-files'
 
 const tempDirs: string[] = []
 
 afterEach(async () => {
+  setLocalAgentsRootForTesting(null)
   await Promise.all(
     tempDirs.splice(0).map((directory) => rm(directory, { force: true, recursive: true })),
   )
@@ -70,6 +73,7 @@ test('loadLocalAgentDefinitions builds DB-ready metadata from a local agent fold
 test('loadRuntimeAssetsFromSnapshot reads optional config and workspace files from the stored source pointer', async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), 'local-agent-assets-'))
   tempDirs.push(rootDir)
+  setLocalAgentsRootForTesting(rootDir)
 
   const agentDir = path.join(rootDir, 'test-writer')
   await mkdir(path.join(agentDir, 'avatars'), { recursive: true })
@@ -126,5 +130,64 @@ test('loadRuntimeAssetsFromSnapshot reads optional config and workspace files fr
   assert.equal(
     assets.workspaceFiles[0]?.targetWorkspaceDir,
     '/home/daytona/.openclaw/workspace-test-writer',
+  )
+})
+
+test('buildLocalAgentArchiveFromSnapshot packages the whole agent folder', async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), 'local-agent-archive-'))
+  tempDirs.push(rootDir)
+  setLocalAgentsRootForTesting(rootDir)
+
+  const agentDir = path.join(rootDir, 'test-writer')
+  await mkdir(path.join(agentDir, 'avatars'), { recursive: true })
+  await mkdir(path.join(agentDir, 'workspace'), { recursive: true })
+  await writeFile(path.join(agentDir, 'IDENTITY.md'), '# identity')
+  await writeFile(path.join(agentDir, 'SOUL.md'), '# soul')
+  await writeFile(path.join(agentDir, 'avatars', 'avatar.png'), 'png')
+  await writeFile(path.join(agentDir, 'workspace', 'README.md'), '# staged')
+
+  const snapshot = JSON.stringify({
+    source: {
+      kind: 'local-folder',
+      slug: 'test-writer',
+      sourceRootRelativePath: path.relative(process.cwd(), agentDir).split(path.sep).join('/'),
+      openClawConfigRelativePath: null,
+      stagingRelativePath: 'agents/test-writer',
+      avatarRelativePath: null,
+    },
+  })
+
+  const archive = await buildLocalAgentArchiveFromSnapshot(snapshot)
+
+  assert.ok(archive)
+  assert.equal(archive.fileName, 'test-writer.tar.gz')
+  assert.ok(archive.contents.length > 0)
+})
+
+test('buildLocalAgentArchiveFromSnapshot rejects source roots outside agents_file', async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), 'local-agent-archive-root-'))
+  const outsideRoot = await mkdtemp(path.join(os.tmpdir(), 'local-agent-outside-'))
+  tempDirs.push(rootDir, outsideRoot)
+  setLocalAgentsRootForTesting(rootDir)
+
+  const agentDir = path.join(outsideRoot, 'test-writer')
+  await mkdir(agentDir, { recursive: true })
+  await writeFile(path.join(agentDir, 'IDENTITY.md'), '# identity')
+  await writeFile(path.join(agentDir, 'SOUL.md'), '# soul')
+
+  const snapshot = JSON.stringify({
+    source: {
+      kind: 'local-folder',
+      slug: 'test-writer',
+      sourceRootRelativePath: path.relative(process.cwd(), agentDir).split(path.sep).join('/'),
+      openClawConfigRelativePath: null,
+      stagingRelativePath: 'agents/test-writer',
+      avatarRelativePath: null,
+    },
+  })
+
+  await assert.rejects(
+    () => buildLocalAgentArchiveFromSnapshot(snapshot),
+    /Local agent source must stay inside agents_file\./,
   )
 })

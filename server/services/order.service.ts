@@ -199,6 +199,24 @@ export function buildDownloadGrant(input: {
   }
 }
 
+export function buildLocalAgentDownloadGrant(input: {
+  baseUrl: string
+  expiresAt: Date
+  slug: string
+}) {
+  const payload = `${input.slug}:${input.expiresAt.toISOString()}`
+  const signature = signDownloadPayload(payload)
+  const url = new URL(`/api/agents/${input.slug}/download`, input.baseUrl)
+
+  url.searchParams.set('expiresAt', input.expiresAt.toISOString())
+  url.searchParams.set('signature', signature)
+
+  return {
+    downloadUrl: url.toString(),
+    expiresAt: input.expiresAt.toISOString(),
+  }
+}
+
 export function verifyDownloadGrant(input: {
   expiresAt: string
   orderId: string
@@ -212,6 +230,25 @@ export function verifyDownloadGrant(input: {
   }
 
   const payload = `${input.orderId}:${input.orderItemId}:${expiresAt.toISOString()}`
+  const expectedSignature = signDownloadPayload(payload)
+
+  if (!compareSignatures(expectedSignature, input.signature)) {
+    throw new HttpError(403, 'Invalid download signature.')
+  }
+}
+
+export function verifyLocalAgentDownloadGrant(input: {
+  expiresAt: string
+  slug: string
+  signature: string
+}) {
+  const expiresAt = new Date(input.expiresAt)
+
+  if (Number.isNaN(expiresAt.getTime()) || expiresAt.getTime() <= Date.now()) {
+    throw new HttpError(410, 'Download link expired.')
+  }
+
+  const payload = `${input.slug}:${expiresAt.toISOString()}`
   const expectedSignature = signDownloadPayload(payload)
 
   if (!compareSignatures(expectedSignature, input.signature)) {

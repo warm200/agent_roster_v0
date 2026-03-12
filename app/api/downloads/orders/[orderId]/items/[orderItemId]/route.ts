@@ -2,9 +2,15 @@ import { NextRequest, NextResponse } from 'next/server'
 
 import { HttpError } from '@/server/lib/http'
 import {
+  buildLocalAgentDownloadGrant,
   getOrderService,
   verifyDownloadGrant,
 } from '@/server/services/order.service'
+
+function extractLocalAgentSlug(installPackageUrl: string) {
+  const match = installPackageUrl.match(/^\/api\/agents\/([^/]+)\/download$/)
+  return match?.[1] ?? null
+}
 
 export async function GET(
   request: NextRequest,
@@ -40,6 +46,18 @@ export async function GET(
       orderId,
       orderItemId,
     })
+
+    const localAgentSlug = extractLocalAgentSlug(installPackageUrl)
+
+    if (localAgentSlug) {
+      const localGrant = buildLocalAgentDownloadGrant({
+        baseUrl: request.nextUrl.origin,
+        expiresAt: new Date(expiresAt),
+        slug: localAgentSlug,
+      })
+
+      return NextResponse.redirect(localGrant.downloadUrl)
+    }
 
     return NextResponse.redirect(new URL(installPackageUrl, request.nextUrl.origin))
   } catch (error) {

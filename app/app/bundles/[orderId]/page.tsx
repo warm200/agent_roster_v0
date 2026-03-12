@@ -330,31 +330,47 @@ export default function BundleDetailPage({ params }: PageProps) {
           </p>
 
           <div className="grid gap-4">
-            {order.items.map((item) => (
-              <Card key={item.id}>
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 rounded-lg bg-secondary flex items-center justify-center">
-                        <FileText className="w-5 h-5" />
+            {order.items.map((item) => {
+              const signedDownload = downloads.find((download) => download.orderItemId === item.id)
+
+              return (
+                <Card key={item.id}>
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-4">
+                        <div className="w-10 h-10 rounded-lg bg-secondary flex items-center justify-center">
+                          <FileText className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <h4 className="font-medium">{item.agent.title}</h4>
+                          <p className="text-sm text-muted-foreground">
+                            v{item.agentVersion.version} - Install Package
+                          </p>
+                          {!signedDownload ? (
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              Secure download link unavailable. Refresh this page to mint a fresh package link.
+                            </p>
+                          ) : null}
+                        </div>
                       </div>
-                      <div>
-                        <h4 className="font-medium">{item.agent.title}</h4>
-                        <p className="text-sm text-muted-foreground">
-                          v{item.agentVersion.version} - Install Package
-                        </p>
-                      </div>
+                      {signedDownload ? (
+                        <Button variant="outline" asChild>
+                          <Link href={signedDownload.downloadUrl}>
+                            <Download className="w-4 h-4 mr-2" />
+                            Download
+                          </Link>
+                        </Button>
+                      ) : (
+                        <Button disabled variant="outline">
+                          <Download className="w-4 h-4 mr-2" />
+                          Download
+                        </Button>
+                      )}
                     </div>
-                    <Button variant="outline" asChild>
-                      <Link href={downloads.find((download) => download.orderItemId === item.id)?.downloadUrl ?? item.agentVersion.installPackageUrl}>
-                        <Download className="w-4 h-4 mr-2" />
-                        Download
-                      </Link>
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                  </CardContent>
+                </Card>
+              )
+            })}
           </div>
         </TabsContent>
 

@@ -73,6 +73,7 @@ Implemented in the current mock app:
 - Backend run repository/service now exist in `server/services/run.repository.ts` and `server/services/run.service.ts` with provider-backed run sync against the current DB shape
 - `GET /api/agents` and `GET /api/agents/[slug]` now route through `server/services/catalog.service.ts`
 - `GET /api/agents/[slug]/thumbnail` now exists to serve DB-backed local agent avatars into the catalog UI
+- `GET /api/agents/[slug]/download` now exists as a signed post-purchase package route that archives only the trusted DB-backed local agent source folder
 - `POST /api/interviews/preview` now routes through `server/services/catalog.service.ts`
 - `/api/cart`, `/api/cart/items`, and `/api/cart/items/[id]` now route through `server/services/cart.service.ts` using the cart cookie
 - `POST /api/checkout/session` now routes through `server/services/checkout.service.ts`

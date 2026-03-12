@@ -85,6 +85,36 @@ test('download route validates grant and redirects to the install package', asyn
   })
 })
 
+test('download route re-signs local agent archives instead of exposing a public route', async () => {
+  setOrderServiceForTesting({
+    ...stubOrderService,
+    async resolveSignedDownload() {
+      return '/api/agents/test-writer/download'
+    },
+  })
+
+  const expiresAt = new Date(Date.now() + 60_000)
+  const grant = buildDownloadGrant({
+    baseUrl: 'http://localhost',
+    expiresAt,
+    orderId: 'order-test-1',
+    orderItemId: 'item-test-1',
+  })
+
+  const response = await resolveDownload(new NextRequest(grant.downloadUrl), {
+    params: Promise.resolve({
+      orderId: 'order-test-1',
+      orderItemId: 'item-test-1',
+    }),
+  })
+
+  assert.equal(response.status, 307)
+  assert.match(
+    response.headers.get('location') ?? '',
+    /^http:\/\/localhost\/api\/agents\/test-writer\/download\?expiresAt=.*&signature=/,
+  )
+})
+
 test('download route rejects missing signature params', async () => {
   setOrderServiceForTesting(stubOrderService)
 
