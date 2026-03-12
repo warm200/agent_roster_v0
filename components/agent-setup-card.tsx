@@ -272,15 +272,17 @@ export function AgentSetupCard(props: {
 
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-3">
-              <Label htmlFor="agent-setup-model-primary">Primary Model</Label>
-              <Link
-                href="https://docs.openclaw.ai/gateway/configuration-reference#model-selection"
-                target="_blank"
-                rel="noreferrer"
-                className="text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-              >
-                Format guide
-              </Link>
+              <div className="space-y-1">
+                <Label htmlFor="agent-setup-model-primary">Primary Model</Label>
+                <Link
+                  href="https://docs.openclaw.ai/concepts/model-providers"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="block text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+                >
+                  Model refs use <code className="rounded bg-muted px-1 py-0.5 text-[11px] text-foreground">provider/model</code>
+                </Link>
+              </div>
             </div>
             <Input
               id="agent-setup-model-primary"
@@ -305,17 +307,7 @@ export function AgentSetupCard(props: {
           </div>
 
           <div className="space-y-2 md:col-span-2">
-            <div className="flex items-center justify-between gap-3">
-              <Label htmlFor="agent-setup-model-fallbacks">Fallback Models</Label>
-              <Link
-                href="https://docs.openclaw.ai/concepts/models"
-                target="_blank"
-                rel="noreferrer"
-                className="text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-              >
-                Model docs
-              </Link>
-            </div>
+            <Label htmlFor="agent-setup-model-fallbacks">Fallback Models</Label>
             <Input
               id="agent-setup-model-fallbacks"
               value={form.modelFallbacks}
@@ -323,7 +315,7 @@ export function AgentSetupCard(props: {
               placeholder="openai/gpt-5-mini, openrouter/openai/gpt-4.1-mini"
             />
           <p className="text-xs text-muted-foreground">
-              Use `provider/model` format, for example `anthropic/claude-opus-4-6`. Comma-separated values write to OpenClaw `agents.defaults.model.fallbacks`.
+              Comma-separated values write to OpenClaw `agents.defaults.model.fallbacks`.
           </p>
         </div>
         </div>
