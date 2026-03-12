@@ -377,7 +377,11 @@ test('daytona run provider stages DB-sourced local agent assets into the sandbox
   const rootDir = await mkdtemp(path.join(os.tmpdir(), 'daytona-local-agent-'))
   tempDirs.push(rootDir)
   const agentDir = path.join(rootDir, 'test-writer')
+  await mkdir(path.join(agentDir, 'avatars'), { recursive: true })
   await mkdir(path.join(agentDir, 'workspace'), { recursive: true })
+  await writeFile(path.join(agentDir, 'IDENTITY.md'), '# identity')
+  await writeFile(path.join(agentDir, 'SOUL.md'), '# soul')
+  await writeFile(path.join(agentDir, 'avatars', 'avatar.png'), 'png')
   await writeFile(
     path.join(agentDir, 'openclaw.json'),
     JSON.stringify({
@@ -406,7 +410,6 @@ test('daytona run provider stages DB-sourced local agent assets into the sandbox
             slug: 'test-writer',
             sourceRootRelativePath: path.relative(process.cwd(), agentDir).split(path.sep).join('/'),
             openClawConfigRelativePath: 'openclaw.json',
-            workspaceRelativePath: 'workspace',
             stagingRelativePath: 'agents/test-writer',
             avatarRelativePath: null,
           },
@@ -485,9 +488,30 @@ test('daytona run provider stages DB-sourced local agent assets into the sandbox
   const uploadedConfig = JSON.parse(sandboxFiles['/home/daytona/.openclaw/openclaw.json'] ?? '{}')
 
   assert.equal(uploadedConfig.agents?.defaults?.locale, 'en-US')
+  assert.equal(uploadedConfig.agents?.defaults?.skipBootstrap, true)
   assert.equal(
     sandboxFiles['/home/daytona/workspace/custom-test-writer/README.md'],
+    undefined,
+  )
+  assert.equal(
+    sandboxFiles['/home/daytona/workspace/custom-test-writer/workspace/README.md'],
     '# hello',
+  )
+  assert.equal(sandboxFiles['/home/daytona/workspace/custom-test-writer/IDENTITY.md'], '# identity')
+  assert.equal(sandboxFiles['/home/daytona/workspace/custom-test-writer/SOUL.md'], '# soul')
+  assert.equal(
+    sandboxFiles['/home/daytona/workspace/custom-test-writer/avatars/avatar.png'],
+    'png',
+  )
+  assert.equal(
+    sandboxFiles['/home/daytona/workspace/custom-test-writer/openclaw.json'],
+    JSON.stringify({
+      agents: {
+        defaults: {
+          locale: 'en-US',
+        },
+      },
+    }),
   )
   assert.equal(uploadedConfig.agents?.list?.[0]?.workspace, '/home/daytona/workspace/custom-test-writer')
 })

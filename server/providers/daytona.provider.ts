@@ -461,7 +461,7 @@ STARTED_AT=$(now_iso)
 
 append_log info bootstrap "Provisioning managed runtime for order $ORDER_ID."
 mkdir -p "$ROOT" "$OPENCLAW_DIR" "$WORKSPACE_DIR"
-if [ -d "$WORKSPACE_STAGE" ]; then
+if [ -d "$WORKSPACE_STAGE" ] && [ -z "$(find "$WORKSPACE_DIR" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]; then
   cp -R "$WORKSPACE_STAGE/." "$WORKSPACE_DIR/"
 fi
 write_status provisioning "$STARTED_AT" "" ""
@@ -816,6 +816,7 @@ function buildOpenClawConfig(
   telegramChannelConfig?: Record<string, unknown> | null,
   agentDefaultsConfig?: Record<string, unknown> | null,
   agentListConfig?: Array<Record<string, unknown>> | null,
+  skipBootstrap = false,
 ) {
   const config = deepMerge(OPENCLAW_BASE_CONFIG, userConfig)
   let runtimeConfig = deepMerge(config, {
@@ -841,6 +842,16 @@ function buildOpenClawConfig(
     })
   }
 
+  if (skipBootstrap) {
+    runtimeConfig = deepMerge(runtimeConfig, {
+      agents: {
+        defaults: {
+          skipBootstrap: true,
+        },
+      },
+    })
+  }
+
   if (agentListConfig && agentListConfig.length > 0) {
     runtimeConfig = deepMerge(runtimeConfig, {
       agents: {
@@ -857,6 +868,27 @@ function buildOpenClawConfig(
     channels: {
       telegram: telegramChannelConfig,
     },
+  })
+}
+
+const OPENCLAW_BOOTSTRAP_FILES = new Set([
+  'AGENTS.md',
+  'SOUL.md',
+  'TOOLS.md',
+  'IDENTITY.md',
+  'USER.md',
+  'HEARTBEAT.md',
+  'BOOTSTRAP.md',
+])
+
+function shouldSkipOpenClawBootstrap(
+  workspaceFiles: Array<{
+    relativePath: string
+  }>,
+) {
+  return workspaceFiles.some((file) => {
+    const basename = path.posix.basename(file.relativePath)
+    return OPENCLAW_BOOTSTRAP_FILES.has(basename)
   })
 }
 
@@ -990,6 +1022,7 @@ export class DaytonaRunProvider implements RunProvider {
     )
     const telegramChannelConfig = await buildOpenClawTelegramChannelConfig(order.channelConfig)
     const agentDefaultsConfig = buildOpenClawAgentDefaultsConfig(order.agentSetup ?? null)
+    const skipBootstrap = shouldSkipOpenClawBootstrap(template.workspaceFiles)
     const openClawConfig = buildOpenClawConfig(
       template.config,
       gatewayToken,
@@ -997,6 +1030,7 @@ export class DaytonaRunProvider implements RunProvider {
       telegramChannelConfig,
       agentDefaultsConfig,
       agentListConfig,
+      skipBootstrap,
     )
     const workspaceDir = resolveOpenClawWorkspaceDir(openClawConfig, homeDir)
     const bootstrapScript = buildBootstrapScript({
@@ -1176,6 +1210,7 @@ export class DaytonaRunProvider implements RunProvider {
       order,
       workspaceByAgentVersionId,
     )
+    const skipBootstrap = shouldSkipOpenClawBootstrap(template.workspaceFiles)
     const openClawConfig = buildOpenClawConfig(
       template.config,
       randomBytes(24).toString('hex'),
@@ -1183,6 +1218,7 @@ export class DaytonaRunProvider implements RunProvider {
       telegramChannelConfig,
       agentDefaultsConfig,
       agentListConfig,
+      skipBootstrap,
     )
     const workspaceDir = resolveOpenClawWorkspaceDir(openClawConfig, homeDir)
     const restartedAt = nowIso()

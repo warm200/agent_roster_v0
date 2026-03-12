@@ -16,7 +16,6 @@ export type LocalAgentRuntimeSource = {
   slug: string
   sourceRootRelativePath: string
   stagingRelativePath: string
-  workspaceRelativePath: string | null
 }
 
 type LocalAgentDefinition = {
@@ -248,20 +247,11 @@ async function buildLocalAgentDefinition(agentDir: string): Promise<LocalAgentDe
   }
 
   const openClawConfigPath = path.join(agentDir, 'openclaw.json')
-  const workspacePath = path.join(agentDir, 'workspace')
   let openClawConfigRelativePath: string | null = null
-  let workspaceRelativePath: string | null = null
 
   try {
     await fs.access(openClawConfigPath)
     openClawConfigRelativePath = 'openclaw.json'
-  } catch {}
-
-  try {
-    const stats = await fs.stat(workspacePath)
-    if (stats.isDirectory()) {
-      workspaceRelativePath = 'workspace'
-    }
   } catch {}
 
   const avatarRelativePath = extractIdentityField(identityContents, 'Avatar')
@@ -295,7 +285,6 @@ async function buildLocalAgentDefinition(agentDir: string): Promise<LocalAgentDe
     slug,
     sourceRootRelativePath: relativePathFromRepoRoot(agentDir),
     stagingRelativePath: slug,
-    workspaceRelativePath,
   }
   const riskLevel = inferRiskLevel(profile)
   const agentId = `agent-local-${slug}`
@@ -431,7 +420,6 @@ export function parseLocalAgentRuntimeSource(snapshot: string): LocalAgentRuntim
       slug: parsed.source.slug ?? '',
       sourceRootRelativePath: parsed.source.sourceRootRelativePath,
       stagingRelativePath: parsed.source.stagingRelativePath ?? `agents/${parsed.source.slug ?? 'agent'}`,
-      workspaceRelativePath: parsed.source.workspaceRelativePath ?? null,
     }
   } catch {
     return null
@@ -565,24 +553,15 @@ export async function loadRuntimeAssetsFromSnapshot(
   const configPath = source.openClawConfigRelativePath
     ? path.resolve(sourceRoot, source.openClawConfigRelativePath)
     : null
-  const workspaceRoot = source.workspaceRelativePath
-    ? path.resolve(sourceRoot, source.workspaceRelativePath)
-    : sourceRoot
-  const ignoredPaths = new Set<string>()
-
-  if (configPath) {
-    ignoredPaths.add(configPath)
-  }
-
   const config = configPath ? await readOptionalJsonFile(configPath) : {}
   let workspaceFiles: RuntimeAssetBundle['workspaceFiles'] = []
 
   try {
-    await fs.access(workspaceRoot)
+    await fs.access(sourceRoot)
     workspaceFiles = await collectWorkspaceFiles(
-      workspaceRoot,
-      workspaceRoot,
-      ignoredPaths,
+      sourceRoot,
+      sourceRoot,
+      new Set<string>(),
     )
     workspaceFiles = workspaceFiles.map((file) => ({
       ...file,

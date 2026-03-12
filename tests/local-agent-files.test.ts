@@ -72,7 +72,11 @@ test('loadRuntimeAssetsFromSnapshot reads optional config and workspace files fr
   tempDirs.push(rootDir)
 
   const agentDir = path.join(rootDir, 'test-writer')
+  await mkdir(path.join(agentDir, 'avatars'), { recursive: true })
   await mkdir(path.join(agentDir, 'workspace'), { recursive: true })
+  await writeFile(path.join(agentDir, 'IDENTITY.md'), '# identity')
+  await writeFile(path.join(agentDir, 'SOUL.md'), '# soul')
+  await writeFile(path.join(agentDir, 'avatars', 'avatar.png'), 'png')
   await writeFile(
     path.join(agentDir, 'openclaw.json'),
     JSON.stringify({
@@ -91,13 +95,12 @@ test('loadRuntimeAssetsFromSnapshot reads optional config and workspace files fr
       slug: 'test-writer',
       sourceRootRelativePath: path.relative(process.cwd(), agentDir).split(path.sep).join('/'),
       openClawConfigRelativePath: 'openclaw.json',
-      workspaceRelativePath: 'workspace',
       stagingRelativePath: 'agents/test-writer',
       avatarRelativePath: null,
     },
   })
 
-  const assets = await loadRuntimeAssetsFromSnapshot(snapshot)
+  const assets = await loadRuntimeAssetsFromSnapshot(snapshot, '/home/daytona/.openclaw/workspace-test-writer')
 
   const parsedConfig = assets.config as {
     agents?: {
@@ -108,8 +111,20 @@ test('loadRuntimeAssetsFromSnapshot reads optional config and workspace files fr
   }
 
   assert.equal(parsedConfig.agents?.defaults?.timeFormat, '24')
-  assert.equal(assets.workspaceFiles.length, 1)
-  assert.equal(assets.workspaceFiles[0].relativePath, 'README.md')
-  assert.equal(assets.workspaceFiles[0].contents.toString('utf8'), '# staged')
-  assert.equal(assets.workspaceFiles[0].targetWorkspaceDir, null)
+  assert.deepEqual(
+    assets.workspaceFiles.map((file) => file.relativePath).sort(),
+    ['IDENTITY.md', 'SOUL.md', 'avatars/avatar.png', 'openclaw.json', 'workspace/README.md'],
+  )
+  assert.equal(
+    assets.workspaceFiles.find((file) => file.relativePath === 'IDENTITY.md')?.contents.toString('utf8'),
+    '# identity',
+  )
+  assert.equal(
+    assets.workspaceFiles.find((file) => file.relativePath === 'workspace/README.md')?.contents.toString('utf8'),
+    '# staged',
+  )
+  assert.equal(
+    assets.workspaceFiles[0]?.targetWorkspaceDir,
+    '/home/daytona/.openclaw/workspace-test-writer',
+  )
 })
