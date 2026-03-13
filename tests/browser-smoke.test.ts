@@ -288,6 +288,26 @@ if (!chromePath) {
   })
 
   test(
+    'browser smoke covers pricing navigation',
+    { timeout: 120_000 },
+    async () => {
+      assert.ok(browser, 'Browser failed to launch')
+      const page = await browser.newPage()
+
+      try {
+        await page.goto(`${BASE_URL}/`, { waitUntil: 'domcontentloaded' })
+        await waitForText(page, 'Build focused work bundles')
+        await clickByHref(page, '/pricing')
+        await waitForText(page, 'Choose the runtime tier')
+        await waitForText(page, 'Warm Standby')
+        assert.equal(page.url(), `${BASE_URL}/pricing`)
+      } finally {
+        await page.close()
+      }
+    },
+  )
+
+  test(
     'browser smoke covers catalog to cart flow',
     { timeout: 120_000 },
     async () => {
