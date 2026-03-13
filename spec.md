@@ -65,6 +65,7 @@ Implemented in the current mock app:
 - Backend commerce snapshot/mapping utilities now exist in `server/services/commerce.utils.ts`
 - Backend catalog service now exists in `server/services/catalog.service.ts` with DB + mock fallback logic
 - Local agent folders under `agents_file/` now upsert into the catalog tables on read, so catalog/cart/order flows stay DB-first while preserving a source pointer for later sandbox staging
+- Local agent imports now default to `priceCents: 0`, so new catalog agents come in as free instead of using the old hardcoded `$29` fallback
 - Cart item rows now render agent thumbnails when `thumbnailUrl` exists, with the existing package icon as fallback
 - Backend cart service now exists in `server/services/cart.service.ts` with DB-backed cart summary recalculation
 - Backend order service now exists in `server/services/order.service.ts` with paid-order creation and signed-download helpers
@@ -78,6 +79,7 @@ Implemented in the current mock app:
 - `/api/cart`, `/api/cart/items`, and `/api/cart/items/[id]` now route through `server/services/cart.service.ts` using the cart cookie
 - `POST /api/checkout/session` now routes through `server/services/checkout.service.ts`
 - Checkout now creates Stripe checkout sessions, requires auth when OAuth providers are configured, and the success page reconciles `session_id` values back into orders before clearing the cart
+- Zero-dollar carts now bypass Stripe and create a paid free order directly, then redirect straight to `/checkout/success?orderId=...`
 - `POST /api/webhooks/telegram` now routes through `server/services/telegram.service.ts`
 - `POST /api/webhooks/stripe` now routes through `server/services/checkout.service.ts`
 - Telegram channel config now supports explicit disconnect/reset so users can unlink a bot and connect a different one

@@ -59,6 +59,25 @@ export async function createCheckoutSession(input: {
     throw new HttpError(400, 'Cart is empty.')
   }
 
+  if (cart.totalCents === 0) {
+    const order = await createPaidOrderFromCart({
+      cartId: cart.id,
+      payment: {
+        amountCents: 0,
+        currency: cart.currency,
+        paymentProvider: 'free',
+        paymentReference: `free:${cart.id}`,
+      },
+      userId: input.userId ?? DEFAULT_REQUEST_USER_ID,
+    })
+    const appUrl = getCheckoutBaseUrl(input.origin)
+
+    return {
+      sessionId: order.id,
+      sessionUrl: `${appUrl}/checkout/success?orderId=${encodeURIComponent(order.id)}`,
+    }
+  }
+
   const stripe = getStripeCheckoutClient()
   const appUrl = getCheckoutBaseUrl(input.origin)
   const session = await stripe.checkout.sessions.create({

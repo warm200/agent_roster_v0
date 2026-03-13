@@ -74,6 +74,38 @@ test('checkout session route forwards cart payload to checkout service', async (
   assert.equal(payload.sessionId, 'cs_test_123')
 })
 
+test('checkout session route returns local success redirect for free carts', async () => {
+  setCheckoutServiceForTesting({
+    async createCheckoutSession() {
+      return {
+        sessionId: 'order-free-1',
+        sessionUrl: 'http://localhost/checkout/success?orderId=order-free-1',
+      }
+    },
+    async handleStripeWebhookEvent() {
+      return { received: true, type: 'checkout.session.completed' as const }
+    },
+    async reconcileCheckoutSession() {
+      return order as never
+    },
+  } satisfies CheckoutService)
+
+  const response = await createSession(
+    new NextRequest('http://localhost/api/checkout/session', {
+      body: JSON.stringify({
+        cartId: 'cart-free-1',
+        userId: 'user-free-1',
+      }),
+      method: 'POST',
+    }),
+  )
+  const payload = await response.json()
+
+  assert.equal(response.status, 201)
+  assert.equal(payload.sessionId, 'order-free-1')
+  assert.equal(payload.sessionUrl, 'http://localhost/checkout/success?orderId=order-free-1')
+})
+
 test('checkout session route requires auth when oauth is configured', async () => {
   process.env.GITHUB_CLIENT_ID = 'github-client'
   process.env.GITHUB_CLIENT_SECRET = 'github-secret'

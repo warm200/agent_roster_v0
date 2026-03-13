@@ -34,6 +34,7 @@ export default function CheckoutPage() {
   const [isProcessing, setIsProcessing] = useState(false)
 
   const canCheckout = acceptedTerms && acceptedRisk && items.length > 0
+  const isFreeCheckout = totalCents === 0
 
   const handleCheckout = async () => {
     if (!canCheckout) return
@@ -47,7 +48,7 @@ export default function CheckoutPage() {
         return
       }
 
-      toast.success('Redirecting to Stripe checkout...')
+      toast.success(isFreeCheckout ? 'Completing free order...' : 'Redirecting to Stripe checkout...')
       window.location.assign(payload.sessionUrl)
     } catch (error) {
       const message =
@@ -251,7 +252,7 @@ export default function CheckoutPage() {
                   ) : (
                     <>
                       <CreditCard className="w-4 h-4 mr-2" />
-                      Pay {formatPrice(totalCents)}
+                      {isFreeCheckout ? 'Complete Free Order' : `Pay ${formatPrice(totalCents)}`}
                     </>
                   )}
                 </Button>

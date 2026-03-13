@@ -28,7 +28,7 @@ This agent connects to your email inbox and helps you stay on top of your messag
 - It does not delete or archive emails automatically
 - It does not access attachments or download files
 - It does not share your email content with third parties`,
-    priceCents: 2900,
+    priceCents: 0,
     currency: 'USD',
     status: 'active',
     currentVersion: {
@@ -79,7 +79,7 @@ This agent integrates with your calendar to optimize your schedule:
 - It does not make travel arrangements
 - It does not access your files or documents
 - It cannot override your manual calendar edits`,
-    priceCents: 3900,
+    priceCents: 0,
     currency: 'USD',
     status: 'active',
     currentVersion: {
@@ -130,7 +130,7 @@ This agent processes your documents to save you reading time:
 - It does not share document content externally
 - It does not store documents after processing
 - It cannot process encrypted or password-protected files`,
-    priceCents: 4900,
+    priceCents: 0,
     currency: 'USD',
     status: 'active',
     currentVersion: {
@@ -181,7 +181,7 @@ This agent enables powerful cross-tool automation:
 - It does not store your API keys permanently
 - It cannot perform actions outside defined workflows
 - It does not have direct database access`,
-    priceCents: 7900,
+    priceCents: 0,
     currency: 'USD',
     status: 'active',
     currentVersion: {
@@ -232,7 +232,7 @@ This agent provides personal productivity analytics:
 - It does not record screen content or keystrokes
 - It does not access financial or sensitive accounts
 - It cannot modify your system settings`,
-    priceCents: 1900,
+    priceCents: 0,
     currency: 'USD',
     status: 'active',
     currentVersion: {

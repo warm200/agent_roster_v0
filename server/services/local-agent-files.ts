@@ -326,7 +326,7 @@ async function buildLocalAgentDefinition(agentDir: string): Promise<LocalAgentDe
       currency: 'USD',
       descriptionMarkdown,
       id: agentId,
-      priceCents: 2900,
+      priceCents: 0,
       slug,
       status: 'active',
       summary,
