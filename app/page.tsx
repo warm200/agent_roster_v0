@@ -10,6 +10,7 @@ import {
   Calendar,
   CheckCircle2,
   FileText,
+  Layers3,
   Mail,
   MessageSquare,
   Play,
@@ -24,58 +25,77 @@ const highlights = [
   'Risk labels upfront. No mystery permissions after checkout.',
 ]
 
-const workflows = [
+const bundleTemplates = [
   {
-    icon: Mail,
-    kicker: 'Inbox',
-    title: 'Triage the chaos',
-    description: 'Draft replies, group urgent threads, and keep your inbox from becoming archaeology.',
+    icon: Sparkles,
+    kicker: 'Morning Ops Bundle',
+    title: 'Start the day with inbox, calendar, and context already aligned.',
+    description:
+      'A compact workspace for triage, schedule repair, and a usable brief before the day gets noisy.',
+    agents: ['Inbox triage', 'Calendar guard', 'Daily brief'],
+    outcome: 'Best for getting into execution fast',
   },
   {
-    icon: Calendar,
-    kicker: 'Calendar',
-    title: 'Protect your focus blocks',
-    description: 'Reschedule collisions, hold deep-work windows, and keep meetings from eating the week.',
+    icon: Mail,
+    kicker: 'Founder Inbox Bundle',
+    title: 'Turn message overload into a controlled decision queue.',
+    description:
+      'Bundle the agents that sort priority threads, draft replies, and surface follow-ups without losing tone.',
+    agents: ['Priority sorter', 'Reply drafter', 'Follow-up tracker'],
+    outcome: 'Best for high-context communication loops',
   },
   {
     icon: FileText,
-    kicker: 'Docs',
-    title: 'Turn documents into action',
-    description: 'Pull deadlines, summarize decisions, and compress long reads into a useful brief.',
+    kicker: 'Weekly Review Bundle',
+    title: 'Close the loop on docs, decisions, and next actions in one pass.',
+    description:
+      'A review workspace that pulls notes, summarizes movement, and packages the next week into something actionable.',
+    agents: ['Notes digester', 'Decision summary', 'Next-week planner'],
+    outcome: 'Best for recurring operating rituals',
   },
-]
+] as const
 
-const steps = [
+const bundleReasons = [
   {
-    id: '01',
-    title: 'Preview the agent brain',
-    description: 'Chat with the agent first. Learn its style, boundaries, and whether it is worth your time.',
+    title: 'Single agents solve one move',
+    description:
+      'Useful, but isolated. You still have to coordinate the handoff, remember the sequence, and stitch outputs together yourself.',
   },
   {
-    id: '02',
-    title: 'Buy once, connect once',
-    description: 'Purchase the bundle, validate Telegram, and keep the handoff path consistent from checkout to run.',
+    title: 'Bundles behave like a workstation',
+    description:
+      'The value is the combination: multiple agents, one operating loop, one shared job to get done.',
   },
   {
-    id: '03',
-    title: 'Launch into the real workspace',
-    description: 'Runs expose status, logs, results, and Control UI without hiding what the runtime is allowed to do.',
+    title: 'You keep the combinations that work',
+    description:
+      'Over time the product becomes less about browsing isolated agents and more about keeping a set of bundles that fit your real routines.',
   },
-]
+] as const
+
+const supportPillars = [
+  {
+    icon: MessageSquare,
+    title: 'Preview before commitment',
+    description: 'Understand tone, logic, and boundaries first. Runtime comes later.',
+  },
+  {
+    icon: Zap,
+    title: 'Run with a real handoff',
+    description: 'Telegram pairing, status, logs, and results keep the bundle operational instead of theatrical.',
+  },
+  {
+    icon: Shield,
+    title: 'Trust stays visible',
+    description: 'Risk labels stay upfront so the bundle feels inspectable before money or workspace access changes hands.',
+  },
+] as const
 
 const benefits = [
   'Curated agents reviewed for safety',
   'Risk language that normal people can read',
   'Runs, logs, and artifacts in one place',
   'Telegram setup without webhook pain in local dev',
-]
-
-const floatingTags = [
-  'Preview first',
-  'Risk labeled',
-  'Telegram paired',
-  'Run logs',
-  'Control UI',
 ]
 
 export default function HomePage() {
@@ -92,18 +112,18 @@ export default function HomePage() {
             <div className="relative z-10">
               <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-border/70 bg-card/70 px-3 py-1.5 text-xs uppercase tracking-[0.22em] text-muted-foreground backdrop-blur">
                 <Sparkles className="h-3.5 w-3.5 text-emerald-300" />
-                Technical buyers, less black box
+                Compose bundles, not one-off tools
               </div>
 
               <h1 className="max-w-4xl text-4xl font-semibold leading-[0.95] tracking-[-0.04em] text-foreground md:text-6xl lg:text-7xl">
-                Buy playful
-                <span className="text-muted-foreground"> agent workflows </span>
-                without giving up operational trust.
+                Build focused
+                <span className="text-muted-foreground"> work bundles </span>
+                that run like a real workspace.
               </h1>
 
               <p className="mt-6 max-w-2xl text-base leading-8 text-muted-foreground md:text-lg">
-                AgentRoster is for solo operators and founders who want useful automation, not an
-                opaque demo. Preview the personality, inspect the risk, then launch the real run.
+                AgentRoster is not mainly about buying a single agent. It is about composing the right
+                combinations, running them as a bundle, and keeping the setups that actually fit your day.
               </p>
 
               <div className="mt-8 flex flex-col gap-3 sm:flex-row">
@@ -117,7 +137,12 @@ export default function HomePage() {
                     <ArrowRight className="ml-2 h-4 w-4 transition-transform duration-200 group-hover:translate-x-1 motion-reduce:transform-none" />
                   </Link>
                 </Button>
-                <Button size="lg" variant="outline" asChild className="h-12 rounded-full border-border/70 bg-card/60 px-6 text-sm">
+                <Button
+                  size="lg"
+                  variant="outline"
+                  asChild
+                  className="h-12 rounded-full border-border/70 bg-card/60 px-6 text-sm"
+                >
                   <Link href="/app">Open Dashboard</Link>
                 </Button>
               </div>
@@ -142,10 +167,10 @@ export default function HomePage() {
 
             <div className="relative z-10">
               <div className="absolute -top-8 right-5 hidden rounded-full border border-border/70 bg-card/70 px-4 py-2 text-xs uppercase tracking-[0.2em] text-muted-foreground backdrop-blur md:block motion-safe:animate-[hero-drift_8s_ease-in-out_infinite]">
-                Runs with receipts
+                Bundle first
               </div>
               <div className="absolute -left-4 top-20 hidden rounded-full border border-border/70 bg-card/70 px-4 py-2 text-xs uppercase tracking-[0.2em] text-muted-foreground backdrop-blur lg:block motion-safe:animate-[hero-drift_10s_ease-in-out_infinite_1s]">
-                Preview before payment
+                Keep what works
               </div>
 
               <Card className="relative overflow-hidden rounded-[2rem] border-border/70 bg-card/85 shadow-[0_30px_80px_-40px_rgba(0,0,0,0.9)] backdrop-blur">
@@ -154,15 +179,15 @@ export default function HomePage() {
                   <div className="flex items-center justify-between rounded-2xl border border-border/60 bg-background/65 px-4 py-3 backdrop-blur">
                     <div className="flex items-center gap-3">
                       <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-secondary text-foreground">
-                        <Bot className="h-5 w-5" />
+                        <Layers3 className="h-5 w-5" />
                       </div>
                       <div>
-                        <div className="text-sm font-medium text-foreground">AgentRoster</div>
-                        <div className="text-xs text-muted-foreground">Control room for paid runs</div>
+                        <div className="text-sm font-medium text-foreground">Morning Ops Bundle</div>
+                        <div className="text-xs text-muted-foreground">A focused workspace, not a loose cart</div>
                       </div>
                     </div>
                     <div className="rounded-full border border-emerald-400/25 bg-emerald-400/10 px-3 py-1 text-[11px] uppercase tracking-[0.18em] text-emerald-300">
-                      Ready to launch
+                      Ready to run
                     </div>
                   </div>
 
@@ -170,23 +195,29 @@ export default function HomePage() {
                     <div className="rounded-[1.5rem] border border-border/60 bg-background/65 p-5 backdrop-blur">
                       <div className="flex items-start justify-between gap-3">
                         <div>
-                          <div className="text-xs uppercase tracking-[0.22em] text-muted-foreground">Live bundle</div>
+                          <div className="text-xs uppercase tracking-[0.22em] text-muted-foreground">Bundle composition</div>
                           <h2 className="mt-2 text-2xl font-semibold tracking-[-0.03em] text-foreground">
-                            Inbox Triage Agent
+                            Three agents. One operating loop.
                           </h2>
                           <p className="mt-2 max-w-sm text-sm leading-6 text-muted-foreground">
-                            Previewed. Paid. Telegram paired. Waiting for you to hit launch instead of
-                            wondering what the runtime might do.
+                            Inbox triage clears the queue, calendar guard protects the day, and daily
+                            brief turns the output into a usable starting point.
                           </p>
                         </div>
                         <RiskBadge level="low" />
                       </div>
 
+                      <div className="mt-5 flex flex-wrap gap-2">
+                        <BundleChip icon={Mail} label="Inbox triage" />
+                        <BundleChip icon={Calendar} label="Calendar guard" />
+                        <BundleChip icon={FileText} label="Daily brief" />
+                      </div>
+
                       <div className="mt-5 grid grid-cols-2 gap-3">
-                        <MetricCard label="Preview" value="Free chat first" />
-                        <MetricCard label="Runtime" value="Managed workspace" />
+                        <MetricCard label="Preview" value="Bundle voice first" />
                         <MetricCard label="Channel" value="Telegram paired" />
-                        <MetricCard label="Logs" value="Readable in app" />
+                        <MetricCard label="Runtime" value="Managed workspace" />
+                        <MetricCard label="Output" value="One shared loop" />
                       </div>
                     </div>
 
@@ -194,18 +225,18 @@ export default function HomePage() {
                       <div className="rounded-[1.5rem] border border-border/60 bg-background/65 p-4 backdrop-blur">
                         <div className="mb-3 flex items-center gap-2 text-xs uppercase tracking-[0.22em] text-muted-foreground">
                           <Play className="h-3.5 w-3.5" />
-                          Run rhythm
+                          Bundle logic
                         </div>
                         <div className="space-y-3">
-                          {steps.map((step, index) => (
-                            <div key={step.id} className="flex items-start gap-3">
+                          {bundleReasons.map((reason, index) => (
+                            <div key={reason.title} className="flex items-start gap-3">
                               <div className="mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-border/70 bg-card text-xs text-foreground">
                                 {index + 1}
                               </div>
                               <div>
-                                <div className="text-sm font-medium text-foreground">{step.title}</div>
+                                <div className="text-sm font-medium text-foreground">{reason.title}</div>
                                 <div className="mt-1 text-sm leading-6 text-muted-foreground">
-                                  {step.description}
+                                  {reason.description}
                                 </div>
                               </div>
                             </div>
@@ -217,21 +248,15 @@ export default function HomePage() {
                         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.09),transparent_38%)]" />
                         <div className="relative">
                           <div className="mb-3 text-xs uppercase tracking-[0.22em] text-muted-foreground">
-                            Small delight, no circus
+                            What users keep
                           </div>
-                          <div className="flex flex-wrap gap-2">
-                            {floatingTags.map((tag, index) => (
-                              <span
-                                key={tag}
-                                className="inline-flex rounded-full border border-border/60 bg-background/75 px-3 py-1.5 text-xs text-foreground motion-safe:animate-[hero-drift_9s_ease-in-out_infinite]"
-                                style={{ animationDelay: `${index * 0.6}s` }}
-                              >
-                                {tag}
-                              </span>
-                            ))}
+                          <div className="space-y-2">
+                            <SavedBundleRow label="Morning routine" detail="Triage + calendar + brief" />
+                            <SavedBundleRow label="Founder loop" detail="Priority inbox + draft replies" />
+                            <SavedBundleRow label="Friday review" detail="Summaries + next actions" />
                           </div>
                           <p className="mt-4 text-sm leading-6 text-muted-foreground">
-                            Enough motion to feel alive. Not enough to make a technical buyer close the tab.
+                            The memorable unit is the combination, not one isolated capability.
                           </p>
                         </div>
                       </div>
@@ -247,41 +272,129 @@ export default function HomePage() {
           <div className="container mx-auto px-4 py-18 md:py-20">
             <div className="mb-10 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
               <div>
-                <div className="text-xs uppercase tracking-[0.24em] text-muted-foreground">Workflows</div>
+                <div className="text-xs uppercase tracking-[0.24em] text-muted-foreground">Bundle Templates</div>
                 <h2 className="mt-3 text-3xl font-semibold tracking-[-0.03em] text-foreground md:text-4xl">
-                  Pick the workflow,
-                  <span className="text-muted-foreground"> not the prompt engineering hobby.</span>
+                  Start from a working combination,
+                  <span className="text-muted-foreground"> not a lonely agent card.</span>
                 </h2>
               </div>
               <p className="max-w-xl text-sm leading-7 text-muted-foreground">
-                Each catalog entry is meant to feel concrete: what it helps with, what risk it carries,
-                and how it fits into an actual operator’s day.
+                These are examples of the mental model: you are choosing a composition for a workflow,
+                then refining the bundle that earns a permanent spot in your stack.
               </p>
             </div>
 
             <div className="grid gap-5 lg:grid-cols-3">
-              {workflows.map((workflow, index) => (
+              {bundleTemplates.map((bundle, index) => (
                 <Card
-                  key={workflow.title}
+                  key={bundle.kicker}
                   className="group overflow-hidden rounded-[1.75rem] border-border/60 bg-background/60 transition-transform duration-300 hover:-translate-y-1 motion-reduce:transform-none"
                 >
                   <CardContent className="p-6">
                     <div className="flex items-center justify-between">
                       <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-secondary text-foreground">
-                        <workflow.icon className="h-6 w-6" />
+                        <bundle.icon className="h-6 w-6" />
                       </div>
                       <span className="text-xs uppercase tracking-[0.22em] text-foreground/30">
                         0{index + 1}
                       </span>
                     </div>
                     <div className="mt-5 text-xs uppercase tracking-[0.22em] text-muted-foreground">
-                      {workflow.kicker}
+                      {bundle.kicker}
                     </div>
                     <h3 className="mt-2 text-xl font-semibold tracking-[-0.02em] text-foreground">
-                      {workflow.title}
+                      {bundle.title}
                     </h3>
                     <p className="mt-3 text-sm leading-7 text-muted-foreground">
-                      {workflow.description}
+                      {bundle.description}
+                    </p>
+                    <div className="mt-5 flex flex-wrap gap-2">
+                      {bundle.agents.map((agent) => (
+                        <span
+                          key={agent}
+                          className="rounded-full border border-border/60 bg-card/65 px-3 py-1.5 text-xs text-foreground"
+                        >
+                          {agent}
+                        </span>
+                      ))}
+                    </div>
+                    <p className="mt-5 text-sm leading-6 text-muted-foreground">{bundle.outcome}</p>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section className="border-b border-border/60">
+          <div className="container mx-auto grid gap-10 px-4 py-18 md:grid-cols-[0.95fr_1.05fr] md:items-center md:py-20">
+            <div>
+              <div className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-card/60 px-3 py-1.5 text-xs uppercase tracking-[0.22em] text-muted-foreground">
+                <Layers3 className="h-3.5 w-3.5 text-emerald-300" />
+                Why bundles win
+              </div>
+              <h2 className="mt-5 text-3xl font-semibold tracking-[-0.03em] text-foreground md:text-4xl">
+                A single agent is a skill point.
+                <span className="text-muted-foreground"> A bundle is a runnable workstation.</span>
+              </h2>
+              <p className="mt-4 max-w-xl text-sm leading-7 text-muted-foreground">
+                The product becomes more defensible when the user thinks in combinations. That is where
+                repeatable workflows, shared context, and real operating value start to show up.
+              </p>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-3">
+              {bundleReasons.map((reason, index) => (
+                <div
+                  key={reason.title}
+                  className="rounded-[1.4rem] border border-border/60 bg-card/55 px-4 py-4 text-sm leading-6 text-muted-foreground backdrop-blur"
+                >
+                  <div className="mb-4 flex h-8 w-8 items-center justify-center rounded-full bg-emerald-400/12 text-emerald-300">
+                    {index + 1}
+                  </div>
+                  <div className="text-base font-medium text-foreground">{reason.title}</div>
+                  <p className="mt-2">{reason.description}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section className="border-b border-border/60 bg-card/30">
+          <div className="container mx-auto px-4 py-18 md:py-20">
+            <div className="mb-10 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+              <div>
+                <div className="text-xs uppercase tracking-[0.24em] text-muted-foreground">Support Layer</div>
+                <h2 className="mt-3 text-3xl font-semibold tracking-[-0.03em] text-foreground md:text-4xl">
+                  Preview, trust, and runtime make the bundle usable.
+                </h2>
+              </div>
+              <p className="max-w-xl text-sm leading-7 text-muted-foreground">
+                These are still core. They just work better as proof that the bundle can be understood,
+                trusted, and run end to end.
+              </p>
+            </div>
+
+            <div className="grid gap-5 lg:grid-cols-3">
+              {supportPillars.map((pillar, index) => (
+                <Card
+                  key={pillar.title}
+                  className="group overflow-hidden rounded-[1.75rem] border-border/60 bg-background/60"
+                >
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between">
+                      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-secondary text-foreground">
+                        <pillar.icon className="h-6 w-6" />
+                      </div>
+                      <span className="text-xs uppercase tracking-[0.22em] text-foreground/30">
+                        0{index + 1}
+                      </span>
+                    </div>
+                    <h3 className="mt-5 text-xl font-semibold tracking-[-0.02em] text-foreground">
+                      {pillar.title}
+                    </h3>
+                    <p className="mt-3 text-sm leading-7 text-muted-foreground">
+                      {pillar.description}
                     </p>
                   </CardContent>
                 </Card>
@@ -301,8 +414,8 @@ export default function HomePage() {
                 Safety copy that doesn’t read like a compliance hostage note.
               </h2>
               <p className="mt-4 max-w-xl text-sm leading-7 text-muted-foreground">
-                Risk is a feature here, not fine print. Every agent makes its permissions legible before
-                you commit real workspace time or real money.
+                Risk is still a feature, not fine print. Every agent in the bundle keeps its permissions
+                legible before you commit real workspace time or real money.
               </p>
 
               <div className="mt-6 flex flex-wrap gap-3">
@@ -339,11 +452,12 @@ export default function HomePage() {
                 <div className="relative max-w-2xl">
                   <div className="text-xs uppercase tracking-[0.24em] text-muted-foreground">Start here</div>
                   <h2 className="mt-3 text-3xl font-semibold tracking-[-0.03em] text-foreground md:text-4xl">
-                    Browse the catalog.
-                    <span className="text-muted-foreground"> Find the one that feels like cheating.</span>
+                    Compose the bundle.
+                    <span className="text-muted-foreground"> Keep the combinations that earn their place.</span>
                   </h2>
                   <p className="mt-4 text-sm leading-7 text-muted-foreground">
-                    Preview first. Buy when the fit is obvious. Launch when the task is real.
+                    Browse agents, shape a focused workspace, preview before buying, then run the bundle
+                    when the job is real.
                   </p>
                 </div>
 
@@ -358,7 +472,12 @@ export default function HomePage() {
                       <ArrowRight className="ml-2 h-4 w-4 transition-transform duration-200 group-hover:translate-x-1 motion-reduce:transform-none" />
                     </Link>
                   </Button>
-                  <Button size="lg" variant="outline" asChild className="h-12 rounded-full border-border/70 bg-background/70 px-6 text-sm">
+                  <Button
+                    size="lg"
+                    variant="outline"
+                    asChild
+                    className="h-12 rounded-full border-border/70 bg-background/70 px-6 text-sm"
+                  >
                     <Link href="/app">See Dashboard</Link>
                   </Button>
                 </div>
@@ -376,9 +495,33 @@ export default function HomePage() {
             </div>
             AgentRoster
           </div>
-          <p>Trusted Personal Ops Agents Platform</p>
+          <p>Compose bundles. Run focused workspaces.</p>
         </div>
       </footer>
+    </div>
+  )
+}
+
+function BundleChip({
+  icon: Icon,
+  label,
+}: {
+  icon: typeof Bot
+  label: string
+}) {
+  return (
+    <div className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-card/70 px-3 py-2 text-xs text-foreground">
+      <Icon className="h-3.5 w-3.5" />
+      {label}
+    </div>
+  )
+}
+
+function SavedBundleRow({ label, detail }: { label: string; detail: string }) {
+  return (
+    <div className="rounded-2xl border border-border/60 bg-background/75 px-3 py-3">
+      <div className="text-sm font-medium text-foreground">{label}</div>
+      <div className="mt-1 text-xs leading-5 text-muted-foreground">{detail}</div>
     </div>
   )
 }
