@@ -137,19 +137,35 @@ export default function PricingPage() {
             <div className="relative z-10">
               <div className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-card/70 px-3 py-1.5 text-xs uppercase tracking-[0.22em] text-muted-foreground backdrop-blur">
                 <Sparkles className="h-3.5 w-3.5 text-orange-200" />
-                Dedicated pricing
+                Runtime plans only
               </div>
 
               <h1 className="mt-6 max-w-4xl text-4xl font-semibold leading-[0.94] tracking-[-0.04em] text-foreground md:text-6xl lg:text-7xl">
-                Choose the runtime tier
-                <span className="text-muted-foreground"> your bundle actually needs.</span>
+                Run agents,
+                <span className="text-muted-foreground"> not infrastructure.</span>
+                <br />
+                Buy agents for free.
+                <span className="text-muted-foreground"> Pay only when you want to run them.</span>
               </h1>
 
               <p className="mt-6 max-w-2xl text-base leading-8 text-muted-foreground md:text-lg">
-                Pricing maps directly to wake behavior, bundle capacity, and concurrency. Start with
-                preview, pay for occasional runs, keep key bundles warm, or pin a workspace into
-                always-on mode.
+                Preview agents for free. Launch real runs with a runtime plan when you&apos;re ready.
               </p>
+
+              <div className="mt-6 grid max-w-2xl gap-3 text-sm text-muted-foreground sm:grid-cols-3">
+                <div className="rounded-2xl border border-border/60 bg-card/55 px-4 py-3">
+                  <div className="text-[11px] uppercase tracking-[0.18em] text-orange-200/80">Agent purchase</div>
+                  <div className="mt-2 text-base font-medium text-foreground">$0 today</div>
+                </div>
+                <div className="rounded-2xl border border-border/60 bg-card/55 px-4 py-3">
+                  <div className="text-[11px] uppercase tracking-[0.18em] text-orange-200/80">Preview chat</div>
+                  <div className="mt-2 text-base font-medium text-foreground">Free</div>
+                </div>
+                <div className="rounded-2xl border border-border/60 bg-card/55 px-4 py-3">
+                  <div className="text-[11px] uppercase tracking-[0.18em] text-orange-200/80">Paid moment</div>
+                  <div className="mt-2 text-base font-medium text-foreground">When runs start</div>
+                </div>
+              </div>
 
               <div className="mt-8 flex flex-col gap-3 sm:flex-row">
                 <Button
@@ -158,7 +174,7 @@ export default function PricingPage() {
                   className="group h-12 rounded-full px-6 text-sm font-medium shadow-[0_14px_30px_-18px_rgba(255,188,127,0.65)]"
                 >
                   <Link href="/agents">
-                    Browse Agents
+                    Browse Free Agents
                     <ArrowRight className="ml-2 h-4 w-4 transition-transform duration-200 group-hover:translate-x-1 motion-reduce:transform-none" />
                   </Link>
                 </Button>
@@ -181,10 +197,10 @@ export default function PricingPage() {
                     <div>
                       <div className="flex items-center gap-2 text-xs uppercase tracking-[0.22em] text-muted-foreground">
                         <Layers3 className="h-3.5 w-3.5" />
-                        Tier ladder
+                        What you pay for
                       </div>
                       <h2 className="mt-3 text-2xl font-semibold tracking-[-0.03em] text-foreground">
-                        From preview to persistent runtime.
+                        Free discovery, paid execution.
                       </h2>
                     </div>
                     <div className="rounded-full border border-orange-200/20 bg-orange-200/10 px-3 py-1 text-[11px] uppercase tracking-[0.18em] text-orange-100/75">
