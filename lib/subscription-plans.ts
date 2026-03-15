@@ -40,7 +40,7 @@ export const SUBSCRIPTION_PLANS = [
     priceCents: 1900,
     billingInterval: 'month',
     includedCredits: 50,
-    activeBundles: 2,
+    activeBundles: 3,
     agentsPerBundle: 5,
     triggerMode: 'auto_wake',
     concurrentRuns: 3,

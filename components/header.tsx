@@ -125,12 +125,11 @@ export function Header() {
                       <AvatarFallback>{initials || 'AR'}</AvatarFallback>
                     </Avatar>
                     <span className="max-w-32 truncate text-sm">{userName}</span>
-                    {/* Keep credit refresh logic live; hide badge until we want balance visible again.
                     {remainingCredits !== null ? (
                       <span className="rounded-full border border-border/70 bg-secondary/80 px-2 py-0.5 text-xs text-muted-foreground">
                         {remainingCredits} cr
                       </span>
-                    ) : null} */}
+                    ) : null}
                   </Link>
                 </Button>
                 <Button
@@ -187,10 +186,9 @@ export function Header() {
                           {userEmail ? (
                             <p className="truncate text-xs text-muted-foreground">{userEmail}</p>
                           ) : null}
-                          {/* Keep credit refresh logic live; hide badge until we want balance visible again.
                           {remainingCredits !== null ? (
                             <p className="truncate text-xs text-muted-foreground">{remainingCredits} credits</p>
-                          ) : null} */}
+                          ) : null}
                         </div>
                       </div>
                       <div className="mt-3 grid gap-2">
