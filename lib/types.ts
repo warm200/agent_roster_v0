@@ -8,9 +8,32 @@ export type RunStatus = 'provisioning' | 'running' | 'completed' | 'failed'
 export type AgentTimeFormat = 'auto' | '12' | '24'
 export type AgentProviderKeyName = 'anthropic' | 'google' | 'openai' | 'openrouter'
 export type SubscriptionPlanId = 'free' | 'run' | 'warm_standby' | 'always_on'
-export type SubscriptionStatus = 'active' | 'canceled' | 'past_due'
+export type SubscriptionStatus = 'active' | 'canceled' | 'expired' | 'past_due'
 export type BillingInterval = 'none' | 'one_time' | 'month'
 export type TriggerMode = 'none' | 'manual' | 'auto_wake' | 'always_active'
+export type CreditLedgerEventType =
+  | 'grant'
+  | 'reset'
+  | 'reserve'
+  | 'commit'
+  | 'refund'
+  | 'adjust'
+  | 'expire'
+  | 'shadow_usage_estimate'
+export type CreditLedgerUnitType =
+  | 'launch_credit'
+  | 'wake_credit'
+  | 'always_on_budget'
+  | 'fair_use_adjustment'
+export type CreditLedgerStatus = 'pending' | 'committed' | 'reversed'
+export type RunTerminationReason =
+  | 'ttl_expired'
+  | 'idle_timeout'
+  | 'provisioning_timeout'
+  | 'manual_stop'
+  | 'provider_unhealthy'
+  | 'provider_rejected'
+  | 'provider_error'
 
 // Order statuses
 export type OrderStatus = 'pending' | 'paid' | 'failed' | 'refunded'
@@ -232,6 +255,7 @@ export interface UserSubscription {
   id: string
   userId: string
   planId: SubscriptionPlanId
+  planVersion: string
   status: SubscriptionStatus
   billingInterval: BillingInterval
   includedCredits: number
@@ -252,11 +276,54 @@ export interface CreditLedgerEntry {
   id: string
   userId: string
   subscriptionId: string | null
+  orderId: string | null
+  runId: string | null
+  eventType: CreditLedgerEventType
+  unitType: CreditLedgerUnitType
   deltaCredits: number
-  balanceAfter: number
-  reason: string
-  metadata: Record<string, unknown>
+  resultingBalance: number | null
+  status: CreditLedgerStatus
+  reasonCode: string
+  idempotencyKey: string
+  metadataJson: Record<string, unknown>
   createdAt: string
+}
+
+export interface RunUsage {
+  id: string
+  runId: string
+  userId: string
+  orderId: string
+  planId: SubscriptionPlanId
+  planVersion: string
+  triggerModeSnapshot: TriggerMode
+  agentCount: number
+  usesRealWorkspace: boolean
+  usesTools: boolean
+  networkEnabled: boolean
+  provisioningStartedAt: string | null
+  providerAcceptedAt: string | null
+  runningStartedAt: string | null
+  completedAt: string | null
+  workspaceReleasedAt: string | null
+  terminationReason: RunTerminationReason | null
+  workspaceMinutes: number | null
+  toolCallsCount: number | null
+  inputTokensEst: number | null
+  outputTokensEst: number | null
+  estimatedInternalCostCents: number | null
+  statusSnapshot: RunStatus
+  ttlPolicySnapshot: {
+    cleanupGraceMinutes: number | null
+    heartbeatMissingMinutes: number | null
+    idleTimeoutMinutes: number | null
+    maxSessionTtlMinutes: number | null
+    provisioningTimeoutMinutes: number
+    triggerMode: TriggerMode
+    unhealthyProviderTimeoutMinutes: number | null
+  }
+  createdAt: string
+  updatedAt: string
 }
 
 export interface LaunchPolicyUsage {

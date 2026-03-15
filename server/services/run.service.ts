@@ -1,5 +1,5 @@
 import { riskProfileSchema, runLogSchema, runResultSchema } from '@/lib/schemas'
-import type { AgentVersion, Order, Run, RunLog, RunResult } from '@/lib/types'
+import type { AgentVersion, Order, Run, RunLog, RunResult, RunTerminationReason, RunUsage, SubscriptionPlan } from '@/lib/types'
 
 import { HttpError } from '../lib/http'
 import { scanAgentVersion as scanAgentVersionRiskProfile } from '../lib/risk-engine'
@@ -9,6 +9,7 @@ import { getOrderByIdForUser, getOrderProviderApiKeysForUser } from './order.ser
 import { RunRepository } from './run.repository'
 import { getSubscriptionService } from './subscription.service'
 import { getTelegramService } from './telegram.service'
+import { getProvisioningFailureReason, getTtlPolicySnapshot, RUNTIME_PLAN_VERSION } from './runtime-policy'
 
 function sanitizeRunText(value: string | null) {
   if (!value) {
@@ -132,6 +133,48 @@ function buildPendingRun(order: Order, runId: string, providerName: string): Run
   }
 }
 
+function buildRunUsage(run: Run, order: Order, plan: SubscriptionPlan): RunUsage {
+  return {
+    id: crypto.randomUUID(),
+    runId: run.id,
+    userId: run.userId,
+    orderId: order.id,
+    planId: plan.id,
+    planVersion: RUNTIME_PLAN_VERSION,
+    triggerModeSnapshot: plan.triggerMode,
+    agentCount: order.items.length,
+    usesRealWorkspace: run.usesRealWorkspace,
+    usesTools: run.usesTools,
+    networkEnabled: run.networkEnabled,
+    provisioningStartedAt: run.createdAt,
+    providerAcceptedAt: null,
+    runningStartedAt: null,
+    completedAt: null,
+    workspaceReleasedAt: null,
+    terminationReason: null,
+    workspaceMinutes: null,
+    toolCallsCount: null,
+    inputTokensEst: null,
+    outputTokensEst: null,
+    estimatedInternalCostCents: null,
+    statusSnapshot: 'provisioning',
+    ttlPolicySnapshot: getTtlPolicySnapshot(plan),
+    createdAt: run.createdAt,
+    updatedAt: run.updatedAt,
+  }
+}
+
+function buildReleasedUsagePatch(run: Run, reason: RunTerminationReason): Partial<RunUsage> {
+  const completedAt = run.completedAt ?? nowIso()
+  return {
+    completedAt,
+    statusSnapshot: run.status,
+    terminationReason: reason,
+    updatedAt: nowIso(),
+    workspaceReleasedAt: completedAt,
+  }
+}
+
 export class RunService {
   constructor(
     private readonly repository: RunRepository = new RunRepository(),
@@ -140,7 +183,8 @@ export class RunService {
   async createRun(userId: string, orderId: string) {
     await runServiceDeps.getTelegramService().getChannelConfig({ orderId, userId })
     const order = await runServiceDeps.getOrderByIdForUser({ orderId, userId })
-    const launchPolicy = await runServiceDeps.getSubscriptionService().getLaunchPolicy(userId, order)
+    const subscriptionService = runServiceDeps.getSubscriptionService()
+    const launchPolicy = await subscriptionService.getLaunchPolicy(userId, order)
 
     if (!launchPolicy.allowed) {
       throw new HttpError(409, launchPolicy.blockers.join(' '))
@@ -154,16 +198,55 @@ export class RunService {
     const provider = runServiceDeps.getRunProvider()
     const runId = `run-${Date.now()}`
     const pendingRun = buildPendingRun(order, runId, provider.name)
-    const createdRun = await this.repository.createRun(pendingRun)
+    await subscriptionService.reserveLaunchCredit?.({
+      orderId,
+      plan: launchPolicy.plan,
+      runId,
+      subscriptionId: launchPolicy.subscription?.id ?? null,
+      userId,
+    })
+
+    let createdRun: Run
+
+    try {
+      if ('createProvisioningRun' in this.repository && typeof this.repository.createProvisioningRun === 'function') {
+        const created = await this.repository.createProvisioningRun(
+          pendingRun,
+          buildRunUsage(pendingRun, order, launchPolicy.plan),
+        )
+        createdRun = created.run
+      } else {
+        createdRun = await this.repository.createRun(pendingRun)
+      }
+    } catch (error) {
+      await subscriptionService.refundReservedLaunchCredit?.({
+        plan: launchPolicy.plan,
+        reasonCode: 'run_row_create_failed',
+        runId,
+        userId,
+      })
+      throw error
+    }
 
     void provider
       .createRun(order, runId, {
         providerApiKeys,
       })
       .then(async (providerRun) => {
+        await subscriptionService.commitReservedLaunchCredit?.({
+          plan: launchPolicy.plan,
+          runId,
+          userId,
+        })
         await this.repository.updateRun(runId, {
           ...providerRun,
           id: runId,
+        })
+        await this.repository.updateRunUsage?.(runId, {
+          providerAcceptedAt: nowIso(),
+          runningStartedAt: providerRun.startedAt ?? (providerRun.status === 'running' ? nowIso() : null),
+          statusSnapshot: providerRun.status,
+          updatedAt: nowIso(),
         })
       })
       .catch(async (error) => {
@@ -173,12 +256,26 @@ export class RunService {
             ? error.message
             : 'Managed runtime provisioning failed.'
 
+        await subscriptionService.refundReservedLaunchCredit?.({
+          plan: launchPolicy.plan,
+          reasonCode:
+            message.toLowerCase().includes('timeout') ? 'provisioning_timeout' : 'provider_not_accepted',
+          runId,
+          userId,
+        })
         await this.repository.updateRun(runId, {
           completedAt: failedAt,
           resultSummary: message,
           startedAt: createdRun.startedAt,
           status: 'failed',
           updatedAt: failedAt,
+        })
+        await this.repository.updateRunUsage?.(runId, {
+          completedAt: failedAt,
+          statusSnapshot: 'failed',
+          terminationReason: getProvisioningFailureReason(launchPolicy.plan.id),
+          updatedAt: failedAt,
+          workspaceReleasedAt: failedAt,
         })
       })
 
@@ -252,7 +349,7 @@ export class RunService {
     const stopped = await runServiceDeps.getRunProvider().stopRun(run.id, run)
     if (!stopped) {
       const stoppedAt = new Date().toISOString()
-      return (
+      const nextRun =
         (await this.repository.updateRun(run.id, {
           completedAt: stoppedAt,
           resultSummary: 'Run stopped by operator request.',
@@ -265,15 +362,19 @@ export class RunService {
           status: 'failed',
           updatedAt: stoppedAt,
         }
-      )
+      await this.repository.updateRunUsage?.(run.id, buildReleasedUsagePatch(nextRun, 'manual_stop'))
+      return nextRun
     }
 
-    return (await this.repository.updateRun(run.id, stopped)) ?? stopped
+    const nextRun = (await this.repository.updateRun(run.id, stopped)) ?? stopped
+    await this.repository.updateRunUsage?.(run.id, buildReleasedUsagePatch(nextRun, 'manual_stop'))
+    return nextRun
   }
 
   async retryRun(userId: string, runId: string) {
     const run = await this.requireRun(userId, runId)
     const provider = runServiceDeps.getRunProvider()
+    const subscriptionService = runServiceDeps.getSubscriptionService()
 
     if (run.status !== 'failed') {
       throw new HttpError(409, 'Only stopped runs can be restarted.')
@@ -284,20 +385,71 @@ export class RunService {
         orderId: run.orderId,
         userId,
       })
+      const launchPolicy = await subscriptionService.getLaunchPolicy(userId, order)
+
+      if (!launchPolicy.allowed) {
+        throw new HttpError(409, launchPolicy.blockers.join(' '))
+      }
+
+      const chargeKey = `restart:${run.id}:${run.updatedAt}`
       const providerApiKeys = runServiceDeps.getOrderProviderApiKeysForUser
         ? await runServiceDeps.getOrderProviderApiKeysForUser({
             orderId: run.orderId,
             userId,
           })
         : {}
-      const restarted = await provider.restartRun(run.id, order, run, {
-        providerApiKeys,
+      await subscriptionService.reserveLaunchCredit?.({
+        chargeKey,
+        orderId: order.id,
+        plan: launchPolicy.plan,
+        runId: run.id,
+        subscriptionId: launchPolicy.subscription?.id ?? null,
+        userId,
       })
 
+      let restarted: Run | null = null
+
+      try {
+        restarted = await provider.restartRun(run.id, order, run, {
+          providerApiKeys,
+        })
+      } catch (error) {
+        await subscriptionService.refundReservedLaunchCredit?.({
+          chargeKey,
+          plan: launchPolicy.plan,
+          reasonCode: 'restart_provider_error',
+          runId: run.id,
+          userId,
+        })
+        throw error
+      }
+
       if (!restarted) {
+        await subscriptionService.refundReservedLaunchCredit?.({
+          chargeKey,
+          plan: launchPolicy.plan,
+          reasonCode: 'restart_provider_rejected',
+          runId: run.id,
+          userId,
+        })
         throw new HttpError(409, 'Managed runtime sandbox could not be restarted.')
       }
 
+      await subscriptionService.commitReservedLaunchCredit?.({
+        chargeKey,
+        plan: launchPolicy.plan,
+        runId: run.id,
+        userId,
+      })
+      await this.repository.updateRunUsage?.(run.id, {
+        completedAt: null,
+        providerAcceptedAt: nowIso(),
+        runningStartedAt: restarted.startedAt ?? nowIso(),
+        statusSnapshot: restarted.status,
+        terminationReason: null,
+        updatedAt: nowIso(),
+        workspaceReleasedAt: null,
+      })
       return (await this.repository.updateRun(run.id, restarted)) ?? restarted
     }
 
@@ -336,6 +488,7 @@ export class RunService {
         }
 
         const persistedRun = (await this.repository.updateRun(run.id, stoppedRun)) ?? stoppedRun
+        await this.repository.updateRunUsage?.(run.id, buildReleasedUsagePatch(persistedRun, 'provider_unhealthy'))
         return sanitizeRun(persistedRun)
       }
 
@@ -374,6 +527,9 @@ export class RunService {
     }
 
     const persistedRun = (await this.repository.updateRun(run.id, nextRun)) ?? nextRun
+    if (persist && persistedRun.status === 'failed') {
+      await this.repository.updateRunUsage?.(run.id, buildReleasedUsagePatch(persistedRun, 'provider_unhealthy'))
+    }
     return sanitizeRun(persistedRun)
   }
 }

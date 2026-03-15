@@ -128,6 +128,18 @@ function buildRun(): Run {
   }
 }
 
+function buildFailedRun(): Run {
+  const now = new Date().toISOString()
+
+  return {
+    ...buildRun(),
+    completedAt: now,
+    resultSummary: 'Run stopped by operator request.',
+    status: 'failed',
+    updatedAt: now,
+  }
+}
+
 afterEach(() => {
   setRunServiceDepsForTesting(null)
 })
@@ -155,6 +167,9 @@ test('run service refreshes telegram pairing state before launch checks', async 
     },
     getSubscriptionService: () =>
       ({
+        commitReservedLaunchCredit: async () => {
+          calls.push('subscription.commitReservedLaunchCredit')
+        },
         getLaunchPolicy: async () => {
           calls.push('subscription.getLaunchPolicy')
           return {
@@ -168,6 +183,13 @@ test('run service refreshes telegram pairing state before launch checks', async 
               concurrentRuns: 0,
             },
           }
+        },
+        refundReservedLaunchCredit: async () => {
+          calls.push('subscription.refundReservedLaunchCredit')
+        },
+        reserveLaunchCredit: async () => {
+          calls.push('subscription.reserveLaunchCredit')
+          return null
         },
       } as never),
     getOrderProviderApiKeysForUser: async () => {
@@ -208,7 +230,9 @@ test('run service refreshes telegram pairing state before launch checks', async 
     'loadOrder',
     'subscription.getLaunchPolicy',
     'loadProviderKeys',
+    'subscription.reserveLaunchCredit',
     'provider.createRun',
+    'subscription.commitReservedLaunchCredit',
   ])
 })
 
@@ -230,6 +254,9 @@ test('run service blocks launch when subscription policy rejects the order', asy
     },
     getSubscriptionService: () =>
       ({
+        commitReservedLaunchCredit: async () => {
+          calls.push('subscription.commitReservedLaunchCredit')
+        },
         getLaunchPolicy: async () => {
           calls.push('subscription.getLaunchPolicy')
           return {
@@ -243,6 +270,13 @@ test('run service blocks launch when subscription policy rejects the order', asy
               concurrentRuns: 0,
             },
           }
+        },
+        refundReservedLaunchCredit: async () => {
+          calls.push('subscription.refundReservedLaunchCredit')
+        },
+        reserveLaunchCredit: async () => {
+          calls.push('subscription.reserveLaunchCredit')
+          return null
         },
       } as never),
     getOrderProviderApiKeysForUser: async () => {
@@ -277,5 +311,283 @@ test('run service blocks launch when subscription policy rejects the order', asy
     'telegram.getChannelConfig',
     'loadOrder',
     'subscription.getLaunchPolicy',
+  ])
+})
+
+test('run service refunds reserved credit when provider never accepts the launch', async () => {
+  const calls: string[] = []
+  const service = new RunService({
+    async createRun(run: Run) {
+      calls.push('repository.createRun')
+      return run
+    },
+    async updateRun(_runId: string, input: Partial<Run>) {
+      calls.push('repository.updateRun')
+      return {
+        ...buildRun(),
+        ...input,
+      }
+    },
+    async updateRunUsage() {
+      calls.push('repository.updateRunUsage')
+      return null
+    },
+  } as never)
+
+  setRunServiceDepsForTesting({
+    getOrderByIdForUser: async () => order,
+    getSubscriptionService: () =>
+      ({
+        commitReservedLaunchCredit: async () => {
+          calls.push('subscription.commitReservedLaunchCredit')
+          return null
+        },
+        getLaunchPolicy: async () => ({
+          allowed: true,
+          blockers: [],
+          plan: getSubscriptionPlan('run'),
+          subscription: {
+            id: 'subscription-1',
+            userId: order.userId,
+            planId: 'run',
+            planVersion: 'v1',
+            status: 'active',
+            billingInterval: 'one_time',
+            includedCredits: 30,
+            remainingCredits: 30,
+            priceCents: 500,
+            currency: 'USD',
+            stripeCustomerId: null,
+            stripePriceId: null,
+            stripeSubscriptionId: null,
+            stripeCheckoutSessionId: null,
+            currentPeriodStart: null,
+            currentPeriodEnd: null,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          },
+          usage: {
+            activeBundles: 0,
+            activeRunIds: [],
+            concurrentRuns: 0,
+          },
+        }),
+        refundReservedLaunchCredit: async () => {
+          calls.push('subscription.refundReservedLaunchCredit')
+          return null
+        },
+        reserveLaunchCredit: async () => {
+          calls.push('subscription.reserveLaunchCredit')
+          return null
+        },
+      } as never),
+    getOrderProviderApiKeysForUser: async () => ({}),
+    getRunProvider: () => ({
+      name: 'test',
+      createRun: async () => {
+        calls.push('provider.createRun')
+        throw new Error('provider handshake timed out')
+      },
+      getLogs: async () => [],
+      getResult: async () => null,
+      getStatus: async () => null,
+      stopRun: async () => null,
+    }),
+    getTelegramService: () =>
+      ({
+        getChannelConfig: async () => order.channelConfig!,
+      } as unknown as ReturnType<typeof getTelegramService>),
+  })
+
+  await service.createRun('user-test-1', 'order-test-1')
+  await new Promise((resolve) => setTimeout(resolve, 0))
+
+  assert.deepEqual(calls, [
+    'subscription.reserveLaunchCredit',
+    'repository.createRun',
+    'provider.createRun',
+    'subscription.refundReservedLaunchCredit',
+    'repository.updateRun',
+    'repository.updateRunUsage',
+  ])
+})
+
+test('run service blocks managed restart when launch policy rejects it', async () => {
+  const calls: string[] = []
+  const failedRun = buildFailedRun()
+  const service = new RunService({
+    async findRunForUser() {
+      return failedRun
+    },
+  } as never)
+
+  setRunServiceDepsForTesting({
+    getOrderByIdForUser: async () => {
+      calls.push('loadOrder')
+      return order
+    },
+    getSubscriptionService: () =>
+      ({
+        commitReservedLaunchCredit: async () => {
+          calls.push('subscription.commitReservedLaunchCredit')
+          return null
+        },
+        getLaunchPolicy: async () => {
+          calls.push('subscription.getLaunchPolicy')
+          return {
+            allowed: false,
+            blockers: ['Run allows at most 3 agents per launched bundle.'],
+            plan: getSubscriptionPlan('run'),
+            subscription: null,
+            usage: {
+              activeBundles: 1,
+              activeRunIds: [failedRun.id],
+              concurrentRuns: 1,
+            },
+          }
+        },
+        refundReservedLaunchCredit: async () => {
+          calls.push('subscription.refundReservedLaunchCredit')
+          return null
+        },
+        reserveLaunchCredit: async () => {
+          calls.push('subscription.reserveLaunchCredit')
+          return null
+        },
+      } as never),
+    getOrderProviderApiKeysForUser: async () => {
+      calls.push('loadProviderKeys')
+      return {}
+    },
+    getRunProvider: () => ({
+      name: 'test',
+      createRun: async () => buildRun(),
+      getLogs: async () => [],
+      getResult: async () => null,
+      getStatus: async () => null,
+      restartRun: async () => {
+        calls.push('provider.restartRun')
+        return buildRun()
+      },
+      stopRun: async () => null,
+    }),
+    getTelegramService: () =>
+      ({
+        getChannelConfig: async () => order.channelConfig!,
+      } as unknown as ReturnType<typeof getTelegramService>),
+  })
+
+  await assert.rejects(
+    () => service.retryRun('user-test-1', failedRun.id),
+    /Run allows at most 3 agents per launched bundle\./,
+  )
+
+  assert.deepEqual(calls, ['loadOrder', 'subscription.getLaunchPolicy'])
+})
+
+test('run service refunds reserved credit when managed restart throws', async () => {
+  const calls: string[] = []
+  const failedRun = buildFailedRun()
+  const service = new RunService({
+    async findRunForUser() {
+      return failedRun
+    },
+    async updateRun() {
+      calls.push('repository.updateRun')
+      return failedRun
+    },
+    async updateRunUsage() {
+      calls.push('repository.updateRunUsage')
+      return null
+    },
+  } as never)
+
+  setRunServiceDepsForTesting({
+    getOrderByIdForUser: async () => {
+      calls.push('loadOrder')
+      return order
+    },
+    getSubscriptionService: () =>
+      ({
+        commitReservedLaunchCredit: async () => {
+          calls.push('subscription.commitReservedLaunchCredit')
+          return null
+        },
+        getLaunchPolicy: async () => {
+          calls.push('subscription.getLaunchPolicy')
+          return {
+            allowed: true,
+            blockers: [],
+            plan: getSubscriptionPlan('warm_standby'),
+            subscription: {
+              id: 'subscription-1',
+              userId: order.userId,
+              planId: 'warm_standby',
+              planVersion: 'v1',
+              status: 'active',
+              billingInterval: 'month',
+              includedCredits: 50,
+              remainingCredits: 49,
+              priceCents: 1900,
+              currency: 'USD',
+              stripeCustomerId: null,
+              stripePriceId: null,
+              stripeSubscriptionId: null,
+              stripeCheckoutSessionId: null,
+              currentPeriodStart: null,
+              currentPeriodEnd: null,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            },
+            usage: {
+              activeBundles: 0,
+              activeRunIds: [],
+              concurrentRuns: 0,
+            },
+          }
+        },
+        refundReservedLaunchCredit: async () => {
+          calls.push('subscription.refundReservedLaunchCredit')
+          return null
+        },
+        reserveLaunchCredit: async () => {
+          calls.push('subscription.reserveLaunchCredit')
+          return null
+        },
+      } as never),
+    getOrderProviderApiKeysForUser: async () => {
+      calls.push('loadProviderKeys')
+      return {}
+    },
+    getRunProvider: () => ({
+      name: 'test',
+      createRun: async () => buildRun(),
+      getLogs: async () => [],
+      getResult: async () => null,
+      getStatus: async () => null,
+      restartRun: async () => {
+        calls.push('provider.restartRun')
+        throw new Error('provider restart exploded')
+      },
+      stopRun: async () => null,
+    }),
+    getTelegramService: () =>
+      ({
+        getChannelConfig: async () => order.channelConfig!,
+      } as unknown as ReturnType<typeof getTelegramService>),
+  })
+
+  await assert.rejects(
+    () => service.retryRun('user-test-1', failedRun.id),
+    /provider restart exploded/,
+  )
+
+  assert.deepEqual(calls, [
+    'loadOrder',
+    'subscription.getLaunchPolicy',
+    'loadProviderKeys',
+    'subscription.reserveLaunchCredit',
+    'provider.restartRun',
+    'subscription.refundReservedLaunchCredit',
   ])
 })

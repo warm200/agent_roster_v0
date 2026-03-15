@@ -1,14 +1,15 @@
 import type Stripe from 'stripe'
-import { eq } from 'drizzle-orm'
+import { eq, sql } from 'drizzle-orm'
 
 import { launchPolicyCheckSchema, subscriptionPlanSchema, userSubscriptionSchema } from '@/lib/schemas'
 import { getFreeSubscriptionPlan, getSubscriptionPlan, listSubscriptionPlans } from '@/lib/subscription-plans'
 import type { LaunchPolicyCheck, Order, SubscriptionPlan, UserSubscription } from '@/lib/types'
 
 import { createDb, type DbClient } from '../db'
-import { creditLedger, runs, userSubscriptions } from '../db/schema'
+import { creditLedger, runUsage, runs, userSubscriptions } from '../db/schema'
 import { HttpError } from '../lib/http'
 import { getStripe } from '../lib/stripe'
+import { getPlanLedgerUnitType, planConsumesLaunchCredits, RUNTIME_PLAN_VERSION } from './runtime-policy'
 
 type SubscriptionCheckoutSession = {
   sessionId: string
@@ -99,11 +100,11 @@ async function getStripePeriodBounds(stripe: Stripe, session: Stripe.Checkout.Se
 export function isCountedActiveRun(run: {
   status: string
   usesRealWorkspace: boolean
+  workspaceReleasedAt: string | null
 }) {
   return (
-    run.status === 'provisioning' ||
-    run.status === 'running' ||
-    (run.usesRealWorkspace && run.status === 'completed')
+    ((run.status === 'provisioning' || run.status === 'running') && !run.workspaceReleasedAt) ||
+    (run.usesRealWorkspace && run.status === 'completed' && !run.workspaceReleasedAt)
   )
 }
 
@@ -115,6 +116,7 @@ export function buildLaunchPolicyCheck(input: {
     orderId: string
     status: string
     usesRealWorkspace: boolean
+    workspaceReleasedAt: string | null
   }>
   subscription: UserSubscription | null
 }) {
@@ -166,6 +168,7 @@ function toUserSubscription(record: typeof userSubscriptions.$inferSelect): User
     id: record.id,
     userId: record.userId,
     planId: record.planId,
+    planVersion: record.planVersion,
     status: record.status,
     billingInterval: record.billingInterval,
     includedCredits: record.includedCredits,
@@ -183,11 +186,35 @@ function toUserSubscription(record: typeof userSubscriptions.$inferSelect): User
   })
 }
 
+function getReserveIdempotencyKey(chargeKey: string) {
+  return `${chargeKey}:reserve:${RUNTIME_PLAN_VERSION}`
+}
+
+function getCommitIdempotencyKey(chargeKey: string) {
+  return `${chargeKey}:commit:${RUNTIME_PLAN_VERSION}`
+}
+
+function getRefundIdempotencyKey(chargeKey: string) {
+  return `${chargeKey}:refund:${RUNTIME_PLAN_VERSION}`
+}
+
 let dbClient: DbClient | null = null
 
 function getDb() {
   dbClient ??= createDb()
   return dbClient
+}
+
+function toLockedSubscriptionRow(row: Record<string, unknown> | undefined) {
+  if (!row) {
+    return null
+  }
+
+  return {
+    id: String(row.id),
+    planVersion: String(row.plan_version ?? RUNTIME_PLAN_VERSION),
+    remainingCredits: Number(row.remaining_credits ?? 0),
+  }
 }
 
 export class SubscriptionService {
@@ -304,14 +331,266 @@ export class SubscriptionService {
         orderId: runs.orderId,
         status: runs.status,
         usesRealWorkspace: runs.usesRealWorkspace,
+        workspaceReleasedAt: runUsage.workspaceReleasedAt,
       })
       .from(runs)
+      .leftJoin(runUsage, eq(runUsage.runId, runs.id))
       .where(eq(runs.userId, userId))
     return buildLaunchPolicyCheck({
       order,
       plan,
-      runRows,
+      runRows: runRows.map((run) => ({
+        ...run,
+        workspaceReleasedAt: run.workspaceReleasedAt?.toISOString() ?? null,
+      })),
       subscription,
+    })
+  }
+
+  async reserveLaunchCredit(input: {
+    chargeKey?: string
+    orderId: string
+    plan: SubscriptionPlan
+    runId: string
+    subscriptionId: string | null
+    userId: string
+  }) {
+    if (!planConsumesLaunchCredits(input.plan.id)) {
+      return null
+    }
+
+    const chargeKey = input.chargeKey ?? input.runId
+    const idempotencyKey = getReserveIdempotencyKey(chargeKey)
+
+    return this.db.transaction(async (tx) => {
+      const existingRows = await tx
+        .select()
+        .from(creditLedger)
+        .where(eq(creditLedger.idempotencyKey, idempotencyKey))
+        .limit(1)
+
+      const existing = existingRows[0]
+
+      if (existing) {
+        return {
+          alreadyReserved: true,
+          subscriptionId: existing.subscriptionId,
+        }
+      }
+
+      const locked = await tx.execute(sql`
+        select *
+        from user_subscriptions
+        where id = ${input.subscriptionId}
+        for update
+      `)
+
+      const subscription = toLockedSubscriptionRow(locked.rows[0] as Record<string, unknown> | undefined)
+
+      if (!subscription) {
+        throw new HttpError(409, 'An active runtime subscription is required before launch.')
+      }
+
+      if (subscription.remainingCredits <= 0) {
+        throw new HttpError(409, 'No credits remaining on the current subscription.')
+      }
+
+      const nextBalance = subscription.remainingCredits - 1
+
+      const [updatedSubscription] = await tx
+        .update(userSubscriptions)
+        .set({
+          remainingCredits: nextBalance,
+          updatedAt: new Date(),
+        })
+        .where(eq(userSubscriptions.id, subscription.id))
+        .returning()
+
+      await tx.insert(creditLedger).values({
+        id: crypto.randomUUID(),
+        userId: input.userId,
+        subscriptionId: subscription.id,
+        orderId: input.orderId,
+        runId: null,
+        eventType: 'reserve',
+        unitType: getPlanLedgerUnitType(input.plan.id),
+        deltaCredits: -1,
+        resultingBalance: nextBalance,
+        status: 'pending',
+        reasonCode: input.plan.id === 'warm_standby' ? 'wake_requested' : 'launch_requested',
+        idempotencyKey,
+        metadataJson: {
+          planId: input.plan.id,
+          planVersion: subscription.planVersion,
+        },
+      })
+
+      return {
+        alreadyReserved: false,
+        subscriptionId: updatedSubscription.id,
+      }
+    })
+  }
+
+  async commitReservedLaunchCredit(input: {
+    chargeKey?: string
+    plan: SubscriptionPlan
+    runId: string
+    userId: string
+  }) {
+    if (!planConsumesLaunchCredits(input.plan.id)) {
+      return null
+    }
+
+    return this.db.transaction(async (tx) => {
+      const chargeKey = input.chargeKey ?? input.runId
+      const reserveRows = await tx
+        .select()
+        .from(creditLedger)
+        .where(eq(creditLedger.idempotencyKey, getReserveIdempotencyKey(chargeKey)))
+        .limit(1)
+
+      const reserve = reserveRows[0]
+
+      if (!reserve) {
+        return null
+      }
+
+      if (reserve.status === 'reversed') {
+        return null
+      }
+
+      await tx
+        .update(creditLedger)
+        .set({
+          status: 'committed',
+        })
+        .where(eq(creditLedger.id, reserve.id))
+
+      const existingCommitRows = await tx
+        .select()
+        .from(creditLedger)
+        .where(eq(creditLedger.idempotencyKey, getCommitIdempotencyKey(chargeKey)))
+        .limit(1)
+
+      if (existingCommitRows[0]) {
+        return null
+      }
+
+      await tx.insert(creditLedger).values({
+        id: crypto.randomUUID(),
+        userId: input.userId,
+        subscriptionId: reserve.subscriptionId,
+        orderId: reserve.orderId,
+        runId: input.runId,
+        eventType: 'commit',
+        unitType: reserve.unitType,
+        deltaCredits: 0,
+        resultingBalance: reserve.resultingBalance,
+        status: 'committed',
+        reasonCode: 'provider_accepted',
+        idempotencyKey: getCommitIdempotencyKey(chargeKey),
+        metadataJson: {
+          chargeKey,
+          reserveLedgerId: reserve.id,
+          planId: input.plan.id,
+        },
+      })
+
+      return null
+    })
+  }
+
+  async refundReservedLaunchCredit(input: {
+    chargeKey?: string
+    plan: SubscriptionPlan
+    reasonCode: string
+    runId: string
+    userId: string
+  }) {
+    if (!planConsumesLaunchCredits(input.plan.id)) {
+      return null
+    }
+
+    const chargeKey = input.chargeKey ?? input.runId
+    const refundIdempotencyKey = getRefundIdempotencyKey(chargeKey)
+
+    return this.db.transaction(async (tx) => {
+      const existingRefundRows = await tx
+        .select()
+        .from(creditLedger)
+        .where(eq(creditLedger.idempotencyKey, refundIdempotencyKey))
+        .limit(1)
+
+      if (existingRefundRows[0]) {
+        return null
+      }
+
+      const reserveRows = await tx
+        .select()
+        .from(creditLedger)
+        .where(eq(creditLedger.idempotencyKey, getReserveIdempotencyKey(chargeKey)))
+        .limit(1)
+
+      const reserve = reserveRows[0]
+
+      if (!reserve || reserve.status === 'reversed') {
+        return null
+      }
+
+      const [runRow] = await tx.select({ id: runs.id }).from(runs).where(eq(runs.id, input.runId)).limit(1)
+
+      const locked = await tx.execute(sql`
+        select *
+        from user_subscriptions
+        where id = ${reserve.subscriptionId}
+        for update
+      `)
+
+      const subscription = toLockedSubscriptionRow(locked.rows[0] as Record<string, unknown> | undefined)
+
+      if (!subscription) {
+        return null
+      }
+
+      const nextBalance = subscription.remainingCredits + 1
+
+      await tx
+        .update(userSubscriptions)
+        .set({
+          remainingCredits: nextBalance,
+          updatedAt: new Date(),
+        })
+        .where(eq(userSubscriptions.id, subscription.id))
+
+      await tx
+        .update(creditLedger)
+        .set({
+          status: 'reversed',
+        })
+        .where(eq(creditLedger.id, reserve.id))
+
+      await tx.insert(creditLedger).values({
+        id: crypto.randomUUID(),
+        userId: input.userId,
+        subscriptionId: subscription.id,
+        orderId: reserve.orderId,
+        runId: runRow ? input.runId : null,
+        eventType: 'refund',
+        unitType: reserve.unitType,
+        deltaCredits: 1,
+        resultingBalance: nextBalance,
+        status: 'committed',
+        reasonCode: input.reasonCode,
+        idempotencyKey: refundIdempotencyKey,
+        metadataJson: {
+          chargeKey,
+          reserveLedgerId: reserve.id,
+          planId: input.plan.id,
+        },
+      })
+
+      return null
     })
   }
 
@@ -361,6 +640,7 @@ export class SubscriptionService {
       currentPeriodStart: period.currentPeriodStart,
       includedCredits: plan.includedCredits,
       planId: plan.id,
+      planVersion: RUNTIME_PLAN_VERSION,
       priceCents: plan.priceCents,
       remainingCredits: nextBalance,
       status: 'active' as const,
@@ -392,14 +672,21 @@ export class SubscriptionService {
 
     await this.db.insert(creditLedger).values({
       id: crypto.randomUUID(),
-      balanceAfter: nextBalance,
+      eventType: existing ? 'reset' : 'grant',
+      unitType: getPlanLedgerUnitType(plan.id),
       deltaCredits: nextBalance - previousBalance,
-      metadata: {
+      metadataJson: {
         checkoutSessionId: session.id,
         planId: plan.id,
+        planVersion: RUNTIME_PLAN_VERSION,
         previousPlanId: existing?.planId ?? null,
       },
-      reason: existing ? 'subscription_update' : 'subscription_purchase',
+      orderId: null,
+      resultingBalance: nextBalance,
+      reasonCode: existing ? 'subscription_update' : 'subscription_purchase',
+      runId: null,
+      status: 'committed',
+      idempotencyKey: `subscription:${session.id}`,
       subscriptionId: record.id,
       userId: persistedUserId,
     })
@@ -417,10 +704,13 @@ export function getSubscriptionService() {
 export type SubscriptionServiceLike = Pick<
   SubscriptionService,
   | 'createCheckoutSession'
+  | 'commitReservedLaunchCredit'
+  | 'refundReservedLaunchCredit'
   | 'getCurrentSubscription'
   | 'getLaunchPolicy'
   | 'handleStripeCheckoutCompletedSession'
   | 'listPlans'
+  | 'reserveLaunchCredit'
   | 'reconcileCheckoutSession'
 >
 

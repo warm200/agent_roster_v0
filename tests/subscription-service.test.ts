@@ -99,6 +99,7 @@ function buildSubscription(planId: UserSubscription['planId'], remainingCredits 
     id: `subscription-${planId}`,
     userId: 'user-1',
     planId,
+    planVersion: 'v1',
     status: 'active',
     billingInterval: planId === 'run' ? 'one_time' : planId === 'free' ? 'none' : 'month',
     includedCredits: getSubscriptionPlan(planId).includedCredits,
@@ -116,10 +117,23 @@ function buildSubscription(planId: UserSubscription['planId'], remainingCredits 
   }
 }
 
-test('counted active runs include completed managed workspaces', () => {
-  assert.equal(isCountedActiveRun({ status: 'completed', usesRealWorkspace: true }), true)
-  assert.equal(isCountedActiveRun({ status: 'completed', usesRealWorkspace: false }), false)
-  assert.equal(isCountedActiveRun({ status: 'failed', usesRealWorkspace: true }), false)
+test('counted active runs stop counting once workspace is released', () => {
+  assert.equal(
+    isCountedActiveRun({ status: 'completed', usesRealWorkspace: true, workspaceReleasedAt: null }),
+    true,
+  )
+  assert.equal(
+    isCountedActiveRun({ status: 'completed', usesRealWorkspace: false, workspaceReleasedAt: null }),
+    false,
+  )
+  assert.equal(
+    isCountedActiveRun({ status: 'completed', usesRealWorkspace: true, workspaceReleasedAt: new Date().toISOString() }),
+    false,
+  )
+  assert.equal(
+    isCountedActiveRun({ status: 'failed', usesRealWorkspace: true, workspaceReleasedAt: null }),
+    false,
+  )
 })
 
 test('free plan blocks all launches', () => {
@@ -151,9 +165,9 @@ test('warm standby blocks when concurrent active runs already fill the plan', ()
     order: buildOrder(2, 'order-next'),
     plan: getSubscriptionPlan('warm_standby'),
     runRows: [
-      { id: 'run-1', orderId: 'order-a', status: 'running', usesRealWorkspace: true },
-      { id: 'run-2', orderId: 'order-b', status: 'running', usesRealWorkspace: true },
-      { id: 'run-3', orderId: 'order-c', status: 'completed', usesRealWorkspace: true },
+      { id: 'run-1', orderId: 'order-a', status: 'running', usesRealWorkspace: true, workspaceReleasedAt: null },
+      { id: 'run-2', orderId: 'order-b', status: 'running', usesRealWorkspace: true, workspaceReleasedAt: null },
+      { id: 'run-3', orderId: 'order-c', status: 'completed', usesRealWorkspace: true, workspaceReleasedAt: null },
     ],
     subscription: buildSubscription('warm_standby', 50),
   })

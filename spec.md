@@ -71,6 +71,9 @@ Implemented in the current mock app:
 - Backend order service now exists in `server/services/order.service.ts` with paid-order creation and signed-download helpers
 - Backend checkout service now exists in `server/services/checkout.service.ts` with Stripe session creation and paid-session reconciliation helpers
 - Subscription plan catalog now exists in `lib/subscription-plans.ts`, matching the current pricing tier matrix (`free`, `run`, `warm_standby`, `always_on`)
+- Runtime subscriptions now persist `planVersion`, and launch credit consumption now uses an explicit reserve -> commit -> refund ledger path instead of only checking `remainingCredits`
+- Managed run launches now create a `run_usage` row with plan/trigger-mode/TTL snapshots plus provisioning/provider-accepted timestamps, so billing facts and usage telemetry are no longer conflated
+- Active-run / active-bundle launch limits now stop counting completed managed runs once their workspace has actually been released, instead of treating all completed sandbox-backed runs as active forever
 - Backend Telegram service now exists in `server/services/telegram.service.ts` with token validation, encrypted secret storage, pairing, and webhook handling
 - Backend run repository/service now exist in `server/services/run.repository.ts` and `server/services/run.service.ts` with provider-backed run sync against the current DB shape
 - `GET /api/agents` and `GET /api/agents/[slug]` now route through `server/services/catalog.service.ts`

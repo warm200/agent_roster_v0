@@ -203,6 +203,35 @@ async function clickByHref(page: Page, href: string) {
   assert.equal(clicked, true, `Could not find link with href "${href}"`)
 }
 
+async function clickByHrefAndText(page: Page, href: string, text: string) {
+  await page.waitForFunction(
+    ({ expectedHref, expectedText }) =>
+      Array.from(document.querySelectorAll<HTMLAnchorElement>(`a[href="${expectedHref}"]`)).some(
+        (node) => node.offsetParent !== null && node.innerText.trim().includes(expectedText),
+      ),
+    {},
+    { expectedHref: href, expectedText: text },
+  )
+
+  const clicked = await page.evaluate(
+    ({ expectedHref, expectedText }) => {
+      const candidate = Array.from(
+        document.querySelectorAll<HTMLAnchorElement>(`a[href="${expectedHref}"]`),
+      ).find((node) => node.offsetParent !== null && node.innerText.trim().includes(expectedText))
+
+      candidate?.click()
+      return Boolean(candidate)
+    },
+    { expectedHref: href, expectedText: text },
+  )
+
+  assert.equal(clicked, true, `Could not find link with href "${href}" and text "${text}"`)
+}
+
+async function waitForPathname(page: Page, pathname: string) {
+  await page.waitForFunction((expectedPathname) => window.location.pathname === expectedPathname, {}, pathname)
+}
+
 async function createSessionToken(overrides: Record<string, string> = {}) {
   return encode({
     secret: process.env.AUTH_SECRET || 'test-auth-secret',
@@ -405,14 +434,16 @@ if (!chromePath) {
       const page = await browser.newPage()
 
       try {
+        await page.setViewport({ width: 1440, height: 960 })
         await authenticatePage(page)
         await page.goto(`${BASE_URL}/app`, { waitUntil: 'domcontentloaded' })
         await waitForText(page, 'Dashboard')
-        await clickByHref(page, '/app/bundles')
-        await waitForText(page, 'My Bundles')
+        await clickByHrefAndText(page, '/app/bundles', 'My Bundles')
+        await waitForPathname(page, '/app/bundles')
         assert.equal(page.url(), `${BASE_URL}/app/bundles`)
 
-        await clickByHref(page, '/app/runs')
+        await clickByHrefAndText(page, '/app/runs', 'Runs')
+        await waitForPathname(page, '/app/runs')
         await waitForText(page, 'Run History')
         assert.equal(page.url(), `${BASE_URL}/app/runs`)
       } finally {
@@ -429,6 +460,7 @@ if (!chromePath) {
       const page = await browser.newPage()
 
       try {
+        await page.setViewport({ width: 1440, height: 960 })
         await authenticatePage(page, {
           sub: 'user-1',
           email: 'user-1@demo.local',
@@ -447,7 +479,7 @@ if (!chromePath) {
           {},
           '/app/bundles/order-1',
         )
-        await clickByHref(page, '/app')
+        await clickByText(page, 'button', 'Go to Dashboard')
         await waitForText(page, 'Dashboard')
         assert.equal(page.url(), `${BASE_URL}/app`)
       } finally {

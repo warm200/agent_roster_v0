@@ -78,8 +78,17 @@ test('pricing plans route returns the shared subscription plan catalog', async (
 test('me subscription route returns free plan when user has no active subscription row', async () => {
   setRequestUserIdForTesting(() => 'user-1')
   setSubscriptionServiceForTesting({
+    async commitReservedLaunchCredit() {
+      return null
+    },
     async createCheckoutSession() {
       throw new Error('not implemented')
+    },
+    async refundReservedLaunchCredit() {
+      return null
+    },
+    async reserveLaunchCredit() {
+      return null
     },
     async getCurrentSubscription() {
       return null
@@ -108,8 +117,17 @@ test('launch policy route returns plan blockers for the selected order', async (
   setRequestUserIdForTesting(() => 'user-1')
   setOrderServiceForTesting(stubOrderService)
   setSubscriptionServiceForTesting({
+    async commitReservedLaunchCredit() {
+      return null
+    },
     async createCheckoutSession() {
       throw new Error('not implemented')
+    },
+    async refundReservedLaunchCredit() {
+      return null
+    },
+    async reserveLaunchCredit() {
+      return null
     },
     async getCurrentSubscription() {
       return null
@@ -163,12 +181,21 @@ test('subscription checkout session route forwards plan payload to service', asy
 
   setRequestUserIdForTesting(() => 'user-1')
   setSubscriptionServiceForTesting({
+    async commitReservedLaunchCredit() {
+      return null
+    },
     async createCheckoutSession(input) {
       received = input
       return {
         sessionId: 'cs_sub_plan_1',
         sessionUrl: 'https://checkout.stripe.com/c/session/subscription-plan-1',
       }
+    },
+    async refundReservedLaunchCredit() {
+      return null
+    },
+    async reserveLaunchCredit() {
+      return null
     },
     async getCurrentSubscription() {
       return null
@@ -218,8 +245,17 @@ test('subscription checkout reconcile route returns the updated subscription', a
 
   setRequestUserIdForTesting(() => 'user-1')
   setSubscriptionServiceForTesting({
+    async commitReservedLaunchCredit() {
+      return null
+    },
     async createCheckoutSession() {
       throw new Error('not implemented')
+    },
+    async refundReservedLaunchCredit() {
+      return null
+    },
+    async reserveLaunchCredit() {
+      return null
     },
     async getCurrentSubscription() {
       return null
@@ -238,6 +274,7 @@ test('subscription checkout reconcile route returns the updated subscription', a
         id: 'subscription-1',
         userId: 'user-1',
         planId: 'run',
+        planVersion: 'v1',
         status: 'active',
         billingInterval: 'one_time',
         includedCredits: 30,
@@ -278,8 +315,17 @@ test('subscription checkout reconcile route returns the updated subscription', a
 test('subscription checkout session route preserves service errors', async () => {
   setRequestUserIdForTesting(() => 'user-1')
   setSubscriptionServiceForTesting({
+    async commitReservedLaunchCredit() {
+      return null
+    },
     async createCheckoutSession() {
       throw new HttpError(400, 'Free does not require checkout.')
+    },
+    async refundReservedLaunchCredit() {
+      return null
+    },
+    async reserveLaunchCredit() {
+      return null
     },
     async getCurrentSubscription() {
       return null

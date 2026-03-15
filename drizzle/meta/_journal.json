@@ -22,6 +22,20 @@
       "when": 1773277200000,
       "tag": "0002_runtime_subscriptions",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1773596400000,
+      "tag": "0003_credit_consumption_runtime_usage",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1773599400000,
+      "tag": "0004_backfill_run_usage",
+      "breakpoints": true
     }
   ]
 }

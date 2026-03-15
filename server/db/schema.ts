@@ -27,8 +27,25 @@ export const subscriptionPlanIdEnum = pgEnum('subscription_plan_id', [
   'warm_standby',
   'always_on',
 ])
-export const subscriptionStatusEnum = pgEnum('subscription_status', ['active', 'canceled', 'past_due'])
+export const subscriptionStatusEnum = pgEnum('subscription_status', ['active', 'canceled', 'expired', 'past_due'])
 export const billingIntervalEnum = pgEnum('billing_interval', ['none', 'one_time', 'month'])
+export const creditLedgerEventTypeEnum = pgEnum('credit_ledger_event_type', [
+  'grant',
+  'reset',
+  'reserve',
+  'commit',
+  'refund',
+  'adjust',
+  'expire',
+  'shadow_usage_estimate',
+])
+export const creditLedgerUnitTypeEnum = pgEnum('credit_ledger_unit_type', [
+  'launch_credit',
+  'wake_credit',
+  'always_on_budget',
+  'fair_use_adjustment',
+])
+export const creditLedgerStatusEnum = pgEnum('credit_ledger_status', ['pending', 'committed', 'reversed'])
 
 export const users = pgTable(
   'users',
@@ -200,6 +217,7 @@ export const userSubscriptions = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
     planId: subscriptionPlanIdEnum('plan_id').notNull(),
+    planVersion: text('plan_version').notNull().default('v1'),
     status: subscriptionStatusEnum('status').notNull(),
     billingInterval: billingIntervalEnum('billing_interval').notNull(),
     includedCredits: integer('included_credits').notNull(),
@@ -228,12 +246,63 @@ export const creditLedger = pgTable('credit_ledger', {
   subscriptionId: text('subscription_id').references(() => userSubscriptions.id, {
     onDelete: 'set null',
   }),
+  orderId: text('order_id').references(() => orders.id, { onDelete: 'set null' }),
+  runId: text('run_id').references(() => runs.id, { onDelete: 'set null' }),
+  eventType: creditLedgerEventTypeEnum('event_type').notNull(),
+  unitType: creditLedgerUnitTypeEnum('unit_type').notNull(),
   deltaCredits: integer('delta_credits').notNull(),
-  balanceAfter: integer('balance_after').notNull(),
-  reason: text('reason').notNull(),
-  metadata: jsonb('metadata').$type<Record<string, unknown>>().notNull(),
+  resultingBalance: integer('resulting_balance'),
+  status: creditLedgerStatusEnum('status').notNull().default('committed'),
+  reasonCode: text('reason_code').notNull(),
+  idempotencyKey: text('idempotency_key').notNull(),
+  metadataJson: jsonb('metadata_json').$type<Record<string, unknown>>().notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-})
+},
+  (table) => ({
+    idempotencyIdx: uniqueIndex('credit_ledger_idempotency_idx').on(table.idempotencyKey),
+  }),
+)
+
+export const runUsage = pgTable(
+  'run_usage',
+  {
+    id: text('id').primaryKey(),
+    runId: text('run_id')
+      .notNull()
+      .references(() => runs.id, { onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    orderId: text('order_id')
+      .notNull()
+      .references(() => orders.id, { onDelete: 'cascade' }),
+    planId: subscriptionPlanIdEnum('plan_id').notNull(),
+    planVersion: text('plan_version').notNull().default('v1'),
+    triggerModeSnapshot: text('trigger_mode_snapshot').notNull(),
+    agentCount: integer('agent_count').notNull(),
+    usesRealWorkspace: boolean('uses_real_workspace').notNull().default(false),
+    usesTools: boolean('uses_tools').notNull().default(false),
+    networkEnabled: boolean('network_enabled').notNull().default(false),
+    provisioningStartedAt: timestamp('provisioning_started_at', { withTimezone: true }),
+    providerAcceptedAt: timestamp('provider_accepted_at', { withTimezone: true }),
+    runningStartedAt: timestamp('running_started_at', { withTimezone: true }),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+    workspaceReleasedAt: timestamp('workspace_released_at', { withTimezone: true }),
+    terminationReason: text('termination_reason'),
+    workspaceMinutes: integer('workspace_minutes'),
+    toolCallsCount: integer('tool_calls_count'),
+    inputTokensEst: integer('input_tokens_est'),
+    outputTokensEst: integer('output_tokens_est'),
+    estimatedInternalCostCents: integer('estimated_internal_cost_cents'),
+    statusSnapshot: runStatusEnum('status_snapshot').notNull(),
+    ttlPolicySnapshot: jsonb('ttl_policy_snapshot').$type<Record<string, unknown>>().notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    runIdx: uniqueIndex('run_usage_run_idx').on(table.runId),
+  }),
+)
 
 export const orderItems = pgTable('order_items', {
   id: text('id').primaryKey(),
@@ -311,6 +380,8 @@ export type DbUserSubscription = InferSelectModel<typeof userSubscriptions>
 export type NewDbUserSubscription = InferInsertModel<typeof userSubscriptions>
 export type DbCreditLedgerEntry = InferSelectModel<typeof creditLedger>
 export type NewDbCreditLedgerEntry = InferInsertModel<typeof creditLedger>
+export type DbRunUsage = InferSelectModel<typeof runUsage>
+export type NewDbRunUsage = InferInsertModel<typeof runUsage>
 export type DbRunChannelConfig = InferSelectModel<typeof runChannelConfigs>
 export type NewDbRunChannelConfig = InferInsertModel<typeof runChannelConfigs>
 export type DbRun = InferSelectModel<typeof runs>

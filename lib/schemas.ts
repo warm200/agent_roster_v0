@@ -9,11 +9,15 @@ import {
   CART_STATUSES,
   CHANNEL_SCOPES,
   CHANNEL_TYPES,
+  CREDIT_LEDGER_EVENT_TYPES,
+  CREDIT_LEDGER_STATUSES,
+  CREDIT_LEDGER_UNIT_TYPES,
   LOG_LEVELS,
   MESSAGE_ROLES,
   ORDER_STATUSES,
   PAIRING_STATUSES,
   RISK_LEVELS,
+  RUN_TERMINATION_REASONS,
   RUN_STATUSES,
   SUBSCRIPTION_PLAN_IDS,
   SUBSCRIPTION_STATUSES,
@@ -41,6 +45,10 @@ export const subscriptionPlanIdSchema = z.enum(SUBSCRIPTION_PLAN_IDS)
 export const subscriptionStatusSchema = z.enum(SUBSCRIPTION_STATUSES)
 export const billingIntervalSchema = z.enum(BILLING_INTERVALS)
 export const triggerModeSchema = z.enum(TRIGGER_MODES)
+export const creditLedgerEventTypeSchema = z.enum(CREDIT_LEDGER_EVENT_TYPES)
+export const creditLedgerUnitTypeSchema = z.enum(CREDIT_LEDGER_UNIT_TYPES)
+export const creditLedgerStatusSchema = z.enum(CREDIT_LEDGER_STATUSES)
+export const runTerminationReasonSchema = z.enum(RUN_TERMINATION_REASONS)
 
 export const riskProfileSchema = z.object({
   id: z.string().min(1),
@@ -251,6 +259,7 @@ export const userSubscriptionSchema = z.object({
   id: z.string().min(1),
   userId: z.string().min(1),
   planId: subscriptionPlanIdSchema,
+  planVersion: z.string().min(1),
   status: subscriptionStatusSchema,
   billingInterval: billingIntervalSchema,
   includedCredits: z.number().int().nonnegative(),
@@ -271,11 +280,56 @@ export const creditLedgerEntrySchema = z.object({
   id: z.string().min(1),
   userId: z.string().min(1),
   subscriptionId: z.string().nullable(),
+  orderId: z.string().nullable(),
+  runId: z.string().nullable(),
+  eventType: creditLedgerEventTypeSchema,
+  unitType: creditLedgerUnitTypeSchema,
   deltaCredits: z.number().int(),
-  balanceAfter: z.number().int().nonnegative(),
-  reason: z.string().min(1),
-  metadata: z.record(z.string(), z.unknown()),
+  resultingBalance: z.number().int().nullable(),
+  status: creditLedgerStatusSchema,
+  reasonCode: z.string().min(1),
+  idempotencyKey: z.string().min(1),
+  metadataJson: z.record(z.string(), z.unknown()),
   createdAt: timestampSchema,
+})
+
+export const ttlPolicySnapshotSchema = z.object({
+  cleanupGraceMinutes: z.number().int().positive().nullable(),
+  heartbeatMissingMinutes: z.number().int().positive().nullable(),
+  idleTimeoutMinutes: z.number().int().positive().nullable(),
+  maxSessionTtlMinutes: z.number().int().positive().nullable(),
+  provisioningTimeoutMinutes: z.number().int().positive(),
+  triggerMode: triggerModeSchema,
+  unhealthyProviderTimeoutMinutes: z.number().int().positive().nullable(),
+})
+
+export const runUsageSchema = z.object({
+  id: z.string().min(1),
+  runId: z.string().min(1),
+  userId: z.string().min(1),
+  orderId: z.string().min(1),
+  planId: subscriptionPlanIdSchema,
+  planVersion: z.string().min(1),
+  triggerModeSnapshot: triggerModeSchema,
+  agentCount: z.number().int().nonnegative(),
+  usesRealWorkspace: z.boolean(),
+  usesTools: z.boolean(),
+  networkEnabled: z.boolean(),
+  provisioningStartedAt: timestampSchema.nullable(),
+  providerAcceptedAt: timestampSchema.nullable(),
+  runningStartedAt: timestampSchema.nullable(),
+  completedAt: timestampSchema.nullable(),
+  workspaceReleasedAt: timestampSchema.nullable(),
+  terminationReason: runTerminationReasonSchema.nullable(),
+  workspaceMinutes: z.number().int().nonnegative().nullable(),
+  toolCallsCount: z.number().int().nonnegative().nullable(),
+  inputTokensEst: z.number().int().nonnegative().nullable(),
+  outputTokensEst: z.number().int().nonnegative().nullable(),
+  estimatedInternalCostCents: z.number().int().nonnegative().nullable(),
+  statusSnapshot: runStatusSchema,
+  ttlPolicySnapshot: ttlPolicySnapshotSchema,
+  createdAt: timestampSchema,
+  updatedAt: timestampSchema,
 })
 
 export const launchPolicyUsageSchema = z.object({

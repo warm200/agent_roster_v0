@@ -184,9 +184,9 @@ Current active-run counting includes:
 
 - `provisioning`
 - `running`
-- `completed` if `usesRealWorkspace = true`
+- `completed` if `usesRealWorkspace = true` **and** the workspace has not been released yet
 
-This matters because sandbox-backed runs are treated as still occupying runtime capacity even after bootstrap completes.
+This matters because sandbox-backed runs can remain capacity-occupying after bootstrap, but they stop counting once cleanup or manual stop releases the workspace.
 
 ### 4.4 Active Bundles
 
@@ -203,10 +203,13 @@ Rule:
 
 Current behavior:
 
-- there is a balance check
-- there is **not yet** automatic credit deduction on launch
+- `Run` and `Warm Standby` now reserve `1` credit before provider boot
+- if provider accepts the launch, the reserve is committed
+- if provider never accepts, the reserve is refunded
+- `Always On` does not use the same hard launch-credit deduction path
+- runs are not stopped mid-session just because credits later become low
 
-So today this acts more like a balance gate than a real consumption engine.
+So this is now a real credit-consumption engine for launch/wake entry, but not yet a full runtime metering model.
 
 ### 4.6 Telegram Pairing
 
@@ -228,6 +231,7 @@ So even a paid user still cannot launch until Telegram setup is ready.
 Stored in `user_subscriptions`:
 
 - selected plan
+- plan version
 - billing interval
 - included credits
 - remaining credits
@@ -237,7 +241,26 @@ Stored in `user_subscriptions`:
 ### 5.2 Credit Ledger
 
 Stored in `credit_ledger`:
+- grants and resets from plan purchase
+- pending reserves before launch
+- commits after provider acceptance
+- refunds if provider acceptance never happens
+- idempotency keys per launch/restart charging attempt
 
+### 5.3 Run Usage
+
+Stored in `run_usage`:
+
+- plan id + plan version snapshot
+- trigger mode snapshot
+- agent count
+- workspace/tools/network flags
+- provisioning timestamp
+- provider acceptance timestamp
+- running/completed timestamps
+- workspace release timestamp
+- termination reason
+- TTL policy snapshot used for that run
 - credit delta
 - resulting balance
 - reason
@@ -343,22 +366,25 @@ Implemented now:
    - active bundles
    - zero remaining credits
 4. inline upgrade UX on bundle detail
+5. reserve -> commit -> refund credit handling for `Run` and `Warm Standby`
+6. run-usage telemetry persistence separate from the billing ledger
 
 ### 8.3 What Is Not Yet Implemented
 
 Not implemented yet:
 
-1. **credit deduction on launch**
-   - launch does not currently subtract credits
-2. **credit pricing model**
+1. **credit pricing model**
    - there is no formula for how many credits a run costs
    - there is no formula for “one more agent costs X”
-3. **trigger mode behavior**
+2. **trigger mode behavior**
    - `manual`, `auto_wake`, `always_active` exist as plan metadata
    - they do not yet drive runtime orchestration behavior
-4. **always-on enforcement**
+3. **always-on enforcement**
    - `alwaysOnBundles` is defined
    - real always-on lifecycle behavior is not fully implemented
+4. **TTL cleanup worker / idle enforcement**
+   - TTL policy is now snapshotted per run
+   - automatic cleanup scheduling and retry are not fully implemented yet
 5. **plan lifecycle sophistication**
    - no proration logic
    - no downgrade/cancel management flow
@@ -422,4 +448,3 @@ Any evaluation of whether the current plan is “best for the world” should tr
 
 1. a valid entitlement architecture
 2. an incomplete billing/consumption model
-

@@ -1,10 +1,10 @@
 import { desc, eq } from 'drizzle-orm'
 
-import { runSchema } from '@/lib/schemas'
-import type { Run } from '@/lib/types'
+import { runSchema, runUsageSchema } from '@/lib/schemas'
+import type { Run, RunUsage } from '@/lib/types'
 
 import { createDb, type DbClient } from '../db'
-import { runs } from '../db/schema'
+import { runUsage, runs } from '../db/schema'
 
 let dbClient: DbClient | null = null
 
@@ -39,6 +39,37 @@ function toJsonArtifacts(run: Pick<Run, 'resultArtifacts'>) {
   }))
 }
 
+function toPublicRunUsage(row: typeof runUsage.$inferSelect): RunUsage {
+  return runUsageSchema.parse({
+    id: row.id,
+    runId: row.runId,
+    userId: row.userId,
+    orderId: row.orderId,
+    planId: row.planId,
+    planVersion: row.planVersion,
+    triggerModeSnapshot: row.triggerModeSnapshot,
+    agentCount: row.agentCount,
+    usesRealWorkspace: row.usesRealWorkspace,
+    usesTools: row.usesTools,
+    networkEnabled: row.networkEnabled,
+    provisioningStartedAt: row.provisioningStartedAt?.toISOString() ?? null,
+    providerAcceptedAt: row.providerAcceptedAt?.toISOString() ?? null,
+    runningStartedAt: row.runningStartedAt?.toISOString() ?? null,
+    completedAt: row.completedAt?.toISOString() ?? null,
+    workspaceReleasedAt: row.workspaceReleasedAt?.toISOString() ?? null,
+    terminationReason: row.terminationReason,
+    workspaceMinutes: row.workspaceMinutes,
+    toolCallsCount: row.toolCallsCount,
+    inputTokensEst: row.inputTokensEst,
+    outputTokensEst: row.outputTokensEst,
+    estimatedInternalCostCents: row.estimatedInternalCostCents,
+    statusSnapshot: row.statusSnapshot,
+    ttlPolicySnapshot: row.ttlPolicySnapshot,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  })
+}
+
 function toInsertValues(run: Run): typeof runs.$inferInsert {
   return {
     id: run.id,
@@ -59,11 +90,56 @@ function toInsertValues(run: Run): typeof runs.$inferInsert {
   }
 }
 
+function toRunUsageInsertValues(usage: RunUsage): typeof runUsage.$inferInsert {
+  return {
+    id: usage.id,
+    runId: usage.runId,
+    userId: usage.userId,
+    orderId: usage.orderId,
+    planId: usage.planId,
+    planVersion: usage.planVersion,
+    triggerModeSnapshot: usage.triggerModeSnapshot,
+    agentCount: usage.agentCount,
+    usesRealWorkspace: usage.usesRealWorkspace,
+    usesTools: usage.usesTools,
+    networkEnabled: usage.networkEnabled,
+    provisioningStartedAt: usage.provisioningStartedAt ? new Date(usage.provisioningStartedAt) : null,
+    providerAcceptedAt: usage.providerAcceptedAt ? new Date(usage.providerAcceptedAt) : null,
+    runningStartedAt: usage.runningStartedAt ? new Date(usage.runningStartedAt) : null,
+    completedAt: usage.completedAt ? new Date(usage.completedAt) : null,
+    workspaceReleasedAt: usage.workspaceReleasedAt ? new Date(usage.workspaceReleasedAt) : null,
+    terminationReason: usage.terminationReason,
+    workspaceMinutes: usage.workspaceMinutes,
+    toolCallsCount: usage.toolCallsCount,
+    inputTokensEst: usage.inputTokensEst,
+    outputTokensEst: usage.outputTokensEst,
+    estimatedInternalCostCents: usage.estimatedInternalCostCents,
+    statusSnapshot: usage.statusSnapshot,
+    ttlPolicySnapshot: usage.ttlPolicySnapshot,
+    createdAt: new Date(usage.createdAt),
+    updatedAt: new Date(usage.updatedAt),
+  }
+}
+
 export class RunRepository {
   async createRun(run: Run) {
     const db = getDb()
     const [created] = await db.insert(runs).values(toInsertValues(run)).returning()
     return toPublicRun(created)
+  }
+
+  async createProvisioningRun(run: Run, usage: RunUsage) {
+    const db = getDb()
+    const created = await db.transaction(async (tx) => {
+      const [createdRun] = await tx.insert(runs).values(toInsertValues(run)).returning()
+      const [createdUsage] = await tx.insert(runUsage).values(toRunUsageInsertValues(usage)).returning()
+      return {
+        run: toPublicRun(createdRun),
+        usage: toPublicRunUsage(createdUsage),
+      }
+    })
+
+    return created
   }
 
   async updateRun(runId: string, input: Partial<Run>) {
@@ -112,5 +188,37 @@ export class RunRepository {
     }
 
     return toPublicRun(row)
+  }
+
+  async findRunUsage(runId: string) {
+    const db = getDb()
+    const [row] = await db.select().from(runUsage).where(eq(runUsage.runId, runId)).limit(1)
+    return row ? toPublicRunUsage(row) : null
+  }
+
+  async updateRunUsage(runId: string, input: Partial<RunUsage>) {
+    const db = getDb()
+    const [updated] = await db
+      .update(runUsage)
+      .set({
+        providerAcceptedAt: input.providerAcceptedAt ? new Date(input.providerAcceptedAt) : undefined,
+        runningStartedAt: input.runningStartedAt ? new Date(input.runningStartedAt) : undefined,
+        completedAt: input.completedAt ? new Date(input.completedAt) : input.completedAt === null ? null : undefined,
+        workspaceReleasedAt:
+          input.workspaceReleasedAt ? new Date(input.workspaceReleasedAt) : input.workspaceReleasedAt === null ? null : undefined,
+        terminationReason: input.terminationReason,
+        workspaceMinutes: input.workspaceMinutes,
+        toolCallsCount: input.toolCallsCount,
+        inputTokensEst: input.inputTokensEst,
+        outputTokensEst: input.outputTokensEst,
+        estimatedInternalCostCents: input.estimatedInternalCostCents,
+        statusSnapshot: input.statusSnapshot,
+        ttlPolicySnapshot: input.ttlPolicySnapshot,
+        updatedAt: input.updatedAt ? new Date(input.updatedAt) : new Date(),
+      })
+      .where(eq(runUsage.runId, runId))
+      .returning()
+
+    return updated ? toPublicRunUsage(updated) : null
   }
 }
