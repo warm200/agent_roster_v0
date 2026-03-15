@@ -85,6 +85,7 @@ Implemented in the current mock app:
 - Subscription persistence now exists in `user_subscriptions` + `credit_ledger`, and `subscription.service.ts` can evaluate launch blockers for agent-count, active-bundle, concurrent-run, and zero-credit cases while also upserting paid runtime plans from Stripe checkout
 - `RunService.createRun()` now enforces subscription launch policy before provider boot, and bundle detail surfaces current plan limits/blockers before the user clicks `Launch Run`
 - Bundle detail now opens an in-place runtime-plan modal when plan limits block launch, returns from Stripe back to the same bundle page, reconciles the purchased plan there, and refreshes the header credit badge immediately
+- Header still refreshes subscription balance in the background after plan changes, but the visible credit badge beside the username is now hidden in the UI until runtime-budget display is promoted again
 - `POST /api/webhooks/telegram` now routes through `server/services/telegram.service.ts`
 - `POST /api/webhooks/stripe` now routes through `server/services/checkout.service.ts`
 - Telegram channel config now supports explicit disconnect/reset so users can unlink a bot and connect a different one
@@ -106,6 +107,7 @@ Implemented in the current mock app:
 - Catalog and agent detail now render local-agent thumbnails when the DB snapshot includes an avatar source path
 - Catalog cards now use a thumbnail-first flip interaction on desktop, while small screens default to the spec/action face for touch usability
 - Landing page now has a more playful trust-first presentation with richer hero composition, lighter microcopy, and subtle floating motion instead of static marketing blocks
+- Pricing page now explains the business model before plan comparison, de-emphasizes credits in the first visual layer, reframes plan differences in outcome language, and adds `Which plan is right for you?` plus FAQ sections
 - Route-level error boundaries now exist for the public shell and the authenticated app shell
 - Route-level loading skeletons now exist for catalog, agent detail, dashboard, bundles, bundle detail, runs, and run detail
 - `npm test` now runs smoke regression coverage for the preview route and auth proxy

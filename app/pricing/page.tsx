@@ -6,30 +6,32 @@ import { Card, CardContent } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 import {
   ArrowRight,
-  Bot,
   Check,
-  Clock3,
   Flame,
   Layers3,
   Play,
   Snowflake,
   Sparkles,
   TimerReset,
-  Zap,
 } from 'lucide-react'
 
 const plans = [
   {
     name: 'Free',
     price: '$0',
-    includedCredits: '0',
+    audience: 'For browsing and preview',
     activeBundles: '0',
     agentsPerBundle: '0',
-    triggerMode: 'None',
+    launchStyle: 'No runtime',
     concurrentRuns: '0',
-    alwaysOnBundles: '0',
-    includes: ['Free Agents Purchase', 'Free persona preview chat'],
-    suitFor: 'Browse, preview, claim agents',
+    runtimeBudget: 'No runtime budget',
+    includes: [
+      'Browse the catalog',
+      'Preview agent behavior',
+      'Claim free agents',
+      'No runtime access',
+    ],
+    suitFor: 'Choose Free if you want to explore agents and preview how they think.',
     icon: Snowflake,
     accent: 'border-white/12 bg-white/[0.03]',
     accentText: 'text-zinc-200',
@@ -39,87 +41,127 @@ const plans = [
   {
     name: 'Run',
     price: '$5',
-    includedCredits: '30',
+    audience: 'For one-off manual runs',
     activeBundles: '1',
     agentsPerBundle: '3',
-    triggerMode: 'Manual only',
+    launchStyle: 'Manual launch',
     concurrentRuns: '1',
-    alwaysOnBundles: '0',
-    includes: ['Slower wake up'],
-    suitFor: 'Occasional manual runs',
+    runtimeBudget: 'Includes runtime budget',
+    includes: [
+      'Launch 1 bundle',
+      'Up to 3 agents per bundle',
+      '1 concurrent run',
+      'Manual trigger',
+      'Best for testing a workflow end-to-end',
+    ],
+    suitFor: 'Choose Run if you want to test one real workflow before committing.',
     icon: Play,
     accent: 'border-amber-300/20 bg-amber-300/[0.06]',
     accentText: 'text-amber-200',
-    highlight: undefined,
-    cta: 'Run On Demand',
+    highlight: 'Best place to start',
+    cta: 'Start with Run',
   },
   {
     name: 'Warm Standby',
     price: '$19/mo',
-    includedCredits: '50/mo',
-    activeBundles: '3',
+    audience: 'For recurring workflows that should wake on demand',
+    activeBundles: '2',
     agentsPerBundle: '5',
-    triggerMode: 'Auto wake',
+    launchStyle: 'Wakes on demand',
     concurrentRuns: '3',
-    alwaysOnBundles: '0',
-    includes: ['Faster wake up'],
-    suitFor: 'Frequent Telegram-triggered workflows',
+    runtimeBudget: 'Usage budget included',
+    includes: [
+      'Up to 2 active bundles',
+      'Up to 5 agents per bundle',
+      'Up to 3 concurrent runs',
+      'Auto-wake behavior',
+      'Best for repeat use without full-time occupancy',
+    ],
+    suitFor: 'Choose Warm Standby if you expect to trigger the same setup repeatedly.',
     icon: TimerReset,
     accent: 'border-orange-300/25 bg-orange-300/[0.07]',
     accentText: 'text-orange-200',
-    highlight: 'Most practical default',
-    cta: 'Keep Bundles Warm',
+    highlight: 'Core monthly plan',
+    cta: 'Choose Warm Standby',
   },
   {
     name: 'Always On',
     price: '$149/mo',
-    includedCredits: '100/mo',
+    audience: 'For a persistent multi-agent workspace',
     activeBundles: '3',
     agentsPerBundle: '8',
-    triggerMode: 'Always active',
+    launchStyle: 'Always ready',
     concurrentRuns: '10',
-    alwaysOnBundles: '10',
-    includes: ['Never sleep'],
-    suitFor: 'One core workspace running full time',
+    runtimeBudget: 'Fair-use runtime budget included',
+    includes: [
+      'Up to 3 active bundles',
+      'Up to 8 agents per bundle',
+      'Up to 10 concurrent runs',
+      'Always-on workspace support',
+      'Best for a dedicated long-running setup',
+    ],
+    suitFor: 'Choose Always On if you need a persistent workspace with more parallel capacity.',
     icon: Flame,
     accent: 'border-rose-300/25 bg-rose-300/[0.07]',
     accentText: 'text-rose-200',
     highlight: undefined,
-    cta: 'Stay Always On',
+    cta: 'See Always On',
   },
 ] as const
 
 const comparisonRows = [
   { label: 'Price', values: plans.map((plan) => plan.price) },
-  { label: 'Included credits', values: plans.map((plan) => plan.includedCredits) },
   { label: 'Active bundles', values: plans.map((plan) => plan.activeBundles) },
   { label: 'Agents per bundle', values: plans.map((plan) => plan.agentsPerBundle) },
-  { label: 'Trigger mode', values: plans.map((plan) => plan.triggerMode) },
+  { label: 'Launch style', values: plans.map((plan) => plan.launchStyle) },
   { label: 'Concurrent runs', values: plans.map((plan) => plan.concurrentRuns) },
-  { label: 'Always-on bundles', values: plans.map((plan) => plan.alwaysOnBundles) },
-  { label: 'Best for', values: plans.map((plan) => plan.suitFor) },
+  { label: 'Runtime budget', values: plans.map((plan) => plan.runtimeBudget) },
 ] as const
 
-const callouts = [
+const planGuides = [
   {
-    title: 'Free is for browsing and preview',
-    description:
-      'Use it to understand the agent persona and claim free agents. It is not a runtime tier.',
+    title: 'Choose Free if you want to explore agents and preview how they think.',
+    description: 'Good for catalog browsing, persona checking, and collecting agents before you are ready to run them.',
   },
   {
-    title: 'Run is the lightest paid entry',
-    description:
-      'Good when execution is manual and occasional. Wake speed stays slower by design.',
+    title: 'Choose Run if you want to test one real workflow before committing.',
+    description: 'This is the first paid step. It is the clearest way to validate one full workflow end-to-end.',
   },
   {
-    title: 'Warm Standby is built for Telegram loops',
-    description:
-      'If bundles are triggered often through Telegram, this is the tier that starts making sense first.',
+    title: 'Choose Warm Standby if you expect to trigger the same setup repeatedly.',
+    description: 'This is the core monthly tier when the same workflow should wake on demand without full-time occupancy.',
   },
   {
-    title: 'Always On is for a pinned core workspace',
-    description:
-      'This is the persistent operating setup: high concurrency, many always-on bundles, no sleep cycle.',
+    title: 'Choose Always On if you need a persistent workspace with more parallel capacity.',
+    description: 'This is the high-capacity anchor tier for a dedicated long-running setup, not the default self-serve starting point.',
+  },
+] as const
+
+const faqs = [
+  {
+    answer:
+      'Agents are free to collect and evaluate. Paid plans cover managed runtime access when you want to actually launch a bundle.',
+    question: 'Why are agents free, but runs paid?',
+  },
+  {
+    answer:
+      'Runtime access, bundle size limits, concurrency, and trigger behavior vary by plan.',
+    question: 'What does a runtime plan unlock?',
+  },
+  {
+    answer:
+      'No. Preview chat is available before purchase and does not require runtime access.',
+    question: 'Do I need a paid plan to preview agents?',
+  },
+  {
+    answer:
+      'Yes. Agents can be collected first. Plan limits are enforced when you launch a run, not when you purchase agents.',
+    question: 'Can I buy agents first and upgrade later?',
+  },
+  {
+    answer:
+      'You can upgrade when a bundle is blocked by plan limits directly from the bundle detail page.',
+    question: 'What happens if I need more capacity later?',
   },
 ] as const
 
@@ -237,7 +279,7 @@ export default function PricingPage() {
                           <div className="text-right">
                             <div className="text-lg font-semibold text-foreground">{plan.price}</div>
                             <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
-                              {plan.triggerMode}
+                              {plan.launchStyle}
                             </div>
                           </div>
                         </div>
@@ -250,18 +292,51 @@ export default function PricingPage() {
           </div>
         </section>
 
+        <section className="border-b border-border/60 bg-background">
+          <div className="container mx-auto px-4 py-14 md:py-16">
+            <div className="grid gap-8 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] lg:items-start">
+              <div>
+                <div className="text-xs uppercase tracking-[0.24em] text-muted-foreground">
+                  How pricing works
+                </div>
+                <h2 className="mt-3 max-w-xl text-3xl font-semibold tracking-[-0.03em] text-foreground md:text-4xl">
+                  The catalog is free. Runtime is the paid layer.
+                </h2>
+              </div>
+
+              <div className="grid gap-3">
+                {[
+                  'Agents are free to collect.',
+                  'Preview chat is free.',
+                  'You only pay when you want to run a bundle in a managed environment.',
+                  'Plans unlock different runtime capabilities like bundle size, trigger mode, and concurrency.',
+                ].map((line) => (
+                  <div
+                    key={line}
+                    className="flex items-start gap-3 rounded-2xl border border-border/60 bg-card/45 px-4 py-4"
+                  >
+                    <div className="mt-0.5 flex h-7 w-7 items-center justify-center rounded-full border border-orange-200/20 bg-orange-200/10">
+                      <Check className="h-3.5 w-3.5 text-orange-200" />
+                    </div>
+                    <p className="text-sm leading-7 text-muted-foreground md:text-base">{line}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
+
         <section className="border-b border-border/60 bg-card/30">
           <div className="container mx-auto px-4 py-18 md:py-20">
             <div className="mb-10 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
               <div>
                 <div className="text-xs uppercase tracking-[0.24em] text-muted-foreground">Plans</div>
                 <h2 className="mt-3 text-3xl font-semibold tracking-[-0.03em] text-foreground md:text-4xl">
-                  Four tiers, four wake profiles.
+                  Choose the runtime shape that matches the job.
                 </h2>
               </div>
               <p className="max-w-xl text-sm leading-7 text-muted-foreground">
-                The difference is not cosmetic. Each tier changes how many bundles can stay active, how
-                many agents fit inside, and how fast the workspace is ready to move.
+                Start simple. Move up only when bundle size, repeat triggering, or parallel capacity becomes the bottleneck.
               </p>
             </div>
 
@@ -278,8 +353,11 @@ export default function PricingPage() {
             <div className="max-w-3xl">
               <div className="text-xs uppercase tracking-[0.24em] text-muted-foreground">Compare</div>
               <h2 className="mt-3 text-3xl font-semibold tracking-[-0.03em] text-foreground md:text-4xl">
-                Exact plan limits, line by line.
+                Plan table, minus fake precision.
               </h2>
+              <p className="mt-4 max-w-2xl text-sm leading-7 text-muted-foreground">
+                Runtime plans include a usage budget. Exact runtime consumption rules may evolve as the platform matures.
+              </p>
             </div>
 
             <div className="mt-8 overflow-x-auto">
@@ -329,7 +407,15 @@ export default function PricingPage() {
 
         <section className="border-b border-border/60 bg-card/30">
           <div className="container mx-auto grid gap-5 px-4 py-18 md:grid-cols-2 xl:grid-cols-4 md:py-20">
-            {callouts.map((item, index) => (
+            <div className="md:col-span-2 xl:col-span-4">
+              <div className="max-w-3xl">
+                <div className="text-xs uppercase tracking-[0.24em] text-muted-foreground">Plan comparison</div>
+                <h2 className="mt-3 text-3xl font-semibold tracking-[-0.03em] text-foreground md:text-4xl">
+                  Which plan is right for you?
+                </h2>
+              </div>
+            </div>
+            {planGuides.map((item, index) => (
               <Card key={item.title} className="rounded-[1.6rem] border-border/60 bg-background/60">
                 <CardContent className="p-6">
                   <div className="text-xs uppercase tracking-[0.22em] text-muted-foreground">
@@ -345,6 +431,30 @@ export default function PricingPage() {
           </div>
         </section>
 
+        <section className="border-b border-border/60 bg-background">
+          <div className="container mx-auto px-4 py-18 md:py-20">
+            <div className="max-w-3xl">
+              <div className="text-xs uppercase tracking-[0.24em] text-muted-foreground">FAQ</div>
+              <h2 className="mt-3 text-3xl font-semibold tracking-[-0.03em] text-foreground md:text-4xl">
+                The questions this page should answer upfront.
+              </h2>
+            </div>
+
+            <div className="mt-10 grid gap-4 lg:grid-cols-2">
+              {faqs.map((item) => (
+                <Card key={item.question} className="rounded-[1.5rem] border-border/60 bg-card/45">
+                  <CardContent className="p-6">
+                    <h3 className="text-lg font-semibold tracking-[-0.02em] text-foreground">
+                      {item.question}
+                    </h3>
+                    <p className="mt-3 text-sm leading-7 text-muted-foreground">{item.answer}</p>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
+        </section>
+
         <section className="relative overflow-hidden">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,188,127,0.1),transparent_42%)]" />
           <div className="container mx-auto px-4 py-18 md:py-20">
@@ -357,8 +467,7 @@ export default function PricingPage() {
                     Start with the lightest tier that matches the job.
                   </h2>
                   <p className="mt-4 text-sm leading-7 text-muted-foreground">
-                    You can browse free, pay for occasional runs, or move up once bundles become part of
-                    a recurring operating loop.
+                    Browse and preview for free first. Pay only when the workflow is real enough to deserve managed runtime.
                   </p>
                 </div>
 
@@ -413,32 +522,11 @@ function PlanCard({
         <div className="mt-5">
           <div className="text-lg font-semibold tracking-[-0.02em] text-foreground">{plan.name}</div>
           <div className="mt-2 text-4xl font-semibold tracking-[-0.05em] text-foreground">{plan.price}</div>
-          <p className="mt-3 text-sm leading-7 text-muted-foreground">{plan.suitFor}</p>
+          <p className="mt-3 text-sm leading-7 text-muted-foreground">{plan.audience}</p>
         </div>
 
-        <div className="mt-6 grid grid-cols-2 gap-3">
-          <PlanMetric icon={Zap} label="Credits" value={plan.includedCredits} />
-          <PlanMetric icon={Layers3} label="Bundles" value={plan.activeBundles} />
-          <PlanMetric icon={Bot} label="Agents" value={plan.agentsPerBundle} />
-          <PlanMetric icon={Clock3} label="Runs" value={plan.concurrentRuns} />
-        </div>
-
-        <div className="mt-5 rounded-[1.35rem] border border-border/60 bg-card/45 p-4">
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Trigger mode</span>
-            <span className="text-sm font-medium text-foreground">{plan.triggerMode}</span>
-          </div>
-          <div className="mt-3 flex items-center justify-between gap-3">
-            <span className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-              Always-on bundles
-            </span>
-            <span className="text-sm font-medium text-foreground">{plan.alwaysOnBundles}</span>
-          </div>
-        </div>
-
-        <div className="mt-5">
-          <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Plan includes</div>
-          <div className="mt-3 space-y-2">
+        <div className="mt-6">
+          <div className="space-y-2">
             {plan.includes.map((item) => (
               <div key={item} className="flex items-start gap-3 text-sm text-muted-foreground">
                 <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-orange-200/10 text-orange-100/80">
@@ -450,30 +538,18 @@ function PlanCard({
           </div>
         </div>
 
+        <div className="mt-5 rounded-[1.35rem] border border-border/60 bg-card/45 p-4">
+          <div className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Runtime budget</div>
+          <div className="mt-2 text-sm font-medium text-foreground">{plan.runtimeBudget}</div>
+          <p className="mt-2 text-xs leading-6 text-muted-foreground">
+            Runtime plans include a usage budget. Exact runtime consumption rules may evolve as the platform matures.
+          </p>
+        </div>
+
         <Button asChild className="mt-6 h-11 w-full rounded-full text-sm">
-          <Link href="/agents">{plan.cta}</Link>
+          <Link href={plan.name === 'Free' ? '/agents' : '/app'}>{plan.cta}</Link>
         </Button>
       </CardContent>
     </Card>
-  )
-}
-
-function PlanMetric({
-  icon: Icon,
-  label,
-  value,
-}: {
-  icon: typeof Bot
-  label: string
-  value: string
-}) {
-  return (
-    <div className="rounded-[1.2rem] border border-border/60 bg-card/45 p-3">
-      <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
-        <Icon className="h-3.5 w-3.5" />
-        {label}
-      </div>
-      <div className="mt-2 text-base font-medium text-foreground">{value}</div>
-    </div>
   )
 }

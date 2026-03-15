@@ -125,7 +125,7 @@ Current source of truth: `lib/subscription-plans.ts`
 
 - Price: `$19/mo`
 - Included Credits: `50`
-- Active Bundles: `3`
+- Active Bundles: `2`
 - Agents per Bundle: `5`
 - Trigger Mode: `auto_wake`
 - Concurrent Runs: `3`
@@ -310,6 +310,22 @@ Header refreshes when:
 - page regains focus
 - subscription purchase reconciliation finishes
 
+### 7.3 Pricing Page Narrative
+
+The pricing page now presents plans with these framing rules:
+
+- agents are free to collect
+- preview chat is free
+- managed runtime is the paid layer
+- credits are not treated as the main decision surface in the first visual layer
+- pricing is explained in plain language before plan comparison
+
+The page also includes:
+
+- a `How pricing works` section
+- a `Which plan is right for you?` explanation section
+- a FAQ that answers the common pricing objections directly
+
 ---
 
 ## 8. Intended Semantics vs Current Implementation
@@ -422,4 +438,3 @@ Any evaluation of whether the current plan is “best for the world” should tr
 
 1. a valid entitlement architecture
 2. an incomplete billing/consumption model
-
