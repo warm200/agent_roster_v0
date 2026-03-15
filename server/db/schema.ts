@@ -21,6 +21,14 @@ export const agentStatusEnum = pgEnum('agent_status', ['draft', 'active', 'archi
 export const cartStatusEnum = pgEnum('cart_status', ['active', 'converted', 'abandoned'])
 export const channelTypeEnum = pgEnum('channel_type', ['telegram'])
 export const channelScopeEnum = pgEnum('channel_scope', ['run'])
+export const subscriptionPlanIdEnum = pgEnum('subscription_plan_id', [
+  'free',
+  'run',
+  'warm_standby',
+  'always_on',
+])
+export const subscriptionStatusEnum = pgEnum('subscription_status', ['active', 'canceled', 'past_due'])
+export const billingIntervalEnum = pgEnum('billing_interval', ['none', 'one_time', 'month'])
 
 export const users = pgTable(
   'users',
@@ -184,6 +192,49 @@ export const orders = pgTable('orders', {
   paidAt: timestamp('paid_at', { withTimezone: true }),
 })
 
+export const userSubscriptions = pgTable(
+  'user_subscriptions',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    planId: subscriptionPlanIdEnum('plan_id').notNull(),
+    status: subscriptionStatusEnum('status').notNull(),
+    billingInterval: billingIntervalEnum('billing_interval').notNull(),
+    includedCredits: integer('included_credits').notNull(),
+    remainingCredits: integer('remaining_credits').notNull(),
+    priceCents: integer('price_cents').notNull(),
+    currency: text('currency').notNull(),
+    stripeCustomerId: text('stripe_customer_id'),
+    stripePriceId: text('stripe_price_id'),
+    stripeSubscriptionId: text('stripe_subscription_id'),
+    stripeCheckoutSessionId: text('stripe_checkout_session_id'),
+    currentPeriodStart: timestamp('current_period_start', { withTimezone: true }),
+    currentPeriodEnd: timestamp('current_period_end', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    userIdx: uniqueIndex('user_subscriptions_user_idx').on(table.userId),
+  }),
+)
+
+export const creditLedger = pgTable('credit_ledger', {
+  id: text('id').primaryKey(),
+  userId: text('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  subscriptionId: text('subscription_id').references(() => userSubscriptions.id, {
+    onDelete: 'set null',
+  }),
+  deltaCredits: integer('delta_credits').notNull(),
+  balanceAfter: integer('balance_after').notNull(),
+  reason: text('reason').notNull(),
+  metadata: jsonb('metadata').$type<Record<string, unknown>>().notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
 export const orderItems = pgTable('order_items', {
   id: text('id').primaryKey(),
   orderId: text('order_id')
@@ -256,6 +307,10 @@ export type DbCart = InferSelectModel<typeof carts>
 export type NewDbCart = InferInsertModel<typeof carts>
 export type DbOrder = InferSelectModel<typeof orders>
 export type NewDbOrder = InferInsertModel<typeof orders>
+export type DbUserSubscription = InferSelectModel<typeof userSubscriptions>
+export type NewDbUserSubscription = InferInsertModel<typeof userSubscriptions>
+export type DbCreditLedgerEntry = InferSelectModel<typeof creditLedger>
+export type NewDbCreditLedgerEntry = InferInsertModel<typeof creditLedger>
 export type DbRunChannelConfig = InferSelectModel<typeof runChannelConfigs>
 export type NewDbRunChannelConfig = InferInsertModel<typeof runChannelConfigs>
 export type DbRun = InferSelectModel<typeof runs>

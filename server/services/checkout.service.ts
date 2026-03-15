@@ -7,6 +7,7 @@ import { HttpError } from '../lib/http'
 import { DEFAULT_REQUEST_USER_ID, ensureRequestUser } from '../lib/request-user'
 import { getActiveCart } from './cart.service'
 import { createPaidOrderFromCart } from './order.service'
+import { getSubscriptionService } from './subscription.service'
 
 function getCheckoutBaseUrl(origin: string) {
   return (process.env.NEXTAUTH_URL || origin).replace(/\/$/, '')
@@ -210,10 +211,18 @@ export async function handleStripeWebhookEvent(input: {
   const session = event.data.object as Stripe.Checkout.Session
   const userId = session.metadata?.userId?.trim() || DEFAULT_REQUEST_USER_ID
   await ensureRequestUser(userId)
-  await handleStripeCheckoutCompletedSession({
-    session,
-    userId,
-  })
+
+  if (session.metadata?.checkoutKind === 'runtime_plan') {
+    await getSubscriptionService().handleStripeCheckoutCompletedSession({
+      session,
+      userId,
+    })
+  } else {
+    await handleStripeCheckoutCompletedSession({
+      session,
+      userId,
+    })
+  }
 
   return {
     received: true,

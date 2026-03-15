@@ -184,13 +184,18 @@ async function clickByText(page: Page, selector: string, text: string) {
 
 async function clickByHref(page: Page, href: string) {
   await page.waitForFunction(
-    (expectedHref) => Boolean(document.querySelector(`a[href="${expectedHref}"]`)),
+    (expectedHref) =>
+      Array.from(document.querySelectorAll<HTMLElement>(`a[href="${expectedHref}"]`)).some(
+        (node) => node.offsetParent !== null,
+      ),
     {},
     href,
   )
 
   const clicked = await page.evaluate((expectedHref) => {
-    const candidate = document.querySelector<HTMLElement>(`a[href="${expectedHref}"]`)
+    const candidate = Array.from(
+      document.querySelectorAll<HTMLElement>(`a[href="${expectedHref}"]`),
+    ).find((node) => node.offsetParent !== null)
     candidate?.click()
     return Boolean(candidate)
   }, href)

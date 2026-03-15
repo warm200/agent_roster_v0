@@ -4,6 +4,7 @@ import { afterEach, test } from 'node:test'
 import type { Order, Run } from '@/lib/types'
 import { getTelegramService } from '@/server/services/telegram.service'
 import { RunService, setRunServiceDepsForTesting } from '@/server/services/run.service'
+import { getSubscriptionPlan } from '@/lib/subscription-plans'
 
 const order: Order = {
   amountCents: 2900,
@@ -152,6 +153,23 @@ test('run service refreshes telegram pairing state before launch checks', async 
       calls.push('loadOrder')
       return order
     },
+    getSubscriptionService: () =>
+      ({
+        getLaunchPolicy: async () => {
+          calls.push('subscription.getLaunchPolicy')
+          return {
+            allowed: true,
+            blockers: [],
+            plan: getSubscriptionPlan('warm_standby'),
+            subscription: null,
+            usage: {
+              activeBundles: 0,
+              activeRunIds: [],
+              concurrentRuns: 0,
+            },
+          }
+        },
+      } as never),
     getOrderProviderApiKeysForUser: async () => {
       calls.push('loadProviderKeys')
       return {}
@@ -188,7 +206,76 @@ test('run service refreshes telegram pairing state before launch checks', async 
   assert.deepEqual(calls, [
     'telegram.getChannelConfig',
     'loadOrder',
+    'subscription.getLaunchPolicy',
     'loadProviderKeys',
     'provider.createRun',
+  ])
+})
+
+test('run service blocks launch when subscription policy rejects the order', async () => {
+  const calls: string[] = []
+  const service = new RunService({
+    async createRun() {
+      throw new Error('should not create repo run')
+    },
+  } as never)
+
+  setRunServiceDepsForTesting({
+    getOrderByIdForUser: async () => {
+      calls.push('loadOrder')
+      return {
+        ...order,
+        items: [...order.items, { ...order.items[0], id: 'order-item-2' }, { ...order.items[0], id: 'order-item-3' }, { ...order.items[0], id: 'order-item-4' }],
+      }
+    },
+    getSubscriptionService: () =>
+      ({
+        getLaunchPolicy: async () => {
+          calls.push('subscription.getLaunchPolicy')
+          return {
+            allowed: false,
+            blockers: ['Run allows at most 3 agents per launched bundle.'],
+            plan: getSubscriptionPlan('run'),
+            subscription: null,
+            usage: {
+              activeBundles: 0,
+              activeRunIds: [],
+              concurrentRuns: 0,
+            },
+          }
+        },
+      } as never),
+    getOrderProviderApiKeysForUser: async () => {
+      calls.push('loadProviderKeys')
+      return {}
+    },
+    getRunProvider: () => ({
+      name: 'test',
+      createRun: async () => {
+        calls.push('provider.createRun')
+        return buildRun()
+      },
+      getLogs: async () => [],
+      getResult: async () => null,
+      getStatus: async () => null,
+      stopRun: async () => null,
+    }),
+    getTelegramService: () =>
+      ({
+        getChannelConfig: async () => {
+          calls.push('telegram.getChannelConfig')
+          return order.channelConfig!
+        },
+      } as unknown as ReturnType<typeof getTelegramService>),
+  })
+
+  await assert.rejects(
+    () => service.createRun('user-test-1', 'order-test-1'),
+    /Run allows at most 3 agents per launched bundle\./,
+  )
+  assert.deepEqual(calls, [
+    'telegram.getChannelConfig',
+    'loadOrder',
+    'subscription.getLaunchPolicy',
   ])
 })

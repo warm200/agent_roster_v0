@@ -7,6 +7,10 @@ export type RiskLevel = 'low' | 'medium' | 'high'
 export type RunStatus = 'provisioning' | 'running' | 'completed' | 'failed'
 export type AgentTimeFormat = 'auto' | '12' | '24'
 export type AgentProviderKeyName = 'anthropic' | 'google' | 'openai' | 'openrouter'
+export type SubscriptionPlanId = 'free' | 'run' | 'warm_standby' | 'always_on'
+export type SubscriptionStatus = 'active' | 'canceled' | 'past_due'
+export type BillingInterval = 'none' | 'one_time' | 'month'
+export type TriggerMode = 'none' | 'manual' | 'auto_wake' | 'always_active'
 
 // Order statuses
 export type OrderStatus = 'pending' | 'paid' | 'failed' | 'refunded'
@@ -207,6 +211,68 @@ export interface User {
   updatedAt: string
 }
 
+export interface SubscriptionPlan {
+  id: SubscriptionPlanId
+  name: string
+  priceLabel: string
+  priceCents: number
+  billingInterval: BillingInterval
+  includedCredits: number
+  activeBundles: number
+  agentsPerBundle: number
+  triggerMode: TriggerMode
+  concurrentRuns: number
+  alwaysOnBundles: number
+  runtimeAccess: boolean
+  planIncludes: string[]
+  suitFor: string
+}
+
+export interface UserSubscription {
+  id: string
+  userId: string
+  planId: SubscriptionPlanId
+  status: SubscriptionStatus
+  billingInterval: BillingInterval
+  includedCredits: number
+  remainingCredits: number
+  priceCents: number
+  currency: string
+  stripeCustomerId: string | null
+  stripePriceId: string | null
+  stripeSubscriptionId: string | null
+  stripeCheckoutSessionId: string | null
+  currentPeriodStart: string | null
+  currentPeriodEnd: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface CreditLedgerEntry {
+  id: string
+  userId: string
+  subscriptionId: string | null
+  deltaCredits: number
+  balanceAfter: number
+  reason: string
+  metadata: Record<string, unknown>
+  createdAt: string
+}
+
+export interface LaunchPolicyUsage {
+  activeBundles: number
+  activeRunIds: string[]
+  concurrentRuns: number
+}
+
+export interface LaunchPolicyCheck {
+  allowed: boolean
+  blockers: string[]
+  plan: SubscriptionPlan
+  subscription: UserSubscription | null
+  usage: LaunchPolicyUsage
+}
+
 // API Response types
 export interface ApiResponse<T> {
   data: T
@@ -217,4 +283,8 @@ export interface ApiResponse<T> {
 export interface CheckoutSession {
   sessionId: string
   sessionUrl: string
+}
+
+export interface SubscriptionCheckoutSession extends CheckoutSession {
+  planId: SubscriptionPlanId
 }

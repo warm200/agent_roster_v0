@@ -2,7 +2,7 @@
 
 import { use, useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -12,12 +12,14 @@ import { Spinner } from '@/components/ui/spinner'
 import { RiskBadge } from '@/components/risk-badge'
 import { BundleRiskSummary } from '@/components/bundle-risk-summary'
 import { AgentSetupCard } from '@/components/agent-setup-card'
+import { PlanUpgradeDialog } from '@/components/plan-upgrade-dialog'
 import { TelegramSetupWizard } from '@/components/telegram-setup-wizard'
 import { formatPrice } from '@/lib/mock-data'
-import type { AgentSetup, Order, Run } from '@/lib/types'
+import type { AgentSetup, LaunchPolicyCheck, Order, Run } from '@/lib/types'
 import { formatDate, formatDateTime } from '@/lib/utils'
-import { createOrderRun, getOrder, getOrderDownloads } from '@/services/orders.api'
+import { createOrderRun, getOrder, getOrderDownloads, getOrderLaunchPolicy } from '@/services/orders.api'
 import { listRuns } from '@/services/runs.api'
+import { reconcileSubscriptionCheckoutSession } from '@/services/subscription.api'
 import { toast } from 'sonner'
 import {
   ChevronLeft,
@@ -36,6 +38,7 @@ interface PageProps {
 export default function BundleDetailPage({ params }: PageProps) {
   const { orderId } = use(params)
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [order, setOrder] = useState<Order | null>(null)
   const [orderRuns, setOrderRuns] = useState<Run[]>([])
   const [downloads, setDownloads] = useState<Array<{
@@ -43,9 +46,13 @@ export default function BundleDetailPage({ params }: PageProps) {
     downloadUrl: string
     expiresAt: string
   }>>([])
+  const [launchPolicy, setLaunchPolicy] = useState<LaunchPolicyCheck | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [telegramSetup, setTelegramSetup] = useState(false)
   const [isLaunching, setIsLaunching] = useState(false)
+  const [isPlanDialogOpen, setIsPlanDialogOpen] = useState(false)
+  const [isReconcilingPlan, setIsReconcilingPlan] = useState(false)
+  const subscriptionSessionId = searchParams.get('subscription_session_id')
 
   const handleChannelConfigChange = useCallback((channelConfig: NonNullable<Order['channelConfig']>) => {
     setOrder((currentOrder) => {
@@ -103,9 +110,10 @@ export default function BundleDetailPage({ params }: PageProps) {
           setOrder(orderPayload)
         }
 
-        const [runsResult, downloadsResult] = await Promise.allSettled([
+        const [runsResult, downloadsResult, launchPolicyResult] = await Promise.allSettled([
           listRuns({ orderId }),
           getOrderDownloads(orderId),
+          getOrderLaunchPolicy(orderId),
         ])
 
         if (!isMounted) {
@@ -114,11 +122,13 @@ export default function BundleDetailPage({ params }: PageProps) {
 
         setOrderRuns(runsResult.status === 'fulfilled' ? runsResult.value.runs : [])
         setDownloads(downloadsResult.status === 'fulfilled' ? downloadsResult.value.downloads : [])
+        setLaunchPolicy(launchPolicyResult.status === 'fulfilled' ? launchPolicyResult.value : null)
       } catch {
         if (isMounted) {
           setOrder(null)
           setOrderRuns([])
           setDownloads([])
+          setLaunchPolicy(null)
         }
       } finally {
         if (isMounted) {
@@ -133,6 +143,49 @@ export default function BundleDetailPage({ params }: PageProps) {
       isMounted = false
     }
   }, [orderId])
+
+  useEffect(() => {
+    if (!subscriptionSessionId || isReconcilingPlan) {
+      return
+    }
+
+    const sessionId = subscriptionSessionId
+    let isMounted = true
+
+    async function reconcilePlanPurchase() {
+      setIsReconcilingPlan(true)
+
+      try {
+        await reconcileSubscriptionCheckoutSession(sessionId)
+        const nextLaunchPolicy = await getOrderLaunchPolicy(orderId)
+
+        if (!isMounted) {
+          return
+        }
+
+        setLaunchPolicy(nextLaunchPolicy)
+        window.dispatchEvent(new CustomEvent('subscription-updated'))
+        toast.success('Plan updated. Credits are ready.')
+        router.replace(`/app/bundles/${orderId}`)
+      } catch (error) {
+        if (!isMounted) {
+          return
+        }
+
+        toast.error(error instanceof Error ? error.message : 'Unable to confirm your plan purchase')
+      } finally {
+        if (isMounted) {
+          setIsReconcilingPlan(false)
+        }
+      }
+    }
+
+    void reconcilePlanPurchase()
+
+    return () => {
+      isMounted = false
+    }
+  }, [isReconcilingPlan, orderId, router, subscriptionSessionId])
 
   if (isLoading) {
     return <BundleDetailSkeleton />
@@ -167,11 +220,14 @@ export default function BundleDetailPage({ params }: PageProps) {
       order.channelConfig?.recipientBindingStatus === 'paired'
     )
 
-  const canLaunchRun = order.status === 'paid' && hasTelegramSetup
+  const planAllowsLaunch = launchPolicy ? launchPolicy.allowed : true
+  const canLaunchRun = order.status === 'paid' && hasTelegramSetup && planAllowsLaunch
   const effectiveDefaultAgentSlug = order.agentSetup?.defaultAgentSlug ?? order.items[0]?.agent.slug ?? null
+  const hasPlanBlockers = Boolean(launchPolicy && launchPolicy.blockers.length > 0)
+  const currentCredits = launchPolicy?.subscription?.remainingCredits ?? launchPolicy?.plan.includedCredits ?? 0
 
   const handleLaunchRun = async () => {
-    if (!canLaunchRun || isLaunching) return
+    if (!canLaunchRun || isLaunching || isReconcilingPlan) return
 
     setIsLaunching(true)
 
@@ -220,10 +276,15 @@ export default function BundleDetailPage({ params }: PageProps) {
 
         <Button
           size="lg"
-          disabled={!canLaunchRun || isLaunching}
+          disabled={!canLaunchRun || isLaunching || isReconcilingPlan}
           onClick={handleLaunchRun}
         >
-          {isLaunching ? (
+          {isReconcilingPlan ? (
+            <>
+              <Spinner className="w-4 h-4 mr-2" />
+              Updating plan...
+            </>
+          ) : isLaunching ? (
             <>
               <Spinner className="w-4 h-4 mr-2" />
               Launching...
@@ -240,17 +301,67 @@ export default function BundleDetailPage({ params }: PageProps) {
       {/* Run Requirements Warning */}
       {!canLaunchRun && (
         <Card className="mb-6 border-amber-500/30 bg-amber-500/5">
-          <CardContent className="p-4 flex items-start gap-3">
+          <CardContent className="flex flex-col gap-4 p-4 md:flex-row md:items-start md:justify-between">
+            <div className="flex items-start gap-3">
             <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
             <div>
-              <p className="font-medium text-amber-400">Complete setup to launch runs</p>
-              <p className="text-sm text-muted-foreground mt-1">
-                You need to connect Telegram before launching runs. This enables notifications and result delivery.
-              </p>
+              <p className="font-medium text-amber-400">Launch requirements not met</p>
+              <div className="mt-1 space-y-1 text-sm text-muted-foreground">
+                {!hasTelegramSetup ? (
+                  <p>
+                    You need to connect Telegram before launching runs. This enables notifications and result delivery.
+                  </p>
+                ) : null}
+                {launchPolicy?.blockers.map((blocker) => (
+                  <p key={blocker}>{blocker}</p>
+                ))}
+              </div>
             </div>
+            </div>
+            {hasPlanBlockers ? (
+              <div className="flex shrink-0 flex-col gap-2">
+                <Button
+                  disabled={isReconcilingPlan}
+                  onClick={() => setIsPlanDialogOpen(true)}
+                  size="sm"
+                >
+                  Adjust Plan
+                </Button>
+                <p className="text-xs text-muted-foreground">
+                  Purchase runtime credits to unlock bundle launches.
+                </p>
+              </div>
+            ) : null}
           </CardContent>
         </Card>
       )}
+
+      {launchPolicy ? (
+        <Card className="mb-6 border-border/70 bg-card/60">
+          <CardContent className="flex flex-col gap-3 p-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="text-sm font-medium text-foreground">
+                Current plan: {launchPolicy.plan.name}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Credits {currentCredits}
+                {' · '}
+                Agents per bundle {launchPolicy.plan.agentsPerBundle}
+                {' · '}
+                Concurrent runs {launchPolicy.plan.concurrentRuns}
+              </p>
+            </div>
+            <Button
+              disabled={isReconcilingPlan}
+              onClick={() => setIsPlanDialogOpen(true)}
+              size="sm"
+              variant="outline"
+            >
+              {launchPolicy.allowed ? 'View Plans' : 'Upgrade Plan'}
+            </Button>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Tabs defaultValue="agents" className="space-y-6">
         <TabsList>
@@ -410,8 +521,13 @@ export default function BundleDetailPage({ params }: PageProps) {
                     : 'Complete Telegram setup to launch runs.'}
                 </p>
                 {canLaunchRun && (
-                  <Button onClick={handleLaunchRun} disabled={isLaunching}>
-                    {isLaunching ? (
+                  <Button onClick={handleLaunchRun} disabled={isLaunching || isReconcilingPlan}>
+                    {isReconcilingPlan ? (
+                      <>
+                        <Spinner className="w-4 h-4 mr-2" />
+                        Updating plan...
+                      </>
+                    ) : isLaunching ? (
                       <>
                         <Spinner className="w-4 h-4 mr-2" />
                         Launching...
@@ -429,6 +545,16 @@ export default function BundleDetailPage({ params }: PageProps) {
           )}
         </TabsContent>
       </Tabs>
+
+      {launchPolicy ? (
+        <PlanUpgradeDialog
+          currentCredits={currentCredits}
+          currentPlanId={launchPolicy.plan.id}
+          onOpenChange={setIsPlanDialogOpen}
+          open={isPlanDialogOpen}
+          returnPath={`/app/bundles/${orderId}`}
+        />
+      ) : null}
     </div>
   )
 }

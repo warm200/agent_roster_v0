@@ -7,6 +7,7 @@ import { getRunProvider } from '../providers'
 import type { RunControlUiLink } from '../providers/run-provider.interface'
 import { getOrderByIdForUser, getOrderProviderApiKeysForUser } from './order.service'
 import { RunRepository } from './run.repository'
+import { getSubscriptionService } from './subscription.service'
 import { getTelegramService } from './telegram.service'
 
 function sanitizeRunText(value: string | null) {
@@ -139,6 +140,12 @@ export class RunService {
   async createRun(userId: string, orderId: string) {
     await runServiceDeps.getTelegramService().getChannelConfig({ orderId, userId })
     const order = await runServiceDeps.getOrderByIdForUser({ orderId, userId })
+    const launchPolicy = await runServiceDeps.getSubscriptionService().getLaunchPolicy(userId, order)
+
+    if (!launchPolicy.allowed) {
+      throw new HttpError(409, launchPolicy.blockers.join(' '))
+    }
+
     const providerApiKeys = runServiceDeps.getOrderProviderApiKeysForUser
       ? await runServiceDeps.getOrderProviderApiKeysForUser({ orderId, userId })
       : {}
@@ -376,6 +383,7 @@ const defaultRunServiceDeps = {
   getOrderByIdForUser,
   getOrderProviderApiKeysForUser,
   getRunProvider,
+  getSubscriptionService,
   getTelegramService,
 }
 let runServiceDeps = defaultRunServiceDeps

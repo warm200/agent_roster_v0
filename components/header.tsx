@@ -1,5 +1,6 @@
 'use client'
 
+import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Button } from '@/components/ui/button'
@@ -8,6 +9,7 @@ import { ShoppingCart, User, Menu, Bot, LogIn, LogOut } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useCart } from '@/lib/cart-context'
 import { useAuth } from '@/lib/auth-context'
+import { getCurrentSubscription } from '@/services/subscription.api'
 import {
   Sheet,
   SheetContent,
@@ -24,6 +26,7 @@ export function Header() {
   const pathname = usePathname()
   const { items } = useCart()
   const { isAuthenticated, session, signOut, status } = useAuth()
+  const [remainingCredits, setRemainingCredits] = useState<number | null>(null)
   const cartCount = items.length
   const userName = session?.user?.name || 'Account'
   const userEmail = session?.user?.email || ''
@@ -33,6 +36,38 @@ export function Header() {
     .join('')
     .slice(0, 2)
     .toUpperCase()
+
+  const loadSubscription = useCallback(async () => {
+    if (!isAuthenticated) {
+      setRemainingCredits(null)
+      return
+    }
+
+    try {
+      const payload = await getCurrentSubscription()
+      setRemainingCredits(payload.subscription?.remainingCredits ?? payload.plan.includedCredits)
+    } catch {
+      setRemainingCredits(null)
+    }
+  }, [isAuthenticated])
+
+  useEffect(() => {
+    void loadSubscription()
+  }, [loadSubscription])
+
+  useEffect(() => {
+    const handleRefresh = () => {
+      void loadSubscription()
+    }
+
+    window.addEventListener('focus', handleRefresh)
+    window.addEventListener('subscription-updated', handleRefresh)
+
+    return () => {
+      window.removeEventListener('focus', handleRefresh)
+      window.removeEventListener('subscription-updated', handleRefresh)
+    }
+  }, [loadSubscription])
 
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -90,6 +125,11 @@ export function Header() {
                       <AvatarFallback>{initials || 'AR'}</AvatarFallback>
                     </Avatar>
                     <span className="max-w-32 truncate text-sm">{userName}</span>
+                    {remainingCredits !== null ? (
+                      <span className="rounded-full border border-border/70 bg-secondary/80 px-2 py-0.5 text-xs text-muted-foreground">
+                        {remainingCredits} cr
+                      </span>
+                    ) : null}
                   </Link>
                 </Button>
                 <Button
@@ -145,6 +185,9 @@ export function Header() {
                           <p className="truncate text-sm font-medium">{userName}</p>
                           {userEmail ? (
                             <p className="truncate text-xs text-muted-foreground">{userEmail}</p>
+                          ) : null}
+                          {remainingCredits !== null ? (
+                            <p className="truncate text-xs text-muted-foreground">{remainingCredits} credits</p>
                           ) : null}
                         </div>
                       </div>

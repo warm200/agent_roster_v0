@@ -70,6 +70,7 @@ Implemented in the current mock app:
 - Backend cart service now exists in `server/services/cart.service.ts` with DB-backed cart summary recalculation
 - Backend order service now exists in `server/services/order.service.ts` with paid-order creation and signed-download helpers
 - Backend checkout service now exists in `server/services/checkout.service.ts` with Stripe session creation and paid-session reconciliation helpers
+- Subscription plan catalog now exists in `lib/subscription-plans.ts`, matching the current pricing tier matrix (`free`, `run`, `warm_standby`, `always_on`)
 - Backend Telegram service now exists in `server/services/telegram.service.ts` with token validation, encrypted secret storage, pairing, and webhook handling
 - Backend run repository/service now exist in `server/services/run.repository.ts` and `server/services/run.service.ts` with provider-backed run sync against the current DB shape
 - `GET /api/agents` and `GET /api/agents/[slug]` now route through `server/services/catalog.service.ts`
@@ -80,6 +81,10 @@ Implemented in the current mock app:
 - `POST /api/checkout/session` now routes through `server/services/checkout.service.ts`
 - Checkout now creates Stripe checkout sessions, requires auth when OAuth providers are configured, and the success page reconciles `session_id` values back into orders before clearing the cart
 - Zero-dollar carts now bypass Stripe and create a paid free order directly, then redirect straight to `/checkout/success?orderId=...`
+- `GET /api/pricing/plans`, `GET /api/me/subscription`, `GET /api/me/orders/[orderId]/launch-policy`, `POST /api/me/subscription/checkout/session`, and `POST /api/me/subscription/checkout/session/[sessionId]` now exist so the frontend can read plan limits, start Stripe runtime-plan checkout, and reconcile the same-page return
+- Subscription persistence now exists in `user_subscriptions` + `credit_ledger`, and `subscription.service.ts` can evaluate launch blockers for agent-count, active-bundle, concurrent-run, and zero-credit cases while also upserting paid runtime plans from Stripe checkout
+- `RunService.createRun()` now enforces subscription launch policy before provider boot, and bundle detail surfaces current plan limits/blockers before the user clicks `Launch Run`
+- Bundle detail now opens an in-place runtime-plan modal when plan limits block launch, returns from Stripe back to the same bundle page, reconciles the purchased plan there, and refreshes the header credit badge immediately
 - `POST /api/webhooks/telegram` now routes through `server/services/telegram.service.ts`
 - `POST /api/webhooks/stripe` now routes through `server/services/checkout.service.ts`
 - Telegram channel config now supports explicit disconnect/reset so users can unlink a bot and connect a different one

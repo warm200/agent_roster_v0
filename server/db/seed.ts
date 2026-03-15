@@ -9,11 +9,13 @@ import {
   agents,
   agentVersions,
   carts,
+  creditLedger,
   orderItems,
   orders,
   riskProfiles,
   runChannelConfigs,
   runs,
+  userSubscriptions,
   users,
 } from './schema'
 
@@ -28,6 +30,43 @@ async function seed() {
         email: 'user-1@demo.local',
         name: 'Demo User',
         authProvider: 'demo',
+      },
+    ]
+    const now = new Date()
+    const nextMonth = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
+    const subscriptionRows = [
+      {
+        id: 'subscription-demo-1',
+        userId: 'user-1',
+        planId: 'warm_standby' as const,
+        status: 'active' as const,
+        billingInterval: 'month' as const,
+        includedCredits: 50,
+        remainingCredits: 50,
+        priceCents: 1900,
+        currency: 'USD',
+        stripeCustomerId: null,
+        stripePriceId: null,
+        stripeSubscriptionId: null,
+        stripeCheckoutSessionId: null,
+        currentPeriodStart: now,
+        currentPeriodEnd: nextMonth,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]
+    const creditRows = [
+      {
+        id: 'credit-demo-1',
+        userId: 'user-1',
+        subscriptionId: 'subscription-demo-1',
+        deltaCredits: 50,
+        balanceAfter: 50,
+        reason: 'subscription_seed',
+        metadata: {
+          planId: 'warm_standby',
+        },
+        createdAt: now,
       },
     ]
 
@@ -163,6 +202,14 @@ async function seed() {
       await db.delete(orders).where(eq(orders.id, orderRow.id))
     }
 
+    for (const creditRow of creditRows) {
+      await db.delete(creditLedger).where(eq(creditLedger.id, creditRow.id))
+    }
+
+    for (const subscriptionRow of subscriptionRows) {
+      await db.delete(userSubscriptions).where(eq(userSubscriptions.id, subscriptionRow.id))
+    }
+
     for (const cartRow of cartRows) {
       await db.delete(carts).where(eq(carts.id, cartRow.id))
     }
@@ -184,6 +231,8 @@ async function seed() {
     }
 
     await db.insert(users).values(demoUsers)
+    await db.insert(userSubscriptions).values(subscriptionRows)
+    await db.insert(creditLedger).values(creditRows)
     await db.insert(agents).values(agentRows)
     await db.insert(agentVersions).values(versionRows)
     await db.insert(riskProfiles).values(riskRows)

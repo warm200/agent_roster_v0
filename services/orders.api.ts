@@ -1,4 +1,11 @@
-import type { Agent, AgentProviderKeyName, AgentSetup, Order, RunChannelConfig } from '@/lib/types'
+import type {
+  Agent,
+  AgentProviderKeyName,
+  AgentSetup,
+  LaunchPolicyCheck,
+  Order,
+  RunChannelConfig,
+} from '@/lib/types'
 
 import { getJson, patchJson, postJson } from './api'
 
@@ -56,6 +63,10 @@ export async function getOrderDownloads(orderId: string) {
 
 export async function getOrderRunChannel(orderId: string) {
   return getJson<OrderRunChannelResponse>(`/api/me/orders/${orderId}/run-channel`)
+}
+
+export async function getOrderLaunchPolicy(orderId: string) {
+  return getJson<LaunchPolicyCheck>(`/api/me/orders/${orderId}/launch-policy`)
 }
 
 export async function createOrderRun(orderId: string) {

@@ -5,6 +5,7 @@ import {
   AGENT_PROVIDER_KEY_NAMES,
   AGENT_STATUSES,
   AGENT_TIME_FORMATS,
+  BILLING_INTERVALS,
   CART_STATUSES,
   CHANNEL_SCOPES,
   CHANNEL_TYPES,
@@ -14,7 +15,10 @@ import {
   PAIRING_STATUSES,
   RISK_LEVELS,
   RUN_STATUSES,
+  SUBSCRIPTION_PLAN_IDS,
+  SUBSCRIPTION_STATUSES,
   TOKEN_STATUSES,
+  TRIGGER_MODES,
 } from './constants'
 
 const timestampSchema = z.string().min(1)
@@ -33,6 +37,10 @@ export const channelScopeSchema = z.enum(CHANNEL_SCOPES)
 export const logLevelSchema = z.enum(LOG_LEVELS)
 export const messageRoleSchema = z.enum(MESSAGE_ROLES)
 export const agentProviderKeyNameSchema = z.enum(AGENT_PROVIDER_KEY_NAMES)
+export const subscriptionPlanIdSchema = z.enum(SUBSCRIPTION_PLAN_IDS)
+export const subscriptionStatusSchema = z.enum(SUBSCRIPTION_STATUSES)
+export const billingIntervalSchema = z.enum(BILLING_INTERVALS)
+export const triggerModeSchema = z.enum(TRIGGER_MODES)
 
 export const riskProfileSchema = z.object({
   id: z.string().min(1),
@@ -222,9 +230,75 @@ export const userSchema = z.object({
   updatedAt: timestampSchema,
 })
 
+export const subscriptionPlanSchema = z.object({
+  id: subscriptionPlanIdSchema,
+  name: z.string().min(1),
+  priceLabel: z.string().min(1),
+  priceCents: z.number().int().nonnegative(),
+  billingInterval: billingIntervalSchema,
+  includedCredits: z.number().int().nonnegative(),
+  activeBundles: z.number().int().nonnegative(),
+  agentsPerBundle: z.number().int().nonnegative(),
+  triggerMode: triggerModeSchema,
+  concurrentRuns: z.number().int().nonnegative(),
+  alwaysOnBundles: z.number().int().nonnegative(),
+  runtimeAccess: z.boolean(),
+  planIncludes: z.array(z.string().min(1)),
+  suitFor: z.string().min(1),
+})
+
+export const userSubscriptionSchema = z.object({
+  id: z.string().min(1),
+  userId: z.string().min(1),
+  planId: subscriptionPlanIdSchema,
+  status: subscriptionStatusSchema,
+  billingInterval: billingIntervalSchema,
+  includedCredits: z.number().int().nonnegative(),
+  remainingCredits: z.number().int().nonnegative(),
+  priceCents: z.number().int().nonnegative(),
+  currency: z.string().length(3),
+  stripeCustomerId: z.string().nullable(),
+  stripePriceId: z.string().nullable(),
+  stripeSubscriptionId: z.string().nullable(),
+  stripeCheckoutSessionId: z.string().nullable(),
+  currentPeriodStart: timestampSchema.nullable(),
+  currentPeriodEnd: timestampSchema.nullable(),
+  createdAt: timestampSchema,
+  updatedAt: timestampSchema,
+})
+
+export const creditLedgerEntrySchema = z.object({
+  id: z.string().min(1),
+  userId: z.string().min(1),
+  subscriptionId: z.string().nullable(),
+  deltaCredits: z.number().int(),
+  balanceAfter: z.number().int().nonnegative(),
+  reason: z.string().min(1),
+  metadata: z.record(z.string(), z.unknown()),
+  createdAt: timestampSchema,
+})
+
+export const launchPolicyUsageSchema = z.object({
+  activeBundles: z.number().int().nonnegative(),
+  activeRunIds: z.array(z.string().min(1)),
+  concurrentRuns: z.number().int().nonnegative(),
+})
+
+export const launchPolicyCheckSchema = z.object({
+  allowed: z.boolean(),
+  blockers: z.array(z.string().min(1)),
+  plan: subscriptionPlanSchema,
+  subscription: userSubscriptionSchema.nullable(),
+  usage: launchPolicyUsageSchema,
+})
+
 export const checkoutSessionSchema = z.object({
   sessionId: z.string().min(1),
   sessionUrl: z.string().min(1),
+})
+
+export const subscriptionCheckoutSessionSchema = checkoutSessionSchema.extend({
+  planId: subscriptionPlanIdSchema,
 })
 
 export const addCartItemRequestSchema = z.object({
@@ -256,6 +330,11 @@ export const previewInterviewRequestSchema = z.object({
 export const updateOrderAgentSetupRequestSchema = z.object({
   agentSetup: agentSetupUpdateSchema,
   vendorApiKeys: providerApiKeysUpdateSchema.optional(),
+})
+
+export const createSubscriptionCheckoutSessionRequestSchema = z.object({
+  planId: subscriptionPlanIdSchema,
+  returnPath: z.string().min(1).optional(),
 })
 
 export const apiErrorSchema = z.object({
