@@ -95,7 +95,8 @@ read_when:
 ### Recoverable state window
 
 - `recoverableUntilAt` is derived and stored
-- UI does not yet surface it as a first-class runtime status
+- run list/detail now surface sleeping / archived / released labels
+- recoverable-until is now shown on run detail
 
 ## Not Shipped Yet
 
@@ -132,12 +133,16 @@ read_when:
 
 ### User-facing lifecycle states
 
-- backend knows `stopped`, `archived`, `deleted`
-- primary user-facing run status is still collapsed to:
+- list/detail now show secondary lifecycle labels for:
+  - sleeping
+  - archived
+  - released
+- primary run status is still collapsed to:
   - provisioning
   - running
   - completed
   - failed
+- there is still no full dedicated lifecycle enum in the public API
 
 ## Next Recommended Slice
 

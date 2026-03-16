@@ -42,6 +42,21 @@ function canStopRun(run: RunSummary) {
   return run.runtimeState === 'provisioning' || run.runtimeState === 'running'
 }
 
+function getRuntimeLifecycleLabel(run: RunSummary) {
+  switch (run.runtimeState) {
+    case 'stopped':
+      return 'Sleeping'
+    case 'archived':
+      return 'Archived'
+    case 'deleted':
+      return 'Released'
+    case 'running':
+      return 'Live'
+    default:
+      return null
+  }
+}
+
 export default function RunsPage() {
   const [runs, setRuns] = useState<RunSummary[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -270,6 +285,7 @@ export default function RunsPage() {
                 const [primaryAgent, ...restAgents] = run.agents
                 const canResume = canResumeRun(run)
                 const canStop = canStopRun(run)
+                const runtimeLifecycleLabel = getRuntimeLifecycleLabel(run)
 
                 return (
                   <div
@@ -287,6 +303,7 @@ export default function RunsPage() {
                           </Badge>
                         )}
                         <span className="font-mono text-xs text-muted-foreground">{run.id}</span>
+                        {runtimeLifecycleLabel ? <Badge variant="secondary">{runtimeLifecycleLabel}</Badge> : null}
                       </div>
                       <p className="text-sm text-muted-foreground">
                         Bundle {run.orderId} • Created {formatDateTime(run.createdAt)}

@@ -107,3 +107,7 @@ Current reconciliation model:
   - `POST /api/internal/runs/[runId]/activity`
 - first live activity producer:
   - paired Telegram inbound messages on an order
+- run list/detail now surface secondary lifecycle labels such as:
+  - Sleeping
+  - Archived
+  - Released

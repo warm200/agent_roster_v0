@@ -23,6 +23,21 @@ interface RunDetailPageProps {
   params: Promise<{ runId: string }>
 }
 
+function getRuntimeLifecycleLabel(run: NonNullable<ReturnType<typeof useRunStatus>['run']>) {
+  switch (run.runtimeState) {
+    case 'stopped':
+      return 'Sleeping'
+    case 'archived':
+      return 'Archived'
+    case 'deleted':
+      return 'Released'
+    case 'running':
+      return 'Live'
+    default:
+      return null
+  }
+}
+
 function canResumeRun(run: NonNullable<ReturnType<typeof useRunStatus>['run']>) {
   return Boolean(
     run.preservedStateAvailable &&
@@ -82,6 +97,7 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
   const canResume = canResumeRun(run)
   const canOpenControlUi = run.runtimeState ? run.runtimeState === 'running' : run.status === 'running'
   const canStop = canStopRun(run)
+  const runtimeLifecycleLabel = getRuntimeLifecycleLabel(run)
   const timeline = buildTimeline(run)
 
   const handleStop = async () => {
@@ -192,12 +208,18 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
             <h1 className="text-3xl font-bold text-foreground">Run {run.id}</h1>
           </div>
           <div className="mb-1 flex flex-wrap items-center gap-2">
-            <span className="text-sm text-muted-foreground">Sandbox status</span>
+            <span className="text-sm text-muted-foreground">Runtime status</span>
             <RunStatusBadge status={run.status} />
+            {runtimeLifecycleLabel ? <Badge variant="secondary">{runtimeLifecycleLabel}</Badge> : null}
           </div>
           <p className="text-muted-foreground">
             Bundle {run.order.id} · {run.agents.length} agent{run.agents.length === 1 ? '' : 's'} · created {formatDateTime(run.createdAt)}
           </p>
+          {run.recoverableUntilAt ? (
+            <p className="mt-1 text-sm text-muted-foreground">
+              Recoverable until {formatDateTime(run.recoverableUntilAt)}
+            </p>
+          ) : null}
         </div>
 
         <div className="flex flex-wrap gap-2">
