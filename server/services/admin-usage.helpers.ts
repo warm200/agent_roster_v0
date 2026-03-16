@@ -396,6 +396,8 @@ export function buildUserRows(input: {
   subscriptionRows: Array<typeof userSubscriptions.$inferSelect>
   usageRows: Array<typeof runUsage.$inferSelect>
   userRows: Array<typeof users.$inferSelect>
+  windowEnd: Date
+  windowStart: Date
 }): AdminUserRecord[] {
   const userMap = new Map(input.userRows.map((user) => [user.id, user]))
   const ordersByUser = new Map<string, Array<typeof orders.$inferSelect>>()
@@ -438,7 +440,7 @@ export function buildUserRows(input: {
       const userUsage = (usageByUser.get(userId) ?? []).sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
       const userLedger = (ledgerByUser.get(userId) ?? []).sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
       const periodStart = subscription?.currentPeriodStart ?? new Date(now.getTime() - WINDOW_DAYS * DAY_MS)
-      const usageThisPeriod = userUsage.filter((row) => row.createdAt >= periodStart)
+      const usageThisPeriod = userUsage.filter((row) => row.createdAt >= input.windowStart && row.createdAt < input.windowEnd)
       const launchesThisPeriod = usageThisPeriod.length
       const failedThisPeriod = usageThisPeriod.filter((row) => row.statusSnapshot === 'failed' && !row.providerAcceptedAt).length
       const pairedBundles = paidOrders.filter((order) => {
@@ -460,7 +462,7 @@ export function buildUserRows(input: {
 
       return {
         avgWorkspaceMinutes: Math.round(average(usageThisPeriod.map((row) => row.workspaceMinutes ?? 0).filter(Boolean))),
-        blockedLaunchesThisPeriod: failedThisPeriod + blockedBundles,
+        blockedLaunchesThisPeriod: failedThisPeriod,
         bundleReadiness: {
           blockedBundles,
           pairedBundles,

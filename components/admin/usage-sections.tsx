@@ -352,10 +352,12 @@ export function BillingSection({ snapshot }: { snapshot: AdminUsageSnapshot }) {
 
 export function UsersSection({
   generatedAt,
+  windowLabel,
   users,
   onSelectUser,
 }: {
   generatedAt: string
+  windowLabel: string
   users: AdminUserRecord[]
   onSelectUser: (userId: string) => void
 }) {
@@ -371,6 +373,7 @@ export function UsersSection({
           <div className="flex flex-wrap items-center gap-3 text-sm text-zinc-400">
             <span>{users.length} visible users</span>
             <span>{formatDate(generatedAt)} snapshot date</span>
+            <span>Activity metrics follow {windowLabel.toLowerCase()}</span>
             <span>Click any row to open the right-side drilldown</span>
           </div>
         </div>
@@ -380,7 +383,7 @@ export function UsersSection({
               <TableHead className="px-5 text-zinc-500 sm:px-6">user</TableHead>
               <TableHead className="text-zinc-500">plan</TableHead>
               <TableHead className="text-zinc-500">remaining</TableHead>
-              <TableHead className="text-zinc-500">period end</TableHead>
+              <TableHead className="text-zinc-500">subscription end</TableHead>
               <TableHead className="text-zinc-500">launches</TableHead>
               <TableHead className="text-zinc-500">blocked</TableHead>
               <TableHead className="text-zinc-500">avg minutes</TableHead>

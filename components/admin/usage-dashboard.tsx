@@ -371,7 +371,12 @@ export function AdminUsageDashboard({ snapshot }: { snapshot: AdminUsageSnapshot
 
           <FunnelRuntimeSection snapshot={snapshot} />
           <BillingSection snapshot={snapshot} />
-          <UsersSection generatedAt={snapshot.generatedAt} onSelectUser={setSelectedUserId} users={filteredUsers} />
+          <UsersSection
+            generatedAt={snapshot.generatedAt}
+            onSelectUser={setSelectedUserId}
+            users={filteredUsers}
+            windowLabel={snapshot.windowLabel}
+          />
           <AlwaysOnSection snapshot={snapshot} />
         </main>
       </div>

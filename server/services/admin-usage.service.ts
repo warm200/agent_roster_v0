@@ -134,6 +134,8 @@ export async function getAdminUsageSnapshot(input?: {
       subscriptionRows,
       usageRows,
       userRows,
+      windowEnd,
+      windowStart,
     })
     const alwaysOnRanks = buildAlwaysOnRanks(userDrilldownRows)
 

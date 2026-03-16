@@ -366,6 +366,11 @@ create table billing_alerts (
 * pairing ready
 * last launch at
 
+当前实现备注：
+
+* 表格里的 activity 指标（launches / blocked / avg minutes / est cost）现在跟随顶部时间窗口
+* `current period end` 已在 UI 中明确为 subscription end，避免和顶部 window 语义混淆
+
 点开一行显示右侧抽屉：
 
 #### A. Subscription

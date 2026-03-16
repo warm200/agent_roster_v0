@@ -3,6 +3,7 @@ import { test } from 'node:test'
 
 import { adminUserRecords } from '@/lib/admin-user-records'
 import {
+  buildUserRows,
   cloneFallback,
   cloneFallbackForWindow,
   getAdminWindowConfig,
@@ -85,4 +86,76 @@ test('cloneFallbackForWindow preserves custom range metadata', () => {
 test('staged admin user records include order ids for dashboard search', () => {
   assert.ok(adminUserRecords.every((user) => user.orderIds.length > 0))
   assert.ok(adminUserRecords.every((user) => user.latestRunStatus))
+})
+
+test('buildUserRows uses the selected admin window for activity metrics', () => {
+  const rows = buildUserRows({
+    channelRows: [
+      {
+        orderId: 'order-1',
+        recipientBindingStatus: 'paired',
+        tokenStatus: 'validated',
+      } as never,
+    ],
+    ledgerRows: [],
+    orderRows: [
+      {
+        createdAt: new Date('2026-03-01T00:00:00.000Z'),
+        id: 'order-1',
+        status: 'paid',
+        userId: 'user-1',
+      } as never,
+    ],
+    subscriptionRows: [
+      {
+        currentPeriodEnd: new Date('2026-03-31T00:00:00.000Z'),
+        currentPeriodStart: new Date('2026-03-01T00:00:00.000Z'),
+        id: 'sub-1',
+        includedCredits: 10,
+        planId: 'run',
+        planVersion: 'v1',
+        remainingCredits: 7,
+        updatedAt: new Date('2026-03-15T00:00:00.000Z'),
+        userId: 'user-1',
+      } as never,
+    ],
+    usageRows: [
+      {
+        createdAt: new Date('2026-03-05T12:00:00.000Z'),
+        estimatedInternalCostCents: 1200,
+        planId: 'run',
+        providerAcceptedAt: new Date('2026-03-05T12:01:00.000Z'),
+        runId: 'run-in-window',
+        statusSnapshot: 'completed',
+        terminationReason: 'completed',
+        userId: 'user-1',
+        workspaceMinutes: 20,
+      } as never,
+      {
+        createdAt: new Date('2026-03-12T12:00:00.000Z'),
+        estimatedInternalCostCents: 3400,
+        planId: 'run',
+        providerAcceptedAt: new Date('2026-03-12T12:01:00.000Z'),
+        runId: 'run-outside-window',
+        statusSnapshot: 'completed',
+        terminationReason: 'completed',
+        userId: 'user-1',
+        workspaceMinutes: 50,
+      } as never,
+    ],
+    userRows: [
+      {
+        email: 'user@example.com',
+        id: 'user-1',
+        name: 'User One',
+      } as never,
+    ],
+    windowEnd: new Date('2026-03-08T00:00:00.000Z'),
+    windowStart: new Date('2026-03-01T00:00:00.000Z'),
+  })
+
+  assert.equal(rows.length, 1)
+  assert.equal(rows[0]?.launchesThisPeriod, 1)
+  assert.equal(rows[0]?.estCostThisPeriodCents, 1200)
+  assert.equal(rows[0]?.avgWorkspaceMinutes, 20)
 })
