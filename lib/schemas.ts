@@ -16,7 +16,10 @@ import {
   MESSAGE_ROLES,
   ORDER_STATUSES,
   PAIRING_STATUSES,
+  PERSISTENCE_MODES,
   RISK_LEVELS,
+  RUNTIME_INSTANCE_STATES,
+  RUNTIME_MODES,
   RUN_TERMINATION_REASONS,
   RUN_STATUSES,
   SUBSCRIPTION_PLAN_IDS,
@@ -45,6 +48,9 @@ export const subscriptionPlanIdSchema = z.enum(SUBSCRIPTION_PLAN_IDS)
 export const subscriptionStatusSchema = z.enum(SUBSCRIPTION_STATUSES)
 export const billingIntervalSchema = z.enum(BILLING_INTERVALS)
 export const triggerModeSchema = z.enum(TRIGGER_MODES)
+export const runtimeModeSchema = z.enum(RUNTIME_MODES)
+export const persistenceModeSchema = z.enum(PERSISTENCE_MODES)
+export const runtimeInstanceStateSchema = z.enum(RUNTIME_INSTANCE_STATES)
 export const creditLedgerEventTypeSchema = z.enum(CREDIT_LEDGER_EVENT_TYPES)
 export const creditLedgerUnitTypeSchema = z.enum(CREDIT_LEDGER_UNIT_TYPES)
 export const creditLedgerStatusSchema = z.enum(CREDIT_LEDGER_STATUSES)
@@ -328,6 +334,43 @@ export const runUsageSchema = z.object({
   estimatedInternalCostCents: z.number().int().nonnegative().nullable(),
   statusSnapshot: runStatusSchema,
   ttlPolicySnapshot: ttlPolicySnapshotSchema,
+  createdAt: timestampSchema,
+  updatedAt: timestampSchema,
+})
+
+export const runtimeInstanceSchema = z.object({
+  id: z.string().min(1),
+  runId: z.string().min(1),
+  userId: z.string().min(1),
+  orderId: z.string().min(1),
+  providerName: z.string().min(1),
+  providerInstanceRef: z.string().min(1),
+  planId: subscriptionPlanIdSchema,
+  runtimeMode: runtimeModeSchema,
+  persistenceMode: persistenceModeSchema,
+  state: runtimeInstanceStateSchema,
+  stopReason: runTerminationReasonSchema.nullable(),
+  preservedStateAvailable: z.boolean(),
+  startedAt: timestampSchema.nullable(),
+  stoppedAt: timestampSchema.nullable(),
+  archivedAt: timestampSchema.nullable(),
+  deletedAt: timestampSchema.nullable(),
+  recoverableUntilAt: timestampSchema.nullable(),
+  workspaceReleasedAt: timestampSchema.nullable(),
+  lastReconciledAt: timestampSchema.nullable(),
+  metadataJson: z.record(z.string(), z.unknown()),
+  createdAt: timestampSchema,
+  updatedAt: timestampSchema,
+})
+
+export const runtimeIntervalSchema = z.object({
+  id: z.string().min(1),
+  runtimeInstanceId: z.string().min(1),
+  runId: z.string().min(1),
+  providerInstanceRef: z.string().min(1),
+  startedAt: timestampSchema,
+  endedAt: timestampSchema.nullable(),
+  closeReason: runTerminationReasonSchema.nullable(),
   createdAt: timestampSchema,
   updatedAt: timestampSchema,
 })

@@ -11,6 +11,18 @@ export type SubscriptionPlanId = 'free' | 'run' | 'warm_standby' | 'always_on'
 export type SubscriptionStatus = 'active' | 'canceled' | 'expired' | 'past_due'
 export type BillingInterval = 'none' | 'one_time' | 'month'
 export type TriggerMode = 'none' | 'manual' | 'auto_wake' | 'always_active'
+export type RuntimeMode =
+  | 'temporary_execution'
+  | 'wakeable_recoverable'
+  | 'persistent_live_workspace'
+export type PersistenceMode = 'ephemeral' | 'recoverable' | 'live'
+export type RuntimeInstanceState =
+  | 'provisioning'
+  | 'running'
+  | 'stopped'
+  | 'archived'
+  | 'deleted'
+  | 'failed'
 export type CreditLedgerEventType =
   | 'grant'
   | 'reset'
@@ -29,8 +41,12 @@ export type CreditLedgerStatus = 'pending' | 'committed' | 'reversed'
 export type RunTerminationReason =
   | 'ttl_expired'
   | 'idle_timeout'
+  | 'daytona_auto_stop'
   | 'provisioning_timeout'
   | 'manual_stop'
+  | 'archived_for_cost'
+  | 'deleted_after_stop'
+  | 'backend_maintenance'
   | 'provider_unhealthy'
   | 'provider_rejected'
   | 'provider_error'
@@ -322,6 +338,43 @@ export interface RunUsage {
     triggerMode: TriggerMode
     unhealthyProviderTimeoutMinutes: number | null
   }
+  createdAt: string
+  updatedAt: string
+}
+
+export interface RuntimeInstance {
+  id: string
+  runId: string
+  userId: string
+  orderId: string
+  providerName: string
+  providerInstanceRef: string
+  planId: SubscriptionPlanId
+  runtimeMode: RuntimeMode
+  persistenceMode: PersistenceMode
+  state: RuntimeInstanceState
+  stopReason: RunTerminationReason | null
+  preservedStateAvailable: boolean
+  startedAt: string | null
+  stoppedAt: string | null
+  archivedAt: string | null
+  deletedAt: string | null
+  recoverableUntilAt: string | null
+  workspaceReleasedAt: string | null
+  lastReconciledAt: string | null
+  metadataJson: Record<string, unknown>
+  createdAt: string
+  updatedAt: string
+}
+
+export interface RuntimeInterval {
+  id: string
+  runtimeInstanceId: string
+  runId: string
+  providerInstanceRef: string
+  startedAt: string
+  endedAt: string | null
+  closeReason: RunTerminationReason | null
   createdAt: string
   updatedAt: string
 }

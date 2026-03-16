@@ -17,6 +17,20 @@ export const SUBSCRIPTION_PLAN_IDS = ['free', 'run', 'warm_standby', 'always_on'
 export const SUBSCRIPTION_STATUSES = ['active', 'canceled', 'expired', 'past_due'] as const
 export const BILLING_INTERVALS = ['none', 'one_time', 'month'] as const
 export const TRIGGER_MODES = ['none', 'manual', 'auto_wake', 'always_active'] as const
+export const RUNTIME_MODES = [
+  'temporary_execution',
+  'wakeable_recoverable',
+  'persistent_live_workspace',
+] as const
+export const PERSISTENCE_MODES = ['ephemeral', 'recoverable', 'live'] as const
+export const RUNTIME_INSTANCE_STATES = [
+  'provisioning',
+  'running',
+  'stopped',
+  'archived',
+  'deleted',
+  'failed',
+] as const
 export const CREDIT_LEDGER_EVENT_TYPES = [
   'grant',
   'reset',
@@ -37,8 +51,12 @@ export const CREDIT_LEDGER_STATUSES = ['pending', 'committed', 'reversed'] as co
 export const RUN_TERMINATION_REASONS = [
   'ttl_expired',
   'idle_timeout',
+  'daytona_auto_stop',
   'provisioning_timeout',
   'manual_stop',
+  'archived_for_cost',
+  'deleted_after_stop',
+  'backend_maintenance',
   'provider_unhealthy',
   'provider_rejected',
   'provider_error',

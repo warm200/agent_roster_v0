@@ -36,6 +36,13 @@
       "when": 1773599400000,
       "tag": "0004_backfill_run_usage",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1773868800000,
+      "tag": "0005_runtime_instances_and_intervals",
+      "breakpoints": true
     }
   ]
 }

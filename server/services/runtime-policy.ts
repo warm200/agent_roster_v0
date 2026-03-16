@@ -1,5 +1,7 @@
 import type {
   CreditLedgerUnitType,
+  PersistenceMode,
+  RuntimeMode,
   RunTerminationReason,
   SubscriptionPlan,
   SubscriptionPlanId,
@@ -16,6 +18,15 @@ export type TtlPolicySnapshot = {
   provisioningTimeoutMinutes: number
   triggerMode: TriggerMode
   unhealthyProviderTimeoutMinutes: number | null
+}
+
+export type RuntimeLifecyclePolicy = {
+  autoArchiveMinutes: number | null
+  autoDeleteMinutes: number | null
+  autoStopMinutes: number | null
+  persistenceMode: PersistenceMode
+  preserveStateOnStop: boolean
+  runtimeMode: RuntimeMode
 }
 
 export function getTtlPolicySnapshot(plan: SubscriptionPlan): TtlPolicySnapshot {
@@ -59,6 +70,47 @@ export function getTtlPolicySnapshot(plan: SubscriptionPlan): TtlPolicySnapshot 
         provisioningTimeoutMinutes: 15,
         triggerMode: plan.triggerMode,
         unhealthyProviderTimeoutMinutes: null,
+      }
+  }
+}
+
+export function getRuntimeLifecyclePolicy(plan: SubscriptionPlan): RuntimeLifecyclePolicy {
+  switch (plan.id) {
+    case 'run':
+      return {
+        autoArchiveMinutes: null,
+        autoDeleteMinutes: 0,
+        autoStopMinutes: 20,
+        persistenceMode: 'ephemeral',
+        preserveStateOnStop: false,
+        runtimeMode: 'temporary_execution',
+      }
+    case 'warm_standby':
+      return {
+        autoArchiveMinutes: 180,
+        autoDeleteMinutes: null,
+        autoStopMinutes: 45,
+        persistenceMode: 'recoverable',
+        preserveStateOnStop: true,
+        runtimeMode: 'wakeable_recoverable',
+      }
+    case 'always_on':
+      return {
+        autoArchiveMinutes: null,
+        autoDeleteMinutes: null,
+        autoStopMinutes: null,
+        persistenceMode: 'live',
+        preserveStateOnStop: true,
+        runtimeMode: 'persistent_live_workspace',
+      }
+    default:
+      return {
+        autoArchiveMinutes: null,
+        autoDeleteMinutes: null,
+        autoStopMinutes: null,
+        persistenceMode: 'ephemeral',
+        preserveStateOnStop: false,
+        runtimeMode: 'temporary_execution',
       }
   }
 }

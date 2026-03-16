@@ -1,7 +1,20 @@
-import type { Order, Run, RunArtifact, RunLog, RunResult } from '@/lib/types'
+import type {
+  Order,
+  Run,
+  RunArtifact,
+  RunLog,
+  RunResult,
+  RunTerminationReason,
+  SubscriptionPlanId,
+} from '@/lib/types'
 
 import { HttpError } from '../lib/http'
-import type { RunProvider, RunProviderRuntimeConfig } from './run-provider.interface'
+import type {
+  CreateRuntimeInstanceInput,
+  RunProvider,
+  RunProviderRuntimeConfig,
+  RuntimeProviderInstance,
+} from './run-provider.interface'
 
 type OpenAIResponseStatus =
   | 'queued'
@@ -24,8 +37,11 @@ type OpenAIResponsePayload = {
 type OpenAIProviderState = {
   createdAt: string
   order: Order
+  persistenceMode: RuntimeProviderInstance['persistenceMode']
+  planId: SubscriptionPlanId
   responseId: string
   runId: string
+  runtimeMode: RuntimeProviderInstance['runtimeMode']
 }
 
 type OpenAIRunProviderOptions = {
@@ -66,6 +82,15 @@ function mapStatus(status: OpenAIResponseStatus): Run['status'] {
     case 'queued':
     default:
       return 'provisioning'
+  }
+}
+
+function mapRunStatusToRuntimeState(status: Run['status']): RuntimeProviderInstance['state'] {
+  switch (status) {
+    case 'completed':
+      return 'stopped'
+    default:
+      return status
   }
 }
 
@@ -155,6 +180,105 @@ export class OpenAIRunProvider implements RunProvider {
     this.model = options.model ?? process.env.OPENAI_RUN_MODEL ?? 'gpt-5'
   }
 
+  async createRuntimeInstance(input: CreateRuntimeInstanceInput): Promise<RuntimeProviderInstance> {
+    const created = await this.createRun(input.order, input.runId, input.runtimeConfig)
+    const existing = openAiRunState.get(input.runId)
+    if (existing) {
+      openAiRunState.set(input.runId, {
+        ...existing,
+        persistenceMode: input.lifecyclePolicy.persistenceMode,
+        planId: input.planId,
+        runtimeMode: input.lifecyclePolicy.runtimeMode,
+      })
+    }
+    return {
+      archivedAt: null,
+      deletedAt: null,
+      lastReconciledAt: created.updatedAt,
+      metadataJson: {},
+      persistenceMode: input.lifecyclePolicy.persistenceMode,
+      planId: input.planId,
+      preservedStateAvailable: input.lifecyclePolicy.preserveStateOnStop,
+      providerInstanceRef: input.runId,
+      providerName: this.name,
+      recoverableUntilAt: null,
+      runId: input.runId,
+      runtimeMode: input.lifecyclePolicy.runtimeMode,
+      startedAt: created.startedAt,
+      state: mapRunStatusToRuntimeState(created.status),
+      stoppedAt: created.completedAt,
+      stopReason: created.status === 'failed' ? 'provider_error' : null,
+      workspaceReleasedAt: created.completedAt,
+    }
+  }
+
+  async getRuntimeInstance(runId: string): Promise<RuntimeProviderInstance | null> {
+    const state = openAiRunState.get(runId)
+    if (!state) {
+      return null
+    }
+    const run = await this.getStatus(runId)
+    if (!run) {
+      return null
+    }
+    return {
+      archivedAt: null,
+      deletedAt: null,
+      lastReconciledAt: run.updatedAt,
+      metadataJson: {
+        responseId: state.responseId,
+      },
+      persistenceMode: state.persistenceMode,
+      planId: state.planId,
+      preservedStateAvailable: false,
+      providerInstanceRef: state.responseId,
+      providerName: this.name,
+      recoverableUntilAt: null,
+      runId,
+      runtimeMode: state.runtimeMode,
+      startedAt: run.startedAt,
+      state: mapRunStatusToRuntimeState(run.status),
+      stoppedAt: run.completedAt,
+      stopReason: run.status === 'failed' ? 'provider_error' : null,
+      workspaceReleasedAt: run.completedAt,
+    }
+  }
+
+  async stopRuntimeInstance(
+    runId: string,
+    reason: RunTerminationReason = 'manual_stop',
+    _fallbackRun?: Run,
+  ): Promise<RuntimeProviderInstance | null> {
+    await this.stopRun(runId)
+    const next = await this.getRuntimeInstance(runId)
+    return next
+      ? {
+          ...next,
+          state: 'stopped',
+          stopReason: reason,
+          workspaceReleasedAt: next.stoppedAt ?? next.workspaceReleasedAt,
+        }
+      : null
+  }
+
+  async restartRuntimeInstance(
+    runId: string,
+    order: Order,
+    lifecyclePolicy: CreateRuntimeInstanceInput['lifecyclePolicy'],
+    runtimeConfig?: RunProviderRuntimeConfig,
+  ): Promise<RuntimeProviderInstance | null> {
+    const existing = openAiRunState.get(runId)
+    openAiRunState.delete(runId)
+    await this.createRuntimeInstance({
+      lifecyclePolicy,
+      order,
+      planId: existing?.planId ?? 'run',
+      runId,
+      runtimeConfig,
+    })
+    return this.getRuntimeInstance(runId)
+  }
+
   async createRun(
     order: Order,
     runId = `run-${Date.now()}`,
@@ -171,8 +295,11 @@ export class OpenAIRunProvider implements RunProvider {
     openAiRunState.set(runId, {
       createdAt,
       order,
+      persistenceMode: 'ephemeral',
+      planId: 'run',
       responseId: response.id,
       runId,
+      runtimeMode: 'temporary_execution',
     })
 
     return applyResponseToRun({

@@ -4,12 +4,29 @@ import path from 'node:path'
 
 import { Daytona, DaytonaNotFoundError, SandboxState, type DaytonaConfig, type Sandbox } from '@daytonaio/sdk'
 
-import type { AgentSetup, Order, Run, RunLog, RunResult, RunStatus } from '@/lib/types'
+import type {
+  AgentSetup,
+  Order,
+  Run,
+  RunLog,
+  RunResult,
+  RunStatus,
+  RunTerminationReason,
+  RuntimeInstanceState,
+  SubscriptionPlanId,
+} from '@/lib/types'
 
 import { HttpError, logServerError } from '../lib/http'
 import { loadRuntimeAssetsFromSnapshot } from '../services/local-agent-files'
+import type { RuntimeLifecyclePolicy } from '../services/runtime-policy'
 import { buildOpenClawTelegramChannelConfig } from '../services/telegram.service'
-import type { RunControlUiLink, RunProvider, RunProviderRuntimeConfig } from './run-provider.interface'
+import type {
+  CreateRuntimeInstanceInput,
+  RunControlUiLink,
+  RunProvider,
+  RunProviderRuntimeConfig,
+  RuntimeProviderInstance,
+} from './run-provider.interface'
 
 type DaytonaRunManifest = {
   agentWorkspaces: Record<string, string>
@@ -19,8 +36,12 @@ type DaytonaRunManifest = {
   createdAt: string
   networkEnabled: boolean
   orderId: string
+  persistenceMode: RuntimeProviderInstance['persistenceMode']
+  planId: SubscriptionPlanId
+  providerInstanceRef: string
   recipientExternalId: string | null
   runId: string
+  runtimeMode: RuntimeProviderInstance['runtimeMode']
   userId: string
   usesTools: boolean
 }
@@ -170,6 +191,9 @@ function buildManifest(
   runId: string,
   createdAt: string,
   agentWorkspaces: Record<string, string>,
+  providerInstanceRef: string,
+  planId: SubscriptionPlanId,
+  lifecyclePolicy: RuntimeLifecyclePolicy,
 ): DaytonaRunManifest {
   return {
     agentWorkspaces,
@@ -179,8 +203,12 @@ function buildManifest(
     createdAt,
     networkEnabled: order.items.some((item) => item.agentVersion.riskProfile.network),
     orderId: order.id,
+    persistenceMode: lifecyclePolicy.persistenceMode,
+    planId,
+    providerInstanceRef,
     recipientExternalId: order.channelConfig?.recipientExternalId ?? null,
     runId,
+    runtimeMode: lifecyclePolicy.runtimeMode,
     userId: order.userId,
     usesTools: order.items.some((item) => {
       const risk = item.agentVersion.riskProfile
@@ -278,6 +306,75 @@ function mapSandboxStateToStatus(state?: string): RunStatus {
     case SandboxState.BUILDING_SNAPSHOT:
     default:
       return 'provisioning'
+  }
+}
+
+function mapSandboxStateToRuntimeState(state?: string): RuntimeInstanceState {
+  switch (state) {
+    case SandboxState.STARTED:
+      return 'running'
+    case SandboxState.STOPPED:
+    case SandboxState.STOPPING:
+      return 'stopped'
+    case SandboxState.ARCHIVED:
+    case SandboxState.ARCHIVING:
+      return 'archived'
+    case SandboxState.DESTROYED:
+    case SandboxState.DESTROYING:
+      return 'deleted'
+    case SandboxState.ERROR:
+    case SandboxState.BUILD_FAILED:
+      return 'failed'
+    case SandboxState.CREATING:
+    case SandboxState.STARTING:
+    case SandboxState.PENDING_BUILD:
+    case SandboxState.PULLING_SNAPSHOT:
+    case SandboxState.BUILDING_SNAPSHOT:
+    default:
+      return 'provisioning'
+  }
+}
+
+function mapRunStatusToRuntimeState(status: RunStatus): RuntimeInstanceState {
+  switch (status) {
+    case 'completed':
+      return 'stopped'
+    default:
+      return status
+  }
+}
+
+function buildRuntimeInstanceFromManifest(
+  manifest: DaytonaRunManifest,
+  status: DaytonaStatusFile,
+  sandbox: Pick<DaytonaSandboxLike, 'createdAt' | 'id' | 'state'>,
+): RuntimeProviderInstance {
+  const runtimeState = mapSandboxStateToRuntimeState(sandbox.state)
+  const stoppedAt =
+    runtimeState === 'stopped' || runtimeState === 'archived' || runtimeState === 'deleted' || runtimeState === 'failed'
+      ? status.completedAt ?? status.updatedAt
+      : null
+
+  return {
+    archivedAt: runtimeState === 'archived' ? status.updatedAt : null,
+    deletedAt: runtimeState === 'deleted' ? status.updatedAt : null,
+    lastReconciledAt: nowIso(),
+    metadataJson: {
+      sandboxId: sandbox.id,
+    },
+    persistenceMode: manifest.persistenceMode,
+    planId: manifest.planId,
+    preservedStateAvailable: manifest.persistenceMode !== 'ephemeral' && runtimeState !== 'deleted',
+    providerInstanceRef: manifest.providerInstanceRef,
+    providerName: 'daytona',
+    recoverableUntilAt: null,
+    runId: manifest.runId,
+    runtimeMode: manifest.runtimeMode,
+    startedAt: status.startedAt,
+    state: runtimeState,
+    stoppedAt,
+    stopReason: runtimeState === 'failed' ? 'provider_unhealthy' : null,
+    workspaceReleasedAt: manifest.persistenceMode === 'ephemeral' && stoppedAt ? stoppedAt : null,
   }
 }
 
@@ -1072,21 +1169,152 @@ export class DaytonaRunProvider implements RunProvider {
     this.openClawPackage = process.env.OPENCLAW_PACKAGE ?? DEFAULT_OPENCLAW_PACKAGE
   }
 
+  async createRuntimeInstance(input: CreateRuntimeInstanceInput): Promise<RuntimeProviderInstance> {
+    const sandbox = await this.createOrBootstrapSandbox(
+      input.order,
+      input.runId,
+      input.planId,
+      input.lifecyclePolicy,
+      input.runtimeConfig,
+    )
+    return buildRuntimeInstanceFromManifest(sandbox.manifest, buildInitialStatus(sandbox.createdAt), sandbox.sandbox)
+  }
+
+  async getRuntimeInstance(runId: string): Promise<RuntimeProviderInstance | null> {
+    const sandbox = await this.getSandbox(runId)
+    if (!sandbox) {
+      return null
+    }
+
+    const manifest = await downloadJsonFile<DaytonaRunManifest>(sandbox, MANIFEST_PATH)
+    if (!manifest) {
+      return null
+    }
+
+    const fileStatus = await downloadJsonFile<DaytonaStatusFile>(sandbox, STATUS_PATH)
+    const status = await refreshGatewayStatus(
+      sandbox,
+      reconcileSandboxStatus(
+        sandbox,
+        fileStatus ??
+          ({
+            completedAt: null,
+            resultSummary: null,
+            startedAt:
+              sandbox.state === SandboxState.STARTED ? sandbox.createdAt ?? manifest.createdAt : null,
+            status: mapSandboxStateToStatus(sandbox.state),
+            updatedAt: sandbox.createdAt ?? manifest.createdAt,
+          } satisfies DaytonaStatusFile),
+      ),
+      manifest,
+    )
+
+    return buildRuntimeInstanceFromManifest(manifest, status, sandbox)
+  }
+
+  async stopRuntimeInstance(
+    runId: string,
+    reason: RunTerminationReason = 'manual_stop',
+    fallbackRun?: Run,
+  ): Promise<RuntimeProviderInstance | null> {
+    const stoppedRun = await this.stopRun(runId, fallbackRun)
+    if (!stoppedRun) {
+      return null
+    }
+    const instance = await this.getRuntimeInstance(runId)
+    return instance
+      ? {
+          ...instance,
+          state: instance.state === 'deleted' ? 'deleted' : 'stopped',
+          stopReason: reason,
+        }
+      : null
+  }
+
+  async deleteRuntimeInstance(runId: string): Promise<void> {
+    const sandbox = await this.getSandbox(runId)
+    if (!sandbox) {
+      return
+    }
+    if (sandbox.delete) {
+      await sandbox.delete(60)
+    }
+  }
+
+  async restartRuntimeInstance(
+    runId: string,
+    order: Order,
+    lifecyclePolicy: RuntimeLifecyclePolicy,
+    runtimeConfig?: RunProviderRuntimeConfig,
+  ): Promise<RuntimeProviderInstance | null> {
+    const runtime = await this.restartRun(runId, order, undefined, runtimeConfig)
+    if (!runtime) {
+      return null
+    }
+    const instance = await this.getRuntimeInstance(runId)
+    if (instance) {
+      return instance
+    }
+    return {
+      archivedAt: null,
+      deletedAt: null,
+      lastReconciledAt: runtime.updatedAt,
+      metadataJson: {},
+      persistenceMode: lifecyclePolicy.persistenceMode,
+      planId: 'run',
+      preservedStateAvailable: lifecyclePolicy.preserveStateOnStop,
+      providerInstanceRef: runId,
+      providerName: this.name,
+      recoverableUntilAt: null,
+      runId,
+      runtimeMode: lifecyclePolicy.runtimeMode,
+      startedAt: runtime.startedAt,
+      state: mapRunStatusToRuntimeState(runtime.status),
+      stoppedAt: runtime.completedAt,
+      stopReason: runtime.status === 'failed' ? 'provider_error' : null,
+      workspaceReleasedAt: lifecyclePolicy.persistenceMode === 'ephemeral' ? runtime.completedAt : null,
+    }
+  }
+
   async createRun(
     order: Order,
     runId = `run-${Date.now()}`,
     runtimeConfig?: RunProviderRuntimeConfig,
   ): Promise<Run> {
+    const sandbox = await this.createOrBootstrapSandbox(
+      order,
+      runId,
+      'run',
+      {
+        autoArchiveMinutes: 60,
+        autoDeleteMinutes: 120,
+        autoStopMinutes: null,
+        persistenceMode: 'recoverable',
+        preserveStateOnStop: true,
+        runtimeMode: 'wakeable_recoverable',
+      },
+      runtimeConfig,
+    )
+    return buildRunFromManifest(sandbox.manifest, buildInitialStatus(sandbox.createdAt), sandbox.sandbox)
+  }
+
+  private async createOrBootstrapSandbox(
+    order: Order,
+    runId: string,
+    planId: SubscriptionPlanId,
+    lifecyclePolicy: RuntimeLifecyclePolicy,
+    runtimeConfig?: RunProviderRuntimeConfig,
+  ) {
     const createdAt = nowIso()
     const gatewayToken = randomBytes(24).toString('hex')
     const envVars = await readOptionalEnvFile(this.envSandboxPath)
     const sandbox = await this.client.create(
       {
-        autoArchiveInterval: 60,
-        autoDeleteInterval: 120,
-        autoStopInterval: 0,
+        autoArchiveInterval: lifecyclePolicy.autoArchiveMinutes ?? 0,
+        autoDeleteInterval: lifecyclePolicy.autoDeleteMinutes ?? 0,
+        autoStopInterval: lifecyclePolicy.autoStopMinutes ?? 0,
         envVars,
-        ephemeral: false,
+        ephemeral: lifecyclePolicy.persistenceMode === 'ephemeral',
         labels: {
           app: 'agent-roster',
           orderId: order.id,
@@ -1106,7 +1334,15 @@ export class DaytonaRunProvider implements RunProvider {
       homeDir,
       order.agentSetup ?? null,
     )
-    const manifest = buildManifest(order, runId, createdAt, workspaceByAgentVersionId)
+    const manifest = buildManifest(
+      order,
+      runId,
+      createdAt,
+      workspaceByAgentVersionId,
+      sandbox.id ?? runId,
+      planId,
+      lifecyclePolicy,
+    )
     const template = await buildOrderRuntimeAssets(
       await loadOpenClawTemplate(this.openClawTemplateDir),
       order,
@@ -1184,8 +1420,11 @@ export class DaytonaRunProvider implements RunProvider {
     }
 
     await startBootstrapScript(sandbox)
-
-    return buildRunFromManifest(manifest, buildInitialStatus(createdAt), sandbox)
+    return {
+      createdAt,
+      manifest,
+      sandbox,
+    }
   }
 
   async getStatus(runId: string): Promise<Run | null> {

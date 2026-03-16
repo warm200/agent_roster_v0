@@ -29,6 +29,20 @@ export const subscriptionPlanIdEnum = pgEnum('subscription_plan_id', [
 ])
 export const subscriptionStatusEnum = pgEnum('subscription_status', ['active', 'canceled', 'expired', 'past_due'])
 export const billingIntervalEnum = pgEnum('billing_interval', ['none', 'one_time', 'month'])
+export const runtimeModeEnum = pgEnum('runtime_mode', [
+  'temporary_execution',
+  'wakeable_recoverable',
+  'persistent_live_workspace',
+])
+export const persistenceModeEnum = pgEnum('persistence_mode', ['ephemeral', 'recoverable', 'live'])
+export const runtimeInstanceStateEnum = pgEnum('runtime_instance_state', [
+  'provisioning',
+  'running',
+  'stopped',
+  'archived',
+  'deleted',
+  'failed',
+])
 export const creditLedgerEventTypeEnum = pgEnum('credit_ledger_event_type', [
   'grant',
   'reset',
@@ -364,6 +378,60 @@ export const runs = pgTable('runs', {
   completedAt: timestamp('completed_at', { withTimezone: true }),
 })
 
+export const runtimeInstances = pgTable(
+  'runtime_instances',
+  {
+    id: text('id').primaryKey(),
+    runId: text('run_id')
+      .notNull()
+      .references(() => runs.id, { onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    orderId: text('order_id')
+      .notNull()
+      .references(() => orders.id, { onDelete: 'cascade' }),
+    providerName: text('provider_name').notNull(),
+    providerInstanceRef: text('provider_instance_ref').notNull(),
+    planId: subscriptionPlanIdEnum('plan_id').notNull(),
+    runtimeMode: runtimeModeEnum('runtime_mode').notNull(),
+    persistenceMode: persistenceModeEnum('persistence_mode').notNull(),
+    state: runtimeInstanceStateEnum('state').notNull(),
+    stopReason: text('stop_reason'),
+    preservedStateAvailable: boolean('preserved_state_available').notNull().default(false),
+    startedAt: timestamp('started_at', { withTimezone: true }),
+    stoppedAt: timestamp('stopped_at', { withTimezone: true }),
+    archivedAt: timestamp('archived_at', { withTimezone: true }),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+    recoverableUntilAt: timestamp('recoverable_until_at', { withTimezone: true }),
+    workspaceReleasedAt: timestamp('workspace_released_at', { withTimezone: true }),
+    lastReconciledAt: timestamp('last_reconciled_at', { withTimezone: true }),
+    metadataJson: jsonb('metadata_json').$type<Record<string, unknown>>().notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    providerRefIdx: uniqueIndex('runtime_instances_provider_ref_idx').on(table.providerInstanceRef),
+    runIdx: uniqueIndex('runtime_instances_run_idx').on(table.runId),
+  }),
+)
+
+export const runtimeIntervals = pgTable('runtime_intervals', {
+  id: text('id').primaryKey(),
+  runtimeInstanceId: text('runtime_instance_id')
+    .notNull()
+    .references(() => runtimeInstances.id, { onDelete: 'cascade' }),
+  runId: text('run_id')
+    .notNull()
+    .references(() => runs.id, { onDelete: 'cascade' }),
+  providerInstanceRef: text('provider_instance_ref').notNull(),
+  startedAt: timestamp('started_at', { withTimezone: true }).notNull(),
+  endedAt: timestamp('ended_at', { withTimezone: true }),
+  closeReason: text('close_reason'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
 export type DbUser = InferSelectModel<typeof users>
 export type NewDbUser = InferInsertModel<typeof users>
 export type DbAgent = InferSelectModel<typeof agents>
@@ -380,6 +448,10 @@ export type DbUserSubscription = InferSelectModel<typeof userSubscriptions>
 export type NewDbUserSubscription = InferInsertModel<typeof userSubscriptions>
 export type DbCreditLedgerEntry = InferSelectModel<typeof creditLedger>
 export type NewDbCreditLedgerEntry = InferInsertModel<typeof creditLedger>
+export type DbRuntimeInstance = InferSelectModel<typeof runtimeInstances>
+export type NewDbRuntimeInstance = InferInsertModel<typeof runtimeInstances>
+export type DbRuntimeInterval = InferSelectModel<typeof runtimeIntervals>
+export type NewDbRuntimeInterval = InferInsertModel<typeof runtimeIntervals>
 export type DbRunUsage = InferSelectModel<typeof runUsage>
 export type NewDbRunUsage = InferInsertModel<typeof runUsage>
 export type DbRunChannelConfig = InferSelectModel<typeof runChannelConfigs>
