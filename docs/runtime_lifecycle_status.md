@@ -52,6 +52,8 @@ read_when:
 - missing `runtime_instances` rows can be backfilled from provider state on read
 - stale runtime instances can now be batch-reconciled by the maintenance service
 - internal trigger route exists at `POST /api/internal/runtime-maintenance/reconcile`
+- CLI/cron entrypoint exists:
+  - `pnpm runtime:maintenance`
 - maintenance can now enforce:
   - provisioning timeout
   - max session TTL

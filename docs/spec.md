@@ -95,6 +95,8 @@ Current reconciliation model:
 - run detail, list, stop, restart, and maintenance reads reconcile provider state back into DB
 - webhook-driven lifecycle reconciliation is intentionally deferred for now
 - internal maintenance trigger: `POST /api/internal/runtime-maintenance/reconcile`
+- CLI maintenance trigger:
+  - `pnpm runtime:maintenance`
 - current maintenance enforcement covers:
   - provisioning timeout
   - max session TTL
