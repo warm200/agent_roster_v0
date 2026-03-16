@@ -29,37 +29,49 @@ export type RuntimeLifecyclePolicy = {
   runtimeMode: RuntimeMode
 }
 
+function readPositiveIntEnv(name: string, fallback: number | null) {
+  const raw = process.env[name]
+  if (!raw) {
+    return fallback
+  }
+  const value = Number.parseInt(raw, 10)
+  if (!Number.isFinite(value) || value < 0) {
+    return fallback
+  }
+  return value
+}
+
 export function getTtlPolicySnapshot(plan: SubscriptionPlan): TtlPolicySnapshot {
   switch (plan.id) {
     case 'run':
       return {
-        cleanupGraceMinutes: 5,
+        cleanupGraceMinutes: readPositiveIntEnv('RUN_CLEANUP_GRACE_MINUTES', 5),
         heartbeatMissingMinutes: null,
-        idleTimeoutMinutes: 20,
-        maxSessionTtlMinutes: 120,
-        provisioningTimeoutMinutes: 15,
+        idleTimeoutMinutes: readPositiveIntEnv('RUN_IDLE_TIMEOUT_MINUTES', 20),
+        maxSessionTtlMinutes: readPositiveIntEnv('RUN_MAX_SESSION_TTL_MINUTES', 120),
+        provisioningTimeoutMinutes: readPositiveIntEnv('RUNTIME_PROVISIONING_TIMEOUT_MINUTES', 15) ?? 15,
         triggerMode: plan.triggerMode,
         unhealthyProviderTimeoutMinutes: null,
       }
     case 'warm_standby':
       return {
-        cleanupGraceMinutes: 10,
+        cleanupGraceMinutes: readPositiveIntEnv('WARM_STANDBY_CLEANUP_GRACE_MINUTES', 10),
         heartbeatMissingMinutes: null,
-        idleTimeoutMinutes: 45,
-        maxSessionTtlMinutes: 360,
-        provisioningTimeoutMinutes: 15,
+        idleTimeoutMinutes: readPositiveIntEnv('WARM_STANDBY_IDLE_TIMEOUT_MINUTES', 45),
+        maxSessionTtlMinutes: readPositiveIntEnv('WARM_STANDBY_MAX_SESSION_TTL_MINUTES', 360),
+        provisioningTimeoutMinutes: readPositiveIntEnv('RUNTIME_PROVISIONING_TIMEOUT_MINUTES', 15) ?? 15,
         triggerMode: plan.triggerMode,
         unhealthyProviderTimeoutMinutes: null,
       }
     case 'always_on':
       return {
         cleanupGraceMinutes: null,
-        heartbeatMissingMinutes: 15,
+        heartbeatMissingMinutes: readPositiveIntEnv('ALWAYS_ON_HEARTBEAT_MISSING_MINUTES', 15),
         idleTimeoutMinutes: null,
         maxSessionTtlMinutes: null,
-        provisioningTimeoutMinutes: 15,
+        provisioningTimeoutMinutes: readPositiveIntEnv('RUNTIME_PROVISIONING_TIMEOUT_MINUTES', 15) ?? 15,
         triggerMode: plan.triggerMode,
-        unhealthyProviderTimeoutMinutes: 10,
+        unhealthyProviderTimeoutMinutes: readPositiveIntEnv('ALWAYS_ON_UNHEALTHY_PROVIDER_TIMEOUT_MINUTES', 10),
       }
     default:
       return {
@@ -67,7 +79,7 @@ export function getTtlPolicySnapshot(plan: SubscriptionPlan): TtlPolicySnapshot 
         heartbeatMissingMinutes: null,
         idleTimeoutMinutes: null,
         maxSessionTtlMinutes: null,
-        provisioningTimeoutMinutes: 15,
+        provisioningTimeoutMinutes: readPositiveIntEnv('RUNTIME_PROVISIONING_TIMEOUT_MINUTES', 15) ?? 15,
         triggerMode: plan.triggerMode,
         unhealthyProviderTimeoutMinutes: null,
       }
@@ -78,18 +90,18 @@ export function getRuntimeLifecyclePolicy(plan: SubscriptionPlan): RuntimeLifecy
   switch (plan.id) {
     case 'run':
       return {
-        autoArchiveMinutes: null,
-        autoDeleteMinutes: 0,
-        autoStopMinutes: 20,
+        autoArchiveMinutes: readPositiveIntEnv('RUN_AUTO_ARCHIVE_MINUTES', null),
+        autoDeleteMinutes: readPositiveIntEnv('RUN_AUTO_DELETE_MINUTES', 0),
+        autoStopMinutes: readPositiveIntEnv('RUN_AUTO_STOP_MINUTES', 20),
         persistenceMode: 'ephemeral',
         preserveStateOnStop: false,
         runtimeMode: 'temporary_execution',
       }
     case 'warm_standby':
       return {
-        autoArchiveMinutes: 180,
+        autoArchiveMinutes: readPositiveIntEnv('WARM_STANDBY_AUTO_ARCHIVE_MINUTES', 180),
         autoDeleteMinutes: null,
-        autoStopMinutes: 45,
+        autoStopMinutes: readPositiveIntEnv('WARM_STANDBY_AUTO_STOP_MINUTES', 45),
         persistenceMode: 'recoverable',
         preserveStateOnStop: true,
         runtimeMode: 'wakeable_recoverable',
@@ -98,7 +110,7 @@ export function getRuntimeLifecyclePolicy(plan: SubscriptionPlan): RuntimeLifecy
       return {
         autoArchiveMinutes: null,
         autoDeleteMinutes: null,
-        autoStopMinutes: null,
+        autoStopMinutes: readPositiveIntEnv('ALWAYS_ON_SAFETY_AUTO_STOP_MINUTES', null),
         persistenceMode: 'live',
         preserveStateOnStop: true,
         runtimeMode: 'persistent_live_workspace',

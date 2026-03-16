@@ -1,15 +1,32 @@
 import { riskProfileSchema, runLogSchema, runResultSchema } from '@/lib/schemas'
-import type { AgentVersion, Order, Run, RunLog, RunResult, RunTerminationReason, RunUsage, SubscriptionPlan } from '@/lib/types'
+import type {
+  AgentVersion,
+  Order,
+  Run,
+  RunLog,
+  RunResult,
+  RunTerminationReason,
+  RunUsage,
+  RuntimeInstance,
+  RuntimeInstanceState,
+  SubscriptionPlan,
+} from '@/lib/types'
 
 import { HttpError } from '../lib/http'
 import { scanAgentVersion as scanAgentVersionRiskProfile } from '../lib/risk-engine'
 import { getRunProvider } from '../providers'
-import type { RunControlUiLink } from '../providers/run-provider.interface'
+import type { RunControlUiLink, RuntimeProviderInstance } from '../providers/run-provider.interface'
 import { getOrderByIdForUser, getOrderProviderApiKeysForUser } from './order.service'
 import { RunRepository } from './run.repository'
+import { RuntimeInstanceRepository } from './runtime-instance.repository'
 import { getSubscriptionService } from './subscription.service'
 import { getTelegramService } from './telegram.service'
-import { getProvisioningFailureReason, getTtlPolicySnapshot, RUNTIME_PLAN_VERSION } from './runtime-policy'
+import {
+  getProvisioningFailureReason,
+  getRuntimeLifecyclePolicy,
+  getTtlPolicySnapshot,
+  RUNTIME_PLAN_VERSION,
+} from './runtime-policy'
 
 function sanitizeRunText(value: string | null) {
   if (!value) {
@@ -175,9 +192,90 @@ function buildReleasedUsagePatch(run: Run, reason: RunTerminationReason): Partia
   }
 }
 
+function mapRuntimeStateToRunStatus(
+  state: RuntimeInstanceState,
+): Run['status'] {
+  switch (state) {
+    case 'running':
+      return 'running'
+    case 'failed':
+      return 'failed'
+    case 'stopped':
+    case 'archived':
+    case 'deleted':
+      return 'completed'
+    case 'provisioning':
+    default:
+      return 'provisioning'
+  }
+}
+
+function buildRuntimeInstanceRecord(
+  order: Order,
+  plan: SubscriptionPlan,
+  instance: RuntimeProviderInstance,
+): RuntimeInstance {
+  const now = nowIso()
+  return {
+    id: crypto.randomUUID(),
+    runId: instance.runId,
+    userId: order.userId,
+    orderId: order.id,
+    providerName: instance.providerName,
+    providerInstanceRef: instance.providerInstanceRef,
+    planId: plan.id,
+    runtimeMode: instance.runtimeMode,
+    persistenceMode: instance.persistenceMode,
+    state: instance.state,
+    stopReason: instance.stopReason,
+    preservedStateAvailable: instance.preservedStateAvailable,
+    startedAt: instance.startedAt,
+    stoppedAt: instance.stoppedAt,
+    archivedAt: instance.archivedAt,
+    deletedAt: instance.deletedAt,
+    recoverableUntilAt: instance.recoverableUntilAt,
+    workspaceReleasedAt: instance.workspaceReleasedAt,
+    lastReconciledAt: instance.lastReconciledAt ?? now,
+    metadataJson: instance.metadataJson,
+    createdAt: now,
+    updatedAt: now,
+  }
+}
+
+function buildRunPatchFromRuntime(
+  run: Run,
+  instance: RuntimeProviderInstance,
+): Partial<Run> {
+  const status = mapRuntimeStateToRunStatus(instance.state)
+  const defaultSummary =
+    instance.state === 'stopped'
+      ? instance.persistenceMode === 'recoverable'
+        ? 'Managed runtime is sleeping and can be resumed later.'
+        : 'Managed runtime session ended.'
+      : instance.state === 'archived'
+        ? 'Managed runtime is archived and can be recovered later.'
+        : instance.state === 'deleted'
+          ? 'Managed runtime session ended and state was released.'
+          : instance.state === 'failed'
+            ? 'Managed runtime is no longer available.'
+            : 'Managed runtime is provisioning. Status will update automatically.'
+
+  return {
+    completedAt:
+      status === 'completed' || status === 'failed'
+        ? instance.deletedAt ?? instance.archivedAt ?? instance.stoppedAt ?? run.completedAt ?? nowIso()
+        : null,
+    resultSummary: run.resultSummary ?? defaultSummary,
+    startedAt: instance.startedAt ?? run.startedAt,
+    status,
+    updatedAt: instance.lastReconciledAt ?? nowIso(),
+  }
+}
+
 export class RunService {
   constructor(
     private readonly repository: RunRepository = new RunRepository(),
+    private readonly runtimeRepository: RuntimeInstanceRepository = new RuntimeInstanceRepository(),
   ) {}
 
   async createRun(userId: string, orderId: string) {
@@ -198,6 +296,7 @@ export class RunService {
     const provider = runServiceDeps.getRunProvider()
     const runId = `run-${Date.now()}`
     const pendingRun = buildPendingRun(order, runId, provider.name)
+    const lifecyclePolicy = getRuntimeLifecyclePolicy(launchPolicy.plan)
     await subscriptionService.reserveLaunchCredit?.({
       orderId,
       plan: launchPolicy.plan,
@@ -228,11 +327,40 @@ export class RunService {
       throw error
     }
 
-    void provider
-      .createRun(order, runId, {
-        providerApiKeys,
-      })
+    const providerCreatePromise = provider.createRuntimeInstance
+      ? provider
+          .createRuntimeInstance({
+            lifecyclePolicy,
+            order,
+            planId: launchPolicy.plan.id,
+            runId,
+            runtimeConfig: {
+              providerApiKeys,
+            },
+          })
+          .then(async (runtimeInstance) => {
+            const existingRuntime = await this.findRuntimeRecordSafe(runId)
+            if (existingRuntime) {
+              await this.updateRuntimeRecordSafe(runId, {
+                ...runtimeInstance,
+                lastReconciledAt: runtimeInstance.lastReconciledAt ?? nowIso(),
+              })
+            } else {
+              await this.createRuntimeRecordSafe(
+                buildRuntimeInstanceRecord(order, launchPolicy.plan, runtimeInstance),
+              )
+            }
+            return provider.getStatus(runId)
+          })
+      : provider.createRun(order, runId, {
+          providerApiKeys,
+        })
+
+    void providerCreatePromise
       .then(async (providerRun) => {
+        if (!providerRun) {
+          return
+        }
         await subscriptionService.commitReservedLaunchCredit?.({
           plan: launchPolicy.plan,
           runId,
@@ -247,6 +375,10 @@ export class RunService {
           runningStartedAt: providerRun.startedAt ?? (providerRun.status === 'running' ? nowIso() : null),
           statusSnapshot: providerRun.status,
           updatedAt: nowIso(),
+          workspaceReleasedAt:
+            providerRun.status === 'completed' || providerRun.status === 'failed'
+              ? providerRun.completedAt ?? nowIso()
+              : null,
         })
       })
       .catch(async (error) => {
@@ -346,7 +478,43 @@ export class RunService {
 
   async stopRun(userId: string, runId: string) {
     const run = await this.requireRun(userId, runId)
-    const stopped = await runServiceDeps.getRunProvider().stopRun(run.id, run)
+    const provider = runServiceDeps.getRunProvider()
+    const runtime = provider.stopRuntimeInstance
+      ? await provider.stopRuntimeInstance(run.id, 'manual_stop', run)
+      : null
+
+    if (runtime) {
+      const existingRuntime = await this.findRuntimeRecordSafe(run.id)
+      const updatedRuntime = existingRuntime
+        ? await this.updateRuntimeRecordSafe(run.id, {
+            ...runtime,
+            lastReconciledAt: runtime.lastReconciledAt ?? nowIso(),
+          })
+        : null
+
+      if (runtime.state === 'stopped' && runtime.persistenceMode === 'ephemeral' && provider.deleteRuntimeInstance) {
+        await provider.deleteRuntimeInstance(run.id)
+        await this.updateRuntimeRecordSafe(run.id, {
+          deletedAt: nowIso(),
+          lastReconciledAt: nowIso(),
+          preservedStateAvailable: false,
+          state: 'deleted',
+          workspaceReleasedAt: nowIso(),
+        })
+      }
+
+      const nextRun = (await this.repository.updateRun(run.id, buildRunPatchFromRuntime(run, runtime))) ?? {
+        ...run,
+        ...buildRunPatchFromRuntime(run, runtime),
+      }
+      await this.repository.updateRunUsage?.(run.id, buildReleasedUsagePatch(nextRun, 'manual_stop'))
+      if (updatedRuntime?.id) {
+        await this.runtimeRepository.closeRuntimeInterval(updatedRuntime.id, nowIso(), 'manual_stop')
+      }
+      return nextRun
+    }
+
+    const stopped = await provider.stopRun(run.id, run)
     if (!stopped) {
       const stoppedAt = new Date().toISOString()
       const nextRun =
@@ -380,7 +548,7 @@ export class RunService {
       throw new HttpError(409, 'Only stopped runs can be restarted.')
     }
 
-    if (run.usesRealWorkspace && provider.restartRun) {
+    if (run.usesRealWorkspace && (provider.restartRuntimeInstance || provider.restartRun)) {
       const order = await runServiceDeps.getOrderByIdForUser({
         orderId: run.orderId,
         userId,
@@ -410,9 +578,53 @@ export class RunService {
       let restarted: Run | null = null
 
       try {
-        restarted = await provider.restartRun(run.id, order, run, {
-          providerApiKeys,
-        })
+        if (provider.restartRuntimeInstance) {
+          const runtime = await provider.restartRuntimeInstance(
+            run.id,
+            order,
+            getRuntimeLifecyclePolicy(launchPolicy.plan),
+            {
+              providerApiKeys,
+            },
+          )
+
+          if (runtime) {
+            await this.updateRuntimeRecordSafe(run.id, {
+              ...runtime,
+              lastReconciledAt: runtime.lastReconciledAt ?? nowIso(),
+              state: runtime.state,
+              stopReason: null,
+            })
+
+            const existingRuntime = await this.findRuntimeRecordSafe(run.id)
+            if (existingRuntime && !(await this.findOpenRuntimeIntervalSafe(existingRuntime.id))) {
+              await this.createRuntimeIntervalSafe({
+                id: crypto.randomUUID(),
+                runtimeInstanceId: existingRuntime.id,
+                runId: run.id,
+                providerInstanceRef: existingRuntime.providerInstanceRef,
+                startedAt: runtime.startedAt ?? nowIso(),
+                endedAt: null,
+                closeReason: null,
+                createdAt: nowIso(),
+                updatedAt: nowIso(),
+              })
+            }
+
+            restarted = (await provider.getStatus(run.id)) ?? {
+              ...run,
+              ...buildRunPatchFromRuntime(run, runtime),
+            }
+          } else {
+            restarted = null
+          }
+        } else {
+          restarted = provider.restartRun
+            ? await provider.restartRun(run.id, order, run, {
+                providerApiKeys,
+              })
+            : null
+        }
       } catch (error) {
         await subscriptionService.refundReservedLaunchCredit?.({
           chargeKey,
@@ -477,9 +689,15 @@ export class RunService {
   /** Pull latest status/result from provider (e.g. Daytona sandbox), merge with run, optionally persist. */
   private async syncRun(run: Run, persist: boolean) {
     let providerRun: Run | null = null
+    const provider = runServiceDeps.getRunProvider()
+    const runtimeRecord = await this.findRuntimeRecordSafe(run.id)
+    let runtimeInstance: RuntimeProviderInstance | null = null
 
     try {
-      providerRun = await runServiceDeps.getRunProvider().getStatus(run.id)
+      if (provider.getRuntimeInstance) {
+        runtimeInstance = await provider.getRuntimeInstance(run.id)
+      }
+      providerRun = await provider.getStatus(run.id)
     } catch (error) {
       if (isStoppedSandboxReadError(error)) {
         const stoppedRun = buildStoppedRun(run)
@@ -496,6 +714,12 @@ export class RunService {
     }
 
     if (!providerRun) {
+      if (runtimeInstance && persist) {
+        await this.updateRuntimeRecordSafe(run.id, {
+          ...runtimeInstance,
+          lastReconciledAt: runtimeInstance.lastReconciledAt ?? nowIso(),
+        })
+      }
       return sanitizeRun(run)
     }
 
@@ -522,6 +746,63 @@ export class RunService {
       completedAt: providerRun.completedAt,
     }
 
+    let persistedRuntime = runtimeRecord
+    if (runtimeInstance && persist) {
+      persistedRuntime = runtimeRecord
+        ? await this.updateRuntimeRecordSafe(run.id, {
+            ...runtimeInstance,
+            lastReconciledAt: runtimeInstance.lastReconciledAt ?? nowIso(),
+          })
+        : null
+
+      if (persistedRuntime) {
+        if (runtimeInstance.state === 'running') {
+          const openInterval = await this.findOpenRuntimeIntervalSafe(persistedRuntime.id)
+          if (!openInterval) {
+            await this.createRuntimeIntervalSafe({
+              id: crypto.randomUUID(),
+              runtimeInstanceId: persistedRuntime.id,
+              runId: run.id,
+              providerInstanceRef: persistedRuntime.providerInstanceRef,
+              startedAt: runtimeInstance.startedAt ?? nowIso(),
+              endedAt: null,
+              closeReason: null,
+              createdAt: nowIso(),
+              updatedAt: nowIso(),
+            })
+          }
+        }
+
+        if (
+          runtimeInstance.state === 'stopped' ||
+          runtimeInstance.state === 'archived' ||
+          runtimeInstance.state === 'deleted' ||
+          runtimeInstance.state === 'failed'
+        ) {
+          await this.closeRuntimeIntervalSafe(
+            persistedRuntime.id,
+            runtimeInstance.stoppedAt ?? runtimeInstance.archivedAt ?? runtimeInstance.deletedAt ?? nowIso(),
+            runtimeInstance.stopReason,
+          )
+        }
+
+        if (
+          runtimeInstance.state === 'stopped' &&
+          runtimeInstance.persistenceMode === 'ephemeral' &&
+          provider.deleteRuntimeInstance
+        ) {
+          await provider.deleteRuntimeInstance(run.id)
+          persistedRuntime = await this.updateRuntimeRecordSafe(run.id, {
+            deletedAt: nowIso(),
+            lastReconciledAt: nowIso(),
+            preservedStateAvailable: false,
+            state: 'deleted',
+            workspaceReleasedAt: nowIso(),
+          })
+        }
+      }
+    }
+
     if (!persist) {
       return sanitizeRun(nextRun)
     }
@@ -530,7 +811,92 @@ export class RunService {
     if (persist && persistedRun.status === 'failed') {
       await this.repository.updateRunUsage?.(run.id, buildReleasedUsagePatch(persistedRun, 'provider_unhealthy'))
     }
+    if (persistedRuntime?.state === 'running') {
+      await this.repository.updateRunUsage?.(run.id, {
+        providerAcceptedAt: persistedRuntime.startedAt ?? nowIso(),
+        runningStartedAt: persistedRuntime.startedAt ?? nowIso(),
+        statusSnapshot: persistedRun.status,
+        updatedAt: nowIso(),
+        workspaceReleasedAt: null,
+      })
+    }
+    if (
+      persistedRuntime &&
+      (persistedRuntime.state === 'stopped' ||
+        persistedRuntime.state === 'archived' ||
+        persistedRuntime.state === 'deleted')
+    ) {
+      await this.repository.updateRunUsage?.(run.id, {
+        completedAt:
+          persistedRun.completedAt ??
+          persistedRuntime.deletedAt ??
+          persistedRuntime.archivedAt ??
+          persistedRuntime.stoppedAt ??
+          nowIso(),
+        statusSnapshot: persistedRun.status,
+        terminationReason: persistedRuntime.stopReason ?? 'idle_timeout',
+        updatedAt: nowIso(),
+        workspaceReleasedAt:
+          persistedRuntime.workspaceReleasedAt ??
+          persistedRuntime.deletedAt ??
+          persistedRuntime.archivedAt ??
+          persistedRuntime.stoppedAt ??
+          nowIso(),
+      })
+    }
     return sanitizeRun(persistedRun)
+  }
+
+  private async findRuntimeRecordSafe(runId: string) {
+    try {
+      return await this.runtimeRepository.findRuntimeInstanceByRunId(runId)
+    } catch {
+      return null
+    }
+  }
+
+  private async updateRuntimeRecordSafe(runId: string, input: Partial<RuntimeInstance>) {
+    try {
+      return await this.runtimeRepository.updateRuntimeInstance(runId, input)
+    } catch {
+      return null
+    }
+  }
+
+  private async createRuntimeRecordSafe(input: RuntimeInstance) {
+    try {
+      return await this.runtimeRepository.createRuntimeInstance(input)
+    } catch {
+      return null
+    }
+  }
+
+  private async findOpenRuntimeIntervalSafe(runtimeInstanceId: string) {
+    try {
+      return await this.runtimeRepository.findOpenRuntimeInterval(runtimeInstanceId)
+    } catch {
+      return null
+    }
+  }
+
+  private async createRuntimeIntervalSafe(input: Parameters<RuntimeInstanceRepository['createRuntimeInterval']>[0]) {
+    try {
+      return await this.runtimeRepository.createRuntimeInterval(input)
+    } catch {
+      return null
+    }
+  }
+
+  private async closeRuntimeIntervalSafe(
+    runtimeInstanceId: string,
+    endedAt: string,
+    closeReason: RunTerminationReason | null,
+  ) {
+    try {
+      return await this.runtimeRepository.closeRuntimeInterval(runtimeInstanceId, endedAt, closeReason)
+    } catch {
+      return null
+    }
   }
 }
 
