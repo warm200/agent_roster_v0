@@ -11,20 +11,18 @@ function getAdminAllowlist() {
     .filter(Boolean)
 }
 
+function rewriteAdminToNotFound(request: NextRequest) {
+  const response = NextResponse.rewrite(new URL('/_not-found', request.url))
+  response.headers.set('cache-control', 'no-store')
+  return response
+}
+
 export async function proxy(request: NextRequest) {
   const isAdminRoute = request.nextUrl.pathname.startsWith('/admin')
 
   if (!isAuthConfigured()) {
     if (isAdminRoute) {
-      return NextResponse.json(
-        { error: 'Admin console requires configured OAuth.' },
-        {
-          headers: {
-            'cache-control': 'no-store',
-          },
-          status: 503,
-        },
-      )
+      return rewriteAdminToNotFound(request)
     }
 
     return NextResponse.next()
@@ -41,19 +39,15 @@ export async function proxy(request: NextRequest) {
       const tokenEmail = typeof token.email === 'string' ? token.email.toLowerCase() : ''
 
       if (allowedEmails.length > 0 && !allowedEmails.includes(tokenEmail)) {
-        return NextResponse.json(
-          { error: 'Forbidden' },
-          {
-            headers: {
-              'cache-control': 'no-store',
-            },
-            status: 403,
-          },
-        )
+        return rewriteAdminToNotFound(request)
       }
     }
 
     return NextResponse.next()
+  }
+
+  if (isAdminRoute) {
+    return rewriteAdminToNotFound(request)
   }
 
   const loginUrl = new URL('/login', request.url)

@@ -45,9 +45,8 @@ test('proxy blocks admin routes when auth providers are not configured', async (
   const request = new NextRequest('http://localhost/admin/usage')
   const response = await proxy(request)
 
-  assert.equal(response.status, 503)
+  assert.equal(response.headers.get('x-middleware-rewrite'), 'http://localhost/_not-found')
   assert.equal(response.headers.get('cache-control'), 'no-store')
-  assert.deepEqual(await response.json(), { error: 'Admin console requires configured OAuth.' })
 })
 
 test('proxy redirects unauthenticated app traffic when auth is configured', async () => {
@@ -73,11 +72,8 @@ test('proxy redirects unauthenticated admin traffic when auth is configured', as
   const request = new NextRequest('http://localhost/admin/usage')
   const response = await proxy(request)
 
-  assert.equal(response.status, 307)
-  assert.equal(
-    response.headers.get('location'),
-    'http://localhost/login?callbackUrl=%2Fadmin%2Fusage',
-  )
+  assert.equal(response.headers.get('x-middleware-rewrite'), 'http://localhost/_not-found')
+  assert.equal(response.headers.get('cache-control'), 'no-store')
 })
 
 test('proxy blocks authenticated admin traffic outside the allowlist', async () => {
@@ -102,9 +98,8 @@ test('proxy blocks authenticated admin traffic outside the allowlist', async () 
   })
   const response = await proxy(request)
 
-  assert.equal(response.status, 403)
+  assert.equal(response.headers.get('x-middleware-rewrite'), 'http://localhost/_not-found')
   assert.equal(response.headers.get('cache-control'), 'no-store')
-  assert.deepEqual(await response.json(), { error: 'Forbidden' })
 })
 
 test('proxy allows authenticated admin traffic from the allowlist', async () => {
