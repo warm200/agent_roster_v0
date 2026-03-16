@@ -20,6 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { filterAdminUsers } from '@/lib/admin-user-filters'
 import type { AdminDateRange, AdminUsageSnapshot } from '@/lib/admin-usage-data'
 import { formatDateTime } from '@/lib/utils'
 
@@ -63,18 +64,6 @@ function getDefaultCustomDates() {
   }
 }
 
-function buildUserSearchText(user: AdminUsageSnapshot['users'][number]) {
-  return [
-    user.id,
-    user.name,
-    user.email,
-    ...user.orderIds,
-    ...user.runTimeline.map((run) => run.id),
-  ]
-    .join(' ')
-    .toLowerCase()
-}
-
 export function AdminUsageDashboard({ snapshot }: { snapshot: AdminUsageSnapshot }) {
   const pathname = usePathname()
   const router = useRouter()
@@ -97,36 +86,13 @@ export function AdminUsageDashboard({ snapshot }: { snapshot: AdminUsageSnapshot
   }, [snapshot.selectedRange])
 
   const filteredUsers = useMemo(() => {
-    const query = search.trim().toLowerCase()
-    const orderQuery = orderIdFilter.trim().toLowerCase()
-    const runQuery = runIdFilter.trim().toLowerCase()
-
-    return snapshot.users.filter((user) => {
-      if (planFilter !== 'all' && user.currentPlan !== planFilter) {
-        return false
-      }
-
-      if (statusFilter !== 'all' && user.latestRunStatus !== statusFilter) {
-        return false
-      }
-
-      if (healthFilter !== 'all' && user.health !== healthFilter) {
-        return false
-      }
-
-      if (orderQuery && !user.orderIds.some((orderId) => orderId.toLowerCase().includes(orderQuery))) {
-        return false
-      }
-
-      if (runQuery && !user.runTimeline.some((run) => run.id.toLowerCase().includes(runQuery))) {
-        return false
-      }
-
-      if (!query) {
-        return true
-      }
-
-      return buildUserSearchText(user).includes(query)
+    return filterAdminUsers(snapshot.users, {
+      health: healthFilter,
+      orderId: orderIdFilter,
+      plan: planFilter,
+      q: search,
+      runId: runIdFilter,
+      status: statusFilter,
     })
   }, [healthFilter, orderIdFilter, planFilter, runIdFilter, search, snapshot.users, statusFilter])
 

@@ -61,6 +61,17 @@ export function buildAdminFunnel(snapshot: AdminUsageSnapshot) {
   }
 }
 
+export function buildAdminBlockers(snapshot: AdminUsageSnapshot) {
+  return {
+    blockedLaunches: snapshot.blockedLaunches,
+    customEndDate: snapshot.customEndDate,
+    customStartDate: snapshot.customStartDate,
+    generatedAt: snapshot.generatedAt,
+    selectedRange: snapshot.selectedRange,
+    windowLabel: snapshot.windowLabel,
+  }
+}
+
 export function buildAdminRuntimeUsage(snapshot: AdminUsageSnapshot) {
   return {
     customEndDate: snapshot.customEndDate,

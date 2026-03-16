@@ -538,7 +538,8 @@ create table billing_alerts (
 
 当前实现备注：
 
-* 已落地站内只读内部接口：`/api/admin/usage` 及 overview / funnel / runtime-usage / billing-health / users / always-on-shadow / alerts 子路由
+* 已落地站内只读内部接口：`/api/admin/usage` 及 overview / funnel / blockers / runtime-usage / billing-health / users / users/:userId / always-on-shadow / alerts 子路由
+* `/api/admin/usage/users` 现已支持 `plan` / `status` / `health` / `order_id` / `run_id` / `q` 过滤参数
 * 页面仍可直接走 server service；后续可切换到这些内部 API 而不改聚合逻辑
 
 这样以后你想把底层换成 view/materialized view，不会牵连 UI。
