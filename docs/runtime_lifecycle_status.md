@@ -55,6 +55,7 @@ read_when:
 - CLI/cron entrypoint exists:
   - `pnpm runtime:maintenance`
   - `pnpm runtime:maintenance:watch`
+  - `pnpm runtime:maintenance:trigger`
 - maintenance can now enforce:
   - provisioning timeout
   - max session TTL
@@ -105,6 +106,8 @@ read_when:
 - maintenance service exists for batch stale-runtime reconciliation
 - opt-in recurring loop exists through:
   - `pnpm runtime:maintenance:watch`
+- remote scheduler trigger exists through:
+  - `pnpm runtime:maintenance:trigger`
 - external scheduling/hosting is still required
 - current cleanup no longer depends only on user reads if the loop or CLI is running
 

@@ -109,6 +109,7 @@ Current MVP Backend Notes:
     - when run detail, run list, stop, or restart touches a run, backend re-reads provider runtime state and reconciles local DB
     - a maintenance service can also batch-reconcile stale runtime instances without webhooks
     - a recurring maintenance loop can be run with `pnpm runtime:maintenance:watch`
+    - a hosted scheduler can trigger the same maintenance route with `pnpm runtime:maintenance:trigger`
     - webhook-driven lifecycle reconciliation is intentionally deferred
   timeout_enforcement:
     - provisioning timeout can now be enforced by the maintenance service

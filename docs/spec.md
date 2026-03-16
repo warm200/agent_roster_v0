@@ -99,6 +99,7 @@ Current reconciliation model:
 - CLI maintenance trigger:
   - `pnpm runtime:maintenance`
   - `pnpm runtime:maintenance:watch`
+  - `pnpm runtime:maintenance:trigger`
 - current maintenance enforcement covers:
   - provisioning timeout
   - max session TTL
