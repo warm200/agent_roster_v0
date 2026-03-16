@@ -120,3 +120,18 @@ export async function syncDerivedBillingAlerts() {
     synced: seeds.length,
   }
 }
+
+export async function syncDerivedBillingAlertsSafely() {
+  const connectionString = resolvePostgresConnectionString()
+
+  if (!connectionString?.startsWith('postgres')) {
+    return false
+  }
+
+  try {
+    await syncDerivedBillingAlerts()
+    return true
+  } catch {
+    return false
+  }
+}

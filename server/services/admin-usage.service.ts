@@ -17,7 +17,7 @@ import {
   userSubscriptions,
   users,
 } from '../db/schema'
-import { mapPersistedBillingAlerts } from './admin-billing-alerts.service'
+import { mapPersistedBillingAlerts, syncDerivedBillingAlertsSafely } from './admin-billing-alerts.service'
 import {
   DAY_MS,
   STALE_RESERVE_MS,
@@ -89,6 +89,8 @@ export async function getAdminUsageSnapshot(input?: {
     } catch {
       launchAttemptRows = null
     }
+    await syncDerivedBillingAlertsSafely()
+
     try {
       billingAlertRows = await db.select().from(billingAlerts).orderBy(desc(billingAlerts.createdAt))
     } catch {

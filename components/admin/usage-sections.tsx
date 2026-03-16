@@ -251,10 +251,10 @@ export function BillingSection({ snapshot }: { snapshot: AdminUsageSnapshot }) {
       <SectionHeading
         eyebrow="Billing Integrity"
         title="Ledger health before cost reporting"
-        description="Reserves, commits, refunds, anomalies, and balance drift need to be trustworthy before pricing changes or support action."
+        description="Reserves, commits, refunds, anomalies, and balance drift need to be trustworthy before pricing changes or support action. Alerts auto-refresh on admin reads; manual sync is still available."
         action={
           <Button disabled={syncingAlerts} onClick={() => void handleSyncAlerts()} variant="outline">
-            {syncingAlerts ? 'Syncing…' : 'Sync Alerts'}
+            {syncingAlerts ? 'Syncing…' : 'Sync Now'}
           </Button>
         }
       />
