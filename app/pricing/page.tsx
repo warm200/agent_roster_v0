@@ -8,7 +8,6 @@ import {
   ArrowRight,
   Bot,
   Check,
-  Clock3,
   Flame,
   Layers3,
   Play,
@@ -22,104 +21,217 @@ const plans = [
   {
     name: 'Free',
     price: '$0',
-    includedCredits: '0',
+    budgetBadge: 'No runtime budget',
+    budgetDetail: 'Browse and preview only.',
+    bestFor: 'Browse and preview',
+    runtimeBehavior: 'No runtime. Collect agents, preview personas, and decide what is worth running later.',
+    whyExists: 'This exists so catalog discovery stays frictionless. You should not pay to understand what an agent is.',
+    whoItsFor: 'People still exploring the catalog or evaluating how an agent thinks.',
     activeBundles: '0',
     agentsPerBundle: '0',
     triggerMode: 'None',
-    concurrentRuns: '0',
     alwaysOnBundles: '0',
-    includes: ['Free Agents Purchase', 'Free persona preview chat'],
-    suitFor: 'Browse, preview, claim agents',
-    icon: Snowflake,
     accent: 'border-white/12 bg-white/[0.03]',
     accentText: 'text-zinc-200',
-    highlight: undefined,
     cta: 'Browse Free Agents',
+    href: '/agents',
+    icon: Snowflake,
+    tone: 'Discovery',
+    highlight: undefined,
+    hideBudget: undefined,
+    includes: ['Free agents purchase', 'Free persona preview chat'],
+    metrics: [
+      { label: 'Runtime behavior', value: 'No runtime', icon: Zap },
+      { label: 'Agents in bundle', value: '0', icon: Bot },
+      { label: 'Trigger mode', value: 'None', icon: Snowflake },
+    ],
+    persistence: 'No runtime',
+    stopBehavior: 'Not applicable',
+    recoveryModel: 'Not applicable',
   },
   {
     name: 'Run',
     price: '$5',
-    includedCredits: '30',
+    budgetBadge: 'Launch budget included',
+    budgetDetail: 'Built for bounded manual test sessions.',
+    bestFor: 'Test one workflow manually',
+    runtimeBehavior: 'Manual bounded session. Start it yourself, test the workflow, and let it auto-stop after inactivity.',
+    whyExists: 'This is the first paid step after preview when you want one real managed run without parallel operating complexity.',
+    whoItsFor: 'Solo operators validating a workflow end to end before they commit to repeat use.',
     activeBundles: '1',
     agentsPerBundle: '3',
     triggerMode: 'Manual only',
-    concurrentRuns: '1',
     alwaysOnBundles: '0',
-    includes: ['Slower wake up'],
-    suitFor: 'Occasional manual runs',
-    icon: Play,
     accent: 'border-amber-300/20 bg-amber-300/[0.06]',
     accentText: 'text-amber-200',
+    cta: 'Start with Run',
+    href: '/app/bundles',
+    icon: Play,
+    tone: 'Starting point',
     highlight: undefined,
-    cta: 'Run On Demand',
+    hideBudget: undefined,
+    includes: ['Manual start', 'Bounded session', 'Auto-stop after inactivity'],
+    metrics: [
+      { label: 'Runtime behavior', value: 'Bounded manual session', icon: Zap },
+      { label: 'Agents in bundle', value: '3', icon: Bot },
+      { label: 'Trigger mode', value: 'Manual only', icon: Play },
+    ],
+    persistence: 'Ephemeral session',
+    stopBehavior: 'Auto-stops after inactivity and may be fully cleaned up.',
+    recoveryModel: 'New launch',
   },
   {
     name: 'Warm Standby',
     price: '$19/mo',
-    includedCredits: '50/mo',
+    budgetBadge: 'Wake budget with recoverable state',
+    budgetDetail: 'Monthly wake budget for repeat workflows that should sleep and resume later.',
+    bestFor: 'Repeat Telegram-triggered workflows',
+    runtimeBehavior: 'Wake on message, work, then auto-sleep when idle. Designed for recoverable runtime state without self-hosting.',
+    whyExists: 'This exists for workflows that should wake repeatedly from Telegram without behaving like a permanent live workspace.',
+    whoItsFor: 'Operators running recurring Telegram-triggered workflows who want wake-on-demand behavior with recoverable state.',
     activeBundles: '3',
     agentsPerBundle: '5',
-    triggerMode: 'Auto wake',
-    concurrentRuns: '3',
+    triggerMode: 'Wake on Telegram',
     alwaysOnBundles: '0',
-    includes: ['Faster wake up'],
-    suitFor: 'Frequent Telegram-triggered workflows',
-    icon: TimerReset,
     accent: 'border-orange-300/25 bg-orange-300/[0.07]',
     accentText: 'text-orange-200',
-    highlight: 'Most practical default',
-    cta: 'Keep Bundles Warm',
+    cta: 'Use for repeat workflows',
+    href: '/app/bundles',
+    icon: TimerReset,
+    tone: 'Wake on demand',
+    highlight: 'Wake on demand',
+    hideBudget: undefined,
+    includes: ['Wake on message', 'Auto-sleeps when idle', 'No self-hosting'],
+    metrics: [
+      { label: 'Runtime behavior', value: 'Wake on message', icon: Zap },
+      { label: 'Agents in bundle', value: '5', icon: Bot },
+      { label: 'Trigger mode', value: 'Telegram wake', icon: TimerReset },
+    ],
+    persistence: 'Recoverable state',
+    stopBehavior: 'Auto-sleeps when idle instead of behaving like a full-time live workspace.',
+    recoveryModel: 'Sleep and restore',
   },
   {
     name: 'Always On',
     price: '$149/mo',
-    includedCredits: '100/mo',
+    budgetBadge: 'Persistent managed runtime',
+    budgetDetail: 'Long-running workspace support.',
+    bestFor: 'One core workspace running full time',
+    runtimeBehavior: 'Persistent workspace for the setups that should stay live instead of waking from zero.',
+    whyExists: 'This plan exists when sleeping and waking becomes the wrong operating model.',
+    whoItsFor: 'Teams or operators who need a long-running managed setup with a core workspace kept alive.',
     activeBundles: '3',
     agentsPerBundle: '8',
-    triggerMode: 'Always active',
-    concurrentRuns: '10',
+    triggerMode: 'Persistent workspace',
     alwaysOnBundles: '10',
-    includes: ['Never sleep'],
-    suitFor: 'One core workspace running full time',
-    icon: Flame,
     accent: 'border-rose-300/25 bg-rose-300/[0.07]',
     accentText: 'text-rose-200',
+    cta: 'Use for dedicated runtime',
+    href: '/app/bundles',
+    icon: Flame,
+    tone: 'Persistent',
     highlight: undefined,
-    cta: 'Stay Always On',
+    includes: ['Persistent workspace', 'Long-running setup', 'Managed runtime'],
+    metrics: [
+      { label: 'Runtime behavior', value: 'Persistent workspace', icon: Zap },
+      { label: 'Agents in bundle', value: '8', icon: Bot },
+      { label: 'Runtime shape', value: 'Long-running setup', icon: Flame },
+    ],
+    hideBudget: true,
+    persistence: 'Live persistence',
+    stopBehavior: 'Stopping is not the normal model. This plan is meant to keep a core workspace alive.',
+    recoveryModel: 'Already live',
   },
 ] as const
 
 const comparisonRows = [
   { label: 'Price', values: plans.map((plan) => plan.price) },
-  { label: 'Included credits', values: plans.map((plan) => plan.includedCredits) },
-  { label: 'Active bundles', values: plans.map((plan) => plan.activeBundles) },
-  { label: 'Agents per bundle', values: plans.map((plan) => plan.agentsPerBundle) },
+  { label: 'Runtime behavior', values: ['No runtime', 'Manual bounded session', 'Wake on message', 'Persistent workspace'] },
+  { label: 'Best for', values: plans.map((plan) => plan.bestFor) },
+  { label: 'State after stop', values: ['Not applicable', 'May be cleaned up', 'Sleeps with recoverable state', 'Normally stays live'] },
+  { label: 'Recovery model', values: ['Not applicable', 'Fresh launch', 'Wake and restore', 'Already live'] },
+  { label: 'Agents per launched bundle', values: plans.map((plan) => plan.agentsPerBundle) },
   { label: 'Trigger mode', values: plans.map((plan) => plan.triggerMode) },
-  { label: 'Concurrent runs', values: plans.map((plan) => plan.concurrentRuns) },
-  { label: 'Always-on bundles', values: plans.map((plan) => plan.alwaysOnBundles) },
-  { label: 'Best for', values: plans.map((plan) => plan.suitFor) },
 ] as const
 
-const callouts = [
+const pricingSteps = [
+  'Agents are free to collect.',
+  'Preview chat is free.',
+  'You only pay when you want to run a bundle in a managed environment.',
+  'Plans unlock different runtime capabilities like bundle size, trigger behavior, and operating mode.',
+] as const
+
+const workflowChoices = [
+  {
+    title: 'Test manually',
+    plan: 'Run',
+    description: 'Use this when you want one real managed run, expect it to stop when idle, and do not need recoverable warm state.',
+  },
+  {
+    title: 'Wake on Telegram',
+    plan: 'Warm Standby',
+    description: 'Use this when Telegram should wake the workflow on demand and later resume from recoverable state instead of starting from zero every time.',
+  },
+  {
+    title: 'Keep a core workspace alive',
+    plan: 'Always On',
+    description: 'Use this when sleeping and waking is the wrong model because the workspace itself needs to stay present.',
+  },
+] as const
+
+const supportCallouts = [
   {
     title: 'Free is for browsing and preview',
     description:
-      'Use it to understand the agent persona and claim free agents. It is not a runtime tier.',
+      'Use it to understand agent behavior and claim free agents. It is not a runtime tier.',
   },
   {
-    title: 'Run is the lightest paid entry',
+    title: 'Run is the default paid entry',
     description:
-      'Good when execution is manual and occasional. Wake speed stays slower by design.',
+      'Best for testing one workflow manually in a bounded session.',
   },
   {
-    title: 'Warm Standby is built for Telegram loops',
+    title: 'Warm Standby is for wake-on-message use',
     description:
-      'If bundles are triggered often through Telegram, this is the tier that starts making sense first.',
+      'Best when you want Telegram-triggered repeat workflows that sleep when idle, recover later, and avoid self-hosting.',
   },
   {
-    title: 'Always On is for a pinned core workspace',
+    title: 'Always On is for a persistent managed workspace',
     description:
-      'This is the persistent operating setup: high concurrency, many always-on bundles, no sleep cycle.',
+      'Use it when you want a core workspace to stay alive, not wake from zero.',
+  },
+] as const
+
+const decisionFaqs = [
+  {
+    question: 'Why are agents free, but runs paid?',
+    answer:
+      'Agents are free to collect and evaluate. Paid plans cover managed runtime access when you want to actually launch a bundle.',
+  },
+  {
+    question: 'What is the difference between Run and Warm Standby after a session stops?',
+    answer:
+      'Run is the bounded test-session tier: once it stops, you should think in terms of a fresh launch. Warm Standby is the wake-and-recover tier: it is meant to sleep when idle and later resume from preserved state instead of acting like a brand-new environment every time.',
+  },
+  {
+    question: 'Why would I pay for Warm Standby instead of just buying Run again?',
+    answer:
+      'Choose Warm Standby when the same workflow keeps coming back and you care about recoverable state after idle stop. Choose Run when you only need a temporary test session and do not care about keeping warm recoverable context around between wakes.',
+  },
+  {
+    question: 'Does stopping always mean deleting everything?',
+    answer:
+      'No. In this product model, stopping can mean different things depending on the plan. Run is treated as ephemeral. Warm Standby is positioned as a sleep-and-recover mode. Always On is not meant to stop as part of normal operation.',
+  },
+  {
+    question: 'Why not just self-host OpenClaw?',
+    answer:
+      'Self-hosting trades subscription cost for operational work: sandbox lifecycle, wake behavior, persistence handling, cleanup, and environment management. These plans are for people who want the managed runtime, not another piece of infrastructure to maintain.',
+  },
+  {
+    question: 'When do I actually need Always On?',
+    answer:
+      'Only when your core workspace should stay alive as an operating environment. If you are mostly testing or waking on demand, Run or Warm Standby is the better fit.',
   },
 ] as const
 
@@ -137,7 +249,7 @@ export default function PricingPage() {
             <div className="relative z-10">
               <div className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-card/70 px-3 py-1.5 text-xs uppercase tracking-[0.22em] text-muted-foreground backdrop-blur">
                 <Sparkles className="h-3.5 w-3.5 text-orange-200" />
-                Runtime plans only
+                Managed runtime plans
               </div>
 
               <h1 className="mt-6 max-w-4xl text-4xl font-semibold leading-[0.94] tracking-[-0.04em] text-foreground md:text-6xl lg:text-7xl">
@@ -149,22 +261,14 @@ export default function PricingPage() {
               </h1>
 
               <p className="mt-6 max-w-2xl text-base leading-8 text-muted-foreground md:text-lg">
-                Preview agents for free. Launch real runs with a runtime plan when you&apos;re ready.
+                Free agent discovery first. Paid managed runtime when you are ready to operate:
+                manual run, wake with recoverable state, or keep a persistent workspace live.
               </p>
 
               <div className="mt-6 grid max-w-2xl gap-3 text-sm text-muted-foreground sm:grid-cols-3">
-                <div className="rounded-2xl border border-border/60 bg-card/55 px-4 py-3">
-                  <div className="text-[11px] uppercase tracking-[0.18em] text-orange-200/80">Agent purchase</div>
-                  <div className="mt-2 text-base font-medium text-foreground">$0 today</div>
-                </div>
-                <div className="rounded-2xl border border-border/60 bg-card/55 px-4 py-3">
-                  <div className="text-[11px] uppercase tracking-[0.18em] text-orange-200/80">Preview chat</div>
-                  <div className="mt-2 text-base font-medium text-foreground">Free</div>
-                </div>
-                <div className="rounded-2xl border border-border/60 bg-card/55 px-4 py-3">
-                  <div className="text-[11px] uppercase tracking-[0.18em] text-orange-200/80">Paid moment</div>
-                  <div className="mt-2 text-base font-medium text-foreground">When runs start</div>
-                </div>
+                <FactPill label="Collect agents" value="Free" />
+                <FactPill label="Preview behavior" value="Free" />
+                <FactPill label="Pay for" value="Managed runtime" />
               </div>
 
               <div className="mt-8 flex flex-col gap-3 sm:flex-row">
@@ -184,7 +288,7 @@ export default function PricingPage() {
                   asChild
                   className="h-12 rounded-full border-border/70 bg-card/60 px-6 text-sm"
                 >
-                  <Link href="/app">Open Dashboard</Link>
+                  <Link href="/app/bundles">See Bundle Runtime Options</Link>
                 </Button>
               </div>
             </div>
@@ -197,52 +301,41 @@ export default function PricingPage() {
                     <div>
                       <div className="flex items-center gap-2 text-xs uppercase tracking-[0.22em] text-muted-foreground">
                         <Layers3 className="h-3.5 w-3.5" />
-                        What you pay for
+                        Choose by workflow
                       </div>
                       <h2 className="mt-3 text-2xl font-semibold tracking-[-0.03em] text-foreground">
-                        Free discovery, paid execution.
+                        Pick the operating mode, not a bigger credit pack.
                       </h2>
                     </div>
                     <div className="rounded-full border border-orange-200/20 bg-orange-200/10 px-3 py-1 text-[11px] uppercase tracking-[0.18em] text-orange-100/75">
-                      4 plans
+                      3 runtime modes
                     </div>
                   </div>
 
                   <div className="mt-6 space-y-3">
-                    {plans.map((plan) => (
+                    {workflowChoices.map((choice) => (
                       <div
-                        key={plan.name}
-                        className={cn(
-                          'rounded-[1.35rem] border px-4 py-4',
-                          plan.accent
-                        )}
+                        key={choice.title}
+                        className="rounded-[1.35rem] border border-border/60 bg-card/45 px-4 py-4"
                       >
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="flex items-start gap-3">
-                            <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/8 bg-background/80">
-                              <plan.icon className={cn('h-5 w-5', plan.accentText)} />
-                            </div>
-                            <div>
-                              <div className="flex flex-wrap items-center gap-2">
-                                <span className="text-base font-medium text-foreground">{plan.name}</span>
-                                {plan.highlight ? (
-                                  <span className="rounded-full border border-orange-200/20 bg-orange-200/10 px-2.5 py-1 text-[10px] uppercase tracking-[0.18em] text-orange-100/75">
-                                    {plan.highlight}
-                                  </span>
-                                ) : null}
-                              </div>
-                              <p className="mt-1 text-sm leading-6 text-muted-foreground">{plan.suitFor}</p>
-                            </div>
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <div className="text-sm font-medium text-foreground">{choice.title}</div>
+                            <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                              {choice.description}
+                            </p>
                           </div>
-                          <div className="text-right">
-                            <div className="text-lg font-semibold text-foreground">{plan.price}</div>
-                            <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
-                              {plan.triggerMode}
-                            </div>
+                          <div className="rounded-full border border-white/10 bg-background/80 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-foreground">
+                            {choice.plan}
                           </div>
                         </div>
                       </div>
                     ))}
+                  </div>
+
+                  <div className="mt-5 rounded-[1.35rem] border border-orange-200/15 bg-orange-200/[0.06] p-4 text-sm leading-7 text-muted-foreground">
+                    Upgrade path: start with a temporary manual run, move to wake-and-recover once the
+                    workflow repeats, and only choose Always On when the workspace itself should stay live.
                   </div>
                 </div>
               </CardContent>
@@ -252,16 +345,40 @@ export default function PricingPage() {
 
         <section className="border-b border-border/60 bg-card/30">
           <div className="container mx-auto px-4 py-18 md:py-20">
+            <div className="max-w-3xl">
+              <div className="text-xs uppercase tracking-[0.24em] text-muted-foreground">How pricing works</div>
+              <h2 className="mt-3 text-3xl font-semibold tracking-[-0.03em] text-foreground md:text-4xl">
+                The split is simple: discovery is free, managed runtime is paid.
+              </h2>
+            </div>
+
+            <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              {pricingSteps.map((step, index) => (
+                <Card key={step} className="rounded-[1.6rem] border-border/60 bg-background/60">
+                  <CardContent className="p-6">
+                    <div className="text-xs uppercase tracking-[0.22em] text-muted-foreground">
+                      0{index + 1}
+                    </div>
+                    <p className="mt-4 text-base leading-7 text-foreground">{step}</p>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section className="border-b border-border/60">
+          <div className="container mx-auto px-4 py-18 md:py-20">
             <div className="mb-10 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
               <div>
-                <div className="text-xs uppercase tracking-[0.24em] text-muted-foreground">Plans</div>
+                <div className="text-xs uppercase tracking-[0.24em] text-muted-foreground">Operating modes</div>
                 <h2 className="mt-3 text-3xl font-semibold tracking-[-0.03em] text-foreground md:text-4xl">
-                  Four tiers, four wake profiles.
+                  Choose the runtime behavior that matches the workload.
                 </h2>
               </div>
               <p className="max-w-xl text-sm leading-7 text-muted-foreground">
-                The difference is not cosmetic. Each tier changes how many bundles can stay active, how
-                many agents fit inside, and how fast the workspace is ready to move.
+                Credits are supporting detail. The real decision is whether you need a bounded manual
+                session, a wakeable recoverable runtime, or a persistent managed workspace.
               </p>
             </div>
 
@@ -270,15 +387,41 @@ export default function PricingPage() {
                 <PlanCard key={plan.name} plan={plan} />
               ))}
             </div>
+
+            <p className="mt-6 text-xs leading-6 text-muted-foreground">
+              Runtime plans include a usage budget. Exact runtime consumption rules may evolve as the
+              platform matures.
+            </p>
+          </div>
+        </section>
+
+        <section className="border-b border-border/60 bg-card/30">
+          <div className="container mx-auto px-4 py-18 md:py-20">
+            <div className="max-w-3xl">
+              <div className="text-xs uppercase tracking-[0.24em] text-muted-foreground">Plan meanings</div>
+              <h2 className="mt-3 text-3xl font-semibold tracking-[-0.03em] text-foreground md:text-4xl">
+                The four plan positions in plain language.
+              </h2>
+            </div>
+
+            <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              {supportCallouts.map((item) => (
+                <DecisionCard
+                  key={item.title}
+                  title={item.title}
+                  description={item.description}
+                />
+              ))}
+            </div>
           </div>
         </section>
 
         <section className="border-b border-border/60">
           <div className="container mx-auto px-4 py-18 md:py-20">
             <div className="max-w-3xl">
-              <div className="text-xs uppercase tracking-[0.24em] text-muted-foreground">Compare</div>
+              <div className="text-xs uppercase tracking-[0.24em] text-muted-foreground">Detailed limits</div>
               <h2 className="mt-3 text-3xl font-semibold tracking-[-0.03em] text-foreground md:text-4xl">
-                Exact plan limits, line by line.
+                For operators who already know what runtime behavior they need.
               </h2>
             </div>
 
@@ -286,13 +429,13 @@ export default function PricingPage() {
               <table className="min-w-full border-separate border-spacing-0">
                 <thead>
                   <tr>
-                    <th className="min-w-[11rem] border-b border-border/60 px-4 py-4 text-left text-xs uppercase tracking-[0.22em] text-muted-foreground">
-                      Feature
+                    <th className="min-w-[11rem] border-b border-border/60 px-4 py-4 text-left text-xs uppercase tracking-[0.22em] text-muted-foreground align-top">
+                      Criteria
                     </th>
                     {plans.map((plan) => (
                       <th
                         key={plan.name}
-                        className="min-w-[10rem] border-b border-border/60 px-4 py-4 text-left"
+                        className="min-w-[11rem] border-b border-border/60 px-4 py-4 text-left align-top"
                       >
                         <div className="flex items-center gap-2">
                           <plan.icon className={cn('h-4 w-4', plan.accentText)} />
@@ -305,15 +448,15 @@ export default function PricingPage() {
                 <tbody>
                   {comparisonRows.map((row, rowIndex) => (
                     <tr key={row.label}>
-                      <td className="border-b border-border/40 px-4 py-4 text-sm text-muted-foreground">
+                      <td className="border-b border-border/40 px-4 py-4 align-top text-sm text-muted-foreground">
                         {row.label}
                       </td>
                       {row.values.map((value, valueIndex) => (
                         <td
                           key={`${row.label}-${plans[valueIndex].name}`}
                           className={cn(
-                            'border-b border-border/40 px-4 py-4 text-sm text-foreground',
-                            rowIndex === comparisonRows.length - 1 && 'border-b-0'
+                            'border-b border-border/40 px-4 py-4 align-top text-sm leading-6 text-foreground',
+                            rowIndex === comparisonRows.length - 1 && 'border-b-0',
                           )}
                         >
                           {value}
@@ -328,20 +471,32 @@ export default function PricingPage() {
         </section>
 
         <section className="border-b border-border/60 bg-card/30">
-          <div className="container mx-auto grid gap-5 px-4 py-18 md:grid-cols-2 xl:grid-cols-4 md:py-20">
-            {callouts.map((item, index) => (
-              <Card key={item.title} className="rounded-[1.6rem] border-border/60 bg-background/60">
-                <CardContent className="p-6">
-                  <div className="text-xs uppercase tracking-[0.22em] text-muted-foreground">
-                    0{index + 1}
-                  </div>
-                  <h3 className="mt-4 text-xl font-semibold tracking-[-0.03em] text-foreground">
-                    {item.title}
-                  </h3>
-                  <p className="mt-3 text-sm leading-7 text-muted-foreground">{item.description}</p>
-                </CardContent>
-              </Card>
-            ))}
+          <div className="container mx-auto px-4 py-18 md:py-20">
+            <div className="max-w-3xl">
+              <div className="text-xs uppercase tracking-[0.24em] text-muted-foreground">Decision FAQ</div>
+              <h2 className="mt-3 text-3xl font-semibold tracking-[-0.03em] text-foreground md:text-4xl">
+                The questions this page should answer before you buy.
+              </h2>
+            </div>
+
+            <div className="mt-8 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+              {decisionFaqs.map((item, index) => (
+                <Card
+                  key={item.question}
+                  className={cn(
+                    'rounded-[1.6rem] border-border/60 bg-background/60',
+                    index === 4 && 'md:col-span-2 xl:col-span-1',
+                  )}
+                >
+                  <CardContent className="p-6">
+                    <h3 className="text-lg font-semibold tracking-[-0.02em] text-foreground">
+                      {item.question}
+                    </h3>
+                    <p className="mt-3 text-sm leading-7 text-muted-foreground">{item.answer}</p>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
           </div>
         </section>
 
@@ -349,38 +504,56 @@ export default function PricingPage() {
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,188,127,0.1),transparent_42%)]" />
           <div className="container mx-auto px-4 py-18 md:py-20">
             <Card className="overflow-hidden rounded-[2rem] border-border/70 bg-card/75 shadow-[0_24px_70px_-36px_rgba(0,0,0,0.8)]">
-              <CardContent className="relative flex flex-col gap-8 p-6 md:flex-row md:items-center md:justify-between md:p-8">
+              <CardContent className="relative p-6 md:p-8">
                 <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(255,255,255,0.04),transparent_55%)]" />
-                <div className="relative max-w-2xl">
-                  <div className="text-xs uppercase tracking-[0.24em] text-muted-foreground">Start here</div>
-                  <h2 className="mt-3 text-3xl font-semibold tracking-[-0.03em] text-foreground md:text-4xl">
-                    Start with the lightest tier that matches the job.
-                  </h2>
-                  <p className="mt-4 text-sm leading-7 text-muted-foreground">
-                    You can browse free, pay for occasional runs, or move up once bundles become part of
-                    a recurring operating loop.
-                  </p>
-                </div>
 
-                <div className="relative flex flex-col gap-3 sm:flex-row">
-                  <Button
-                    size="lg"
-                    asChild
-                    className="group h-12 rounded-full px-6 text-sm font-medium shadow-[0_14px_30px_-18px_rgba(255,188,127,0.65)]"
-                  >
-                    <Link href="/agents">
-                      Explore Agents
-                      <ArrowRight className="ml-2 h-4 w-4 transition-transform duration-200 group-hover:translate-x-1 motion-reduce:transform-none" />
-                    </Link>
-                  </Button>
-                  <Button
-                    size="lg"
-                    variant="outline"
-                    asChild
-                    className="h-12 rounded-full border-border/70 bg-background/70 px-6 text-sm"
-                  >
-                    <Link href="/app">See Dashboard</Link>
-                  </Button>
+                <div className="relative flex flex-col gap-8">
+                  <div className="max-w-2xl">
+                    <div className="text-xs uppercase tracking-[0.24em] text-muted-foreground">Start here</div>
+                    <h2 className="mt-3 text-3xl font-semibold tracking-[-0.03em] text-foreground md:text-4xl">
+                      Choose the runtime by how state should behave.
+                    </h2>
+                    <p className="mt-4 text-sm leading-7 text-muted-foreground">
+                      Run is for manual tests. Warm Standby is for wake with memory. Always On is for
+                      staying live.
+                    </p>
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-3">
+                    <BottomChoice
+                      title="Run = test manually"
+                      description="Use it when a bounded session is enough and stopping can mean starting fresh later."
+                    />
+                    <BottomChoice
+                      title="Warm Standby = wake with memory"
+                      description="Use it when Telegram should wake the workflow and later recover state instead of restarting from zero."
+                    />
+                    <BottomChoice
+                      title="Always On = stay live"
+                      description="Use it when a core workspace should remain alive as an operating surface."
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-3 sm:flex-row">
+                    <Button
+                      size="lg"
+                      asChild
+                      className="group h-12 rounded-full px-6 text-sm font-medium shadow-[0_14px_30px_-18px_rgba(255,188,127,0.65)]"
+                    >
+                      <Link href="/agents">
+                        Browse Free Agents
+                        <ArrowRight className="ml-2 h-4 w-4 transition-transform duration-200 group-hover:translate-x-1 motion-reduce:transform-none" />
+                      </Link>
+                    </Button>
+                    <Button
+                      size="lg"
+                      variant="outline"
+                      asChild
+                      className="h-12 rounded-full border-border/70 bg-background/70 px-6 text-sm"
+                    >
+                      <Link href="/app/bundles">Choose a Plan from Bundle Detail</Link>
+                    </Button>
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -403,40 +576,65 @@ function PlanCard({
           <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/8 bg-background/80">
             <plan.icon className={cn('h-5 w-5', plan.accentText)} />
           </div>
-          {plan.highlight ? (
-            <div className="rounded-full border border-orange-200/20 bg-orange-200/10 px-3 py-1 text-[11px] uppercase tracking-[0.18em] text-orange-100/75">
-              {plan.highlight}
+          <div className="text-right">
+            <div className="rounded-full border border-white/10 bg-background/75 px-3 py-1 text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+              {plan.tone}
             </div>
-          ) : null}
+            {plan.highlight ? (
+              <div className="mt-2 rounded-full border border-orange-200/20 bg-orange-200/10 px-3 py-1 text-[10px] uppercase tracking-[0.18em] text-orange-100/75">
+                {plan.highlight}
+              </div>
+            ) : null}
+          </div>
         </div>
 
         <div className="mt-5">
           <div className="text-lg font-semibold tracking-[-0.02em] text-foreground">{plan.name}</div>
           <div className="mt-2 text-4xl font-semibold tracking-[-0.05em] text-foreground">{plan.price}</div>
-          <p className="mt-3 text-sm leading-7 text-muted-foreground">{plan.suitFor}</p>
         </div>
 
-        <div className="mt-6 grid grid-cols-2 gap-3">
-          <PlanMetric icon={Zap} label="Credits" value={plan.includedCredits} />
-          <PlanMetric icon={Layers3} label="Bundles" value={plan.activeBundles} />
-          <PlanMetric icon={Bot} label="Agents" value={plan.agentsPerBundle} />
-          <PlanMetric icon={Clock3} label="Runs" value={plan.concurrentRuns} />
+        <div className="mt-6 space-y-5">
+          <PlanSection label="Best for" value={plan.bestFor} />
+          <PlanSection label="Runtime behavior" value={plan.runtimeBehavior} />
+          <PlanSection label="Persistence" value={plan.persistence} />
+          <PlanSection label="What happens when it stops" value={plan.stopBehavior} />
+          <PlanSection label="Recovery model" value={plan.recoveryModel} />
+          <PlanSection label="Why this exists" value={plan.whyExists} />
+          <PlanSection label="Who it is for" value={plan.whoItsFor} />
         </div>
 
-        <div className="mt-5 rounded-[1.35rem] border border-border/60 bg-card/45 p-4">
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Trigger mode</span>
-            <span className="text-sm font-medium text-foreground">{plan.triggerMode}</span>
+        {!plan.hideBudget ? (
+          <div className="mt-6 rounded-[1.35rem] border border-border/60 bg-card/45 p-4">
+            <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+              Runtime budget
+            </div>
+            <div className="mt-3 text-sm font-medium text-foreground">{plan.budgetBadge}</div>
+            <div className="mt-1 text-xs leading-6 text-muted-foreground">{plan.budgetDetail}</div>
           </div>
-          <div className="mt-3 flex items-center justify-between gap-3">
-            <span className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-              Always-on bundles
-            </span>
-            <span className="text-sm font-medium text-foreground">{plan.alwaysOnBundles}</span>
+        ) : (
+          <div className="mt-6 rounded-[1.35rem] border border-border/60 bg-card/45 p-4">
+            <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+              Managed runtime shape
+            </div>
+            <div className="mt-3 text-sm font-medium text-foreground">Persistent occupancy, not a launch-credit pitch.</div>
+            <div className="mt-1 text-xs leading-6 text-muted-foreground">
+              Always On is sold as a long-running managed setup, not as a bigger version of Run.
+            </div>
           </div>
+        )}
+
+        <div className="mt-5 grid grid-cols-2 gap-3">
+          {plan.metrics.map((metric) => (
+            <PlanMetric
+              key={`${plan.name}-${metric.label}`}
+              icon={metric.icon}
+              label={metric.label}
+              value={metric.value}
+            />
+          ))}
         </div>
 
-        <div className="mt-5">
+        <div className="mt-5 rounded-[1.2rem] border border-border/60 bg-background/55 p-4">
           <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Plan includes</div>
           <div className="mt-3 space-y-2">
             {plan.includes.map((item) => (
@@ -451,10 +649,57 @@ function PlanCard({
         </div>
 
         <Button asChild className="mt-6 h-11 w-full rounded-full text-sm">
-          <Link href="/agents">{plan.cta}</Link>
+          <Link href={plan.href}>{plan.cta}</Link>
         </Button>
       </CardContent>
     </Card>
+  )
+}
+
+function BottomChoice({
+  title,
+  description,
+}: {
+  title: string
+  description: string
+}) {
+  return (
+    <div className="rounded-[1.35rem] border border-border/60 bg-background/55 p-4">
+      <div className="text-sm font-medium text-foreground">{title}</div>
+      <p className="mt-2 text-sm leading-7 text-muted-foreground">{description}</p>
+    </div>
+  )
+}
+
+function DecisionCard({
+  title,
+  description,
+}: {
+  title: string
+  description: string
+}) {
+  return (
+    <Card className="rounded-[1.6rem] border-border/60 bg-background/60">
+      <CardContent className="p-6">
+        <h3 className="text-lg font-semibold tracking-[-0.02em] text-foreground">{title}</h3>
+        <p className="mt-3 text-sm leading-7 text-muted-foreground">{description}</p>
+      </CardContent>
+    </Card>
+  )
+}
+
+function FactPill({
+  label,
+  value,
+}: {
+  label: string
+  value: string
+}) {
+  return (
+    <div className="rounded-2xl border border-border/60 bg-card/55 px-4 py-3">
+      <div className="text-[11px] uppercase tracking-[0.18em] text-orange-200/80">{label}</div>
+      <div className="mt-2 text-base font-medium text-foreground">{value}</div>
+    </div>
   )
 }
 
@@ -473,7 +718,22 @@ function PlanMetric({
         <Icon className="h-3.5 w-3.5" />
         {label}
       </div>
-      <div className="mt-2 text-base font-medium text-foreground">{value}</div>
+      <div className="mt-2 text-sm font-medium text-foreground">{value}</div>
+    </div>
+  )
+}
+
+function PlanSection({
+  label,
+  value,
+}: {
+  label: string
+  value: string
+}) {
+  return (
+    <div>
+      <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">{label}</div>
+      <p className="mt-2 text-sm leading-7 text-muted-foreground">{value}</p>
     </div>
   )
 }

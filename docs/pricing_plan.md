@@ -97,53 +97,73 @@ Runtime plan data is persisted in:
 
 Current source of truth: `lib/subscription-plans.ts`
 
+Frontend positioning:
+
+- pricing page should sell these plans as **runtime operating modes**
+- primary decision axis is:
+  - when to use the plan
+  - what runtime behavior it unlocks
+  - what happens to state when it stops
+  - whether the next session starts fresh, wakes recoverably, or stays live
+  - what workload it is meant for
+- credits are supporting information, not the main comparison surface
+- the detailed comparison section should compare:
+  - runtime behavior
+  - state after stop
+  - recovery model
+  - agents per launched bundle
+  - trigger mode
+
 ### Free
 
 - Price: `$0`
 - Included Credits: `0`
-- Active Bundles: `0`
 - Agents per Bundle: `0`
 - Trigger Mode: `none`
-- Concurrent Runs: `0`
-- Always-On Bundles: `0`
 - Runtime Access: `false`
 - Best for: browsing, previewing, claiming free agents
 
 ### Run
 
 - Price: `$5`
-- Included Credits: `30`
-- Active Bundles: `1`
+- Included Credits: `15`
 - Agents per Bundle: `3`
 - Trigger Mode: `manual`
-- Concurrent Runs: `1`
-- Always-On Bundles: `0`
 - Runtime Access: `true`
-- Best for: occasional manual runs
+- Best for: testing one workflow manually
+- Public positioning: bounded manual session with auto-stop after inactivity
+- Persistence framing: ephemeral session
+- State after stop: may be fully cleaned up rather than preserved as a warm recoverable environment
 
 ### Warm Standby
 
 - Price: `$19/mo`
-- Included Credits: `50`
-- Active Bundles: `3`
+- Included Credits: `10`
 - Agents per Bundle: `5`
 - Trigger Mode: `auto_wake`
-- Concurrent Runs: `3`
-- Always-On Bundles: `0`
 - Runtime Access: `true`
-- Best for: frequent Telegram-triggered workflows
+- Best for: repeat Telegram-triggered workflows
+- Public positioning: wake on message, auto-sleeps when idle, no self-hosting
+- Persistence framing: recoverable state
+- State after stop: should sleep/stop while preserving recoverable state for later wake or recovery
 
 ### Always On
 
 - Price: `$149/mo`
 - Included Credits: `100`
-- Active Bundles: `3`
 - Agents per Bundle: `8`
 - Trigger Mode: `always_active`
-- Concurrent Runs: `10`
-- Always-On Bundles: `10`
 - Runtime Access: `true`
 - Best for: one core workspace running full time
+- Public positioning: persistent workspace / long-running managed setup
+- Persistence framing: live persistence
+- State after stop: stopping is not the normal model; the workspace is meant to stay live
+
+Important nuance:
+
+- concurrency and occupancy limits may still exist in backend enforcement
+- but they are no longer a primary user-facing pricing comparison axis
+- Always On may still keep an internal `includedCredits` field, but the landing page should not sell it like a bigger credit pack
 
 ---
 
@@ -420,7 +440,7 @@ If another AI is evaluating whether the pricing model is good, it should underst
 Another reasoning model should focus on questions like:
 
 1. Is the separation between **free agent ownership** and **paid runtime access** intuitive?
-2. Is a one-time `$5` `Run` plan with `30` credits coherent, or should it be a metered pack instead of a plan?
+2. Is a one-time `$5` `Run` plan with `15` credits coherent, or should it be a metered pack instead of a plan?
 3. Should `completed + managed workspace` count against concurrency and active bundles?
 4. Are `Warm Standby` and `Always On` distinct enough without stronger runtime behavior differences?
 5. Should credits reset, roll over, or accumulate?
