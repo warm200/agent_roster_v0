@@ -59,6 +59,7 @@ export type BillingAnomaly = {
   entity: string
   createdAt: string
   message: string
+  acknowledgedAt?: string | null
 }
 
 export type BalanceMismatch = {

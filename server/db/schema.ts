@@ -66,6 +66,14 @@ export const launchAttemptResultEnum = pgEnum('launch_attempt_result', [
   'provider_accepted',
   'failed_before_accept',
 ])
+export const billingAlertTypeEnum = pgEnum('billing_alert_type', [
+  'stale_reserve',
+  'balance_mismatch',
+  'negative_balance',
+  'duplicate_idempotency',
+  'refund_chain_error',
+])
+export const billingAlertSeverityEnum = pgEnum('billing_alert_severity', ['info', 'warning', 'critical'])
 
 export const users = pgTable(
   'users',
@@ -347,6 +355,18 @@ export const launchAttempts = pgTable(
     runIdx: uniqueIndex('launch_attempts_run_idx').on(table.runId),
   }),
 )
+
+export const billingAlerts = pgTable('billing_alerts', {
+  id: text('id').primaryKey(),
+  alertType: billingAlertTypeEnum('alert_type').notNull(),
+  severity: billingAlertSeverityEnum('severity').notNull(),
+  entityType: text('entity_type').notNull(),
+  entityId: text('entity_id'),
+  message: text('message').notNull(),
+  metadataJson: jsonb('metadata_json').$type<Record<string, unknown>>().notNull(),
+  acknowledgedAt: timestamp('acknowledged_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+})
 
 export const orderItems = pgTable('order_items', {
   id: text('id').primaryKey(),

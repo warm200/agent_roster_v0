@@ -1,5 +1,6 @@
 'use client'
 
+import { startTransition, useState } from 'react'
 import {
   Area,
   AreaChart,
@@ -11,7 +12,9 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
+import { useRouter } from 'next/navigation'
 
+import { Button } from '@/components/ui/button'
 import {
   ChartContainer,
   ChartTooltip,
@@ -209,12 +212,51 @@ export function FunnelRuntimeSection({ snapshot }: { snapshot: AdminUsageSnapsho
 }
 
 export function BillingSection({ snapshot }: { snapshot: AdminUsageSnapshot }) {
+  const router = useRouter()
+  const [syncingAlerts, setSyncingAlerts] = useState(false)
+  const [pendingAckId, setPendingAckId] = useState<string | null>(null)
+
+  const handleSyncAlerts = async () => {
+    setSyncingAlerts(true)
+
+    try {
+      await fetch('/api/admin/usage/alerts/sync', {
+        method: 'POST',
+      })
+      startTransition(() => {
+        router.refresh()
+      })
+    } finally {
+      setSyncingAlerts(false)
+    }
+  }
+
+  const handleAcknowledge = async (alertId: string) => {
+    setPendingAckId(alertId)
+
+    try {
+      await fetch(`/api/admin/usage/alerts/${alertId}/ack`, {
+        method: 'POST',
+      })
+      startTransition(() => {
+        router.refresh()
+      })
+    } finally {
+      setPendingAckId(null)
+    }
+  }
+
   return (
     <section className="space-y-4" id="billing">
       <SectionHeading
         eyebrow="Billing Integrity"
         title="Ledger health before cost reporting"
         description="Reserves, commits, refunds, anomalies, and balance drift need to be trustworthy before pricing changes or support action."
+        action={
+          <Button disabled={syncingAlerts} onClick={() => void handleSyncAlerts()} variant="outline">
+            {syncingAlerts ? 'Syncing…' : 'Sync Alerts'}
+          </Button>
+        }
       />
       <div className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
         <Panel className="p-5">
@@ -242,12 +284,27 @@ export function BillingSection({ snapshot }: { snapshot: AdminUsageSnapshot }) {
                     <div className="flex flex-wrap items-center gap-2">
                       <SignalPill tone={anomaly.severity}>{anomaly.severity}</SignalPill>
                       <p className="font-medium text-white">{anomaly.type}</p>
+                      {anomaly.acknowledgedAt ? (
+                        <SignalPill tone="info">acknowledged</SignalPill>
+                      ) : null}
                     </div>
                     <p className="mt-2 text-sm text-zinc-400">{anomaly.message}</p>
                   </div>
                   <div className="text-right text-xs text-zinc-500">
                     <p>{anomaly.entity}</p>
                     <p className="mt-1">{formatDateTime(anomaly.createdAt)}</p>
+                    {anomaly.acknowledgedAt ? <p className="mt-1">Ack {formatDateTime(anomaly.acknowledgedAt)}</p> : null}
+                    {!anomaly.acknowledgedAt && anomaly.id !== 'no-anomalies' ? (
+                      <Button
+                        className="mt-3"
+                        disabled={pendingAckId === anomaly.id}
+                        onClick={() => void handleAcknowledge(anomaly.id)}
+                        size="sm"
+                        variant="outline"
+                      >
+                        {pendingAckId === anomaly.id ? 'Saving…' : 'Acknowledge'}
+                      </Button>
+                    ) : null}
                   </div>
                 </div>
               </div>

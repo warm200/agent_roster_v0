@@ -216,6 +216,12 @@ create table billing_alerts (
 );
 ```
 
+当前实现备注：
+
+* 已落地 `billing_alerts` schema + internal sync / ack API
+* dashboard 会优先读取持久化告警；没有表或没有数据时回退到推导口径
+* 部署后仍需执行 schema rollout（例如 `pnpm db:push`），再调用内部 sync 接口生成首批告警
+
 ---
 
 ## 6. 页面信息架构

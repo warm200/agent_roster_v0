@@ -9,6 +9,7 @@ import {
 
 import { createDb } from '../db'
 import {
+  billingAlerts,
   creditLedger,
   launchAttempts,
   orders,
@@ -17,6 +18,7 @@ import {
   userSubscriptions,
   users,
 } from '../db/schema'
+import { mapPersistedBillingAlerts } from './admin-billing-alerts.service'
 import {
   DAY_MS,
   STALE_RESERVE_MS,
@@ -75,12 +77,18 @@ export async function getAdminUsageSnapshot(rangeInput?: AdminDateRange): Promis
       db.select().from(creditLedger).orderBy(desc(creditLedger.createdAt)),
       db.select().from(runUsage).orderBy(desc(runUsage.createdAt)),
     ])
+    let billingAlertRows: Array<typeof billingAlerts.$inferSelect> | null = null
     let launchAttemptRows: Array<typeof launchAttempts.$inferSelect> | null = null
 
     try {
       launchAttemptRows = await db.select().from(launchAttempts).orderBy(desc(launchAttempts.attemptedAt))
     } catch {
       launchAttemptRows = null
+    }
+    try {
+      billingAlertRows = await db.select().from(billingAlerts).orderBy(desc(billingAlerts.createdAt))
+    } catch {
+      billingAlertRows = null
     }
 
     const liveSnapshot = structuredClone(fallbackSnapshot)
@@ -133,12 +141,30 @@ export async function getAdminUsageSnapshot(rangeInput?: AdminDateRange): Promis
       launchAttemptRows
         ? 'Overview, runtime, billing, user drilldown, and launch funnel attribution are live from the current Postgres schema.'
         : 'Overview, runtime, billing, and user drilldown are live from the current Postgres schema. Launch-attempt blocker attribution remains derived until `launch_attempts` exists in the database.'
-    liveSnapshot.alerts = buildAlerts({
+    const derivedAlerts = buildAlerts({
       failedPrevious24h: failedBeforeAcceptPrevious24h,
       failedToday: failedBeforeAcceptToday,
       mismatchCount: mismatchRows.length,
       stalePendingReserves,
     })
+    const persistedBillingAnomalies =
+      billingAlertRows && billingAlertRows.length > 0 ? mapPersistedBillingAlerts(billingAlertRows.slice(0, 50)) : null
+    const persistedOverviewAlerts =
+      persistedBillingAnomalies && persistedBillingAnomalies.length > 0
+        ? persistedBillingAnomalies
+            .filter((row) => !row.acknowledgedAt)
+            .slice(0, 3)
+            .map((row) => ({
+              detail: row.message,
+              id: row.id,
+              severity: row.severity,
+              title: row.type,
+            }))
+        : []
+    liveSnapshot.alerts =
+      persistedOverviewAlerts.length > 0
+        ? [...persistedOverviewAlerts, ...derivedAlerts.filter((row) => row.id === 'provider-failure-spike')]
+        : derivedAlerts
     liveSnapshot.overviewMetrics = [
       {
         key: 'active-paid-users',
@@ -303,11 +329,13 @@ export async function getAdminUsageSnapshot(rangeInput?: AdminDateRange): Promis
       peakConcurrentRuns: buildPeakConcurrentSeries(usageRows, now, windowConfig),
     }
     liveSnapshot.billingHealth = {
-      anomalies: buildBillingAnomalies({
-        ledgerRows,
-        mismatches: mismatchRows,
-        stalePendingReserves,
-      }).slice(0, 50),
+      anomalies:
+        persistedBillingAnomalies ??
+        buildBillingAnomalies({
+          ledgerRows,
+          mismatches: mismatchRows,
+          stalePendingReserves,
+        }).slice(0, 50),
       mismatches: mismatchRows,
       summary: [
         { label: 'Total grants', value: sum(ledgerRows.filter((row) => row.eventType === 'grant').map((row) => row.deltaCredits)), format: 'credits' },
