@@ -296,6 +296,32 @@ Not fully used yet for:
 - per-agent overage pricing
 - runtime burn accounting
 
+### 5.4 Runtime Lifecycle State
+
+Stored in `runtime_instances`:
+
+- provider sandbox / instance reference
+- runtime mode
+- persistence mode
+- provider lifecycle state
+- stop reason
+- preserved-state availability
+- archived / deleted / released timestamps
+- recoverable-until timestamp for recoverable runtimes
+
+Stored in `runtime_intervals`:
+
+- each started/stopped runtime window
+- interval close reason
+- multiple intervals across restart / recover flows
+
+Current reconciliation model:
+
+- pull-based, not webhook-based
+- provider state is reconciled on read and runtime actions
+- missing runtime records can be backfilled from provider state
+- a dedicated background maintenance sweep is still a separate follow-up slice
+
 ---
 
 ## 6. Stripe Behavior
@@ -334,7 +360,7 @@ Bundle detail currently shows:
 - current plan
 - current credits
 - agents-per-bundle limit
-- concurrent-run limit
+- runtime mode
 
 If blocked by plan:
 

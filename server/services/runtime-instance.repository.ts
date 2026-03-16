@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull } from 'drizzle-orm'
+import { and, desc, eq, inArray, isNull, lt, or } from 'drizzle-orm'
 
 import { runtimeInstanceSchema, runtimeIntervalSchema } from '@/lib/schemas'
 import type { RuntimeInstance, RuntimeInterval } from '@/lib/types'
@@ -138,6 +138,30 @@ export class RuntimeInstanceRepository {
       .returning()
 
     return updated ? toPublicRuntimeInstance(updated) : null
+  }
+
+  async listRuntimeInstancesNeedingReconcile(input: {
+    lastReconciledBefore: string
+    limit: number
+    states: RuntimeInstance['state'][]
+  }) {
+    const db = getDb()
+    const rows = await db
+      .select()
+      .from(runtimeInstances)
+      .where(
+        and(
+          inArray(runtimeInstances.state, input.states),
+          or(
+            isNull(runtimeInstances.lastReconciledAt),
+            lt(runtimeInstances.lastReconciledAt, new Date(input.lastReconciledBefore)),
+          ),
+        ),
+      )
+      .orderBy(desc(runtimeInstances.updatedAt))
+      .limit(input.limit)
+
+    return rows.map(toPublicRuntimeInstance)
   }
 
   async createRuntimeInterval(input: RuntimeInterval) {

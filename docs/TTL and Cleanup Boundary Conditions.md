@@ -107,6 +107,7 @@ Current MVP Backend Notes:
   reconciliation_model:
     - lifecycle is pull-based for now
     - when run detail, run list, stop, or restart touches a run, backend re-reads provider runtime state and reconciles local DB
+    - a maintenance service can also batch-reconcile stale runtime instances without webhooks
     - webhook-driven lifecycle reconciliation is intentionally deferred
   runtime_instance_states:
     - provisioning
