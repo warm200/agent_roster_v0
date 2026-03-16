@@ -184,6 +184,12 @@ create table launch_attempts (
 * 有多少人是被拦，不是没意愿
 * 是哪种 blocker 最伤转化
 
+当前实现备注：
+
+* 应用代码已开始写入 `launch_attempts`，admin dashboard 也会优先读取它
+* 如果现网数据库还没建这张表，产品主流程不会被阻断；admin 会自动回退到推导口径
+* 部署后仍需执行 schema rollout（例如 `pnpm db:push`）
+
 #### `billing_alerts`
 
 作用：提前把异常落表，而不是每次进 dashboard 临时计算。

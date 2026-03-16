@@ -10,6 +10,7 @@ import {
 import { createDb } from '../db'
 import {
   creditLedger,
+  launchAttempts,
   orders,
   runChannelConfigs,
   runUsage,
@@ -34,6 +35,18 @@ import {
   startOfUtcDay,
   sum,
 } from './admin-usage.helpers'
+
+function getAdminBlockerTone(reason: string): AdminSignal {
+  if (reason === 'telegram_not_ready') {
+    return 'critical'
+  }
+
+  if (reason === 'credits_exhausted' || reason === 'no_runtime_access') {
+    return 'warning'
+  }
+
+  return 'info'
+}
 
 export async function getAdminUsageSnapshot(rangeInput?: AdminDateRange): Promise<AdminUsageSnapshot> {
   const connectionString = resolvePostgresConnectionString()
@@ -62,15 +75,42 @@ export async function getAdminUsageSnapshot(rangeInput?: AdminDateRange): Promis
       db.select().from(creditLedger).orderBy(desc(creditLedger.createdAt)),
       db.select().from(runUsage).orderBy(desc(runUsage.createdAt)),
     ])
+    let launchAttemptRows: Array<typeof launchAttempts.$inferSelect> | null = null
+
+    try {
+      launchAttemptRows = await db.select().from(launchAttempts).orderBy(desc(launchAttempts.attemptedAt))
+    } catch {
+      launchAttemptRows = null
+    }
 
     const liveSnapshot = structuredClone(fallbackSnapshot)
     const paidOrdersInWindow = orderRows.filter((row) => row.status === 'paid' && isWithinWindow(row.createdAt, now, windowConfig.windowMs))
     const usageInWindow = usageRows.filter((row) => isWithinWindow(row.createdAt, now, windowConfig.windowMs))
+    const attemptsInWindow = (launchAttemptRows ?? []).filter((row) => isWithinWindow(row.attemptedAt, now, windowConfig.windowMs))
+    const attemptsToday = (launchAttemptRows ?? []).filter((row) => row.attemptedAt >= todayRowsStart)
+    const failedBeforeAcceptToday = launchAttemptRows
+      ? attemptsToday.filter((row) => row.result === 'failed_before_accept').length
+      : usageRows.filter((row) => row.createdAt >= todayRowsStart && row.statusSnapshot === 'failed' && !row.providerAcceptedAt).length
+    const failedBeforeAcceptPrevious24h = launchAttemptRows
+      ? launchAttemptRows.filter(
+          (row) =>
+            row.attemptedAt >= previous24hStart &&
+            row.attemptedAt < todayRowsStart &&
+            row.result === 'failed_before_accept',
+        ).length
+      : usageRows.filter((row) => row.createdAt >= previous24hStart && row.createdAt < todayRowsStart && row.statusSnapshot === 'failed' && !row.providerAcceptedAt).length
     const usageToday = usageRows.filter((row) => row.createdAt >= todayRowsStart)
-    const failedToday = usageRows.filter((row) => row.createdAt >= todayRowsStart && row.statusSnapshot === 'failed' && !row.providerAcceptedAt).length
-    const failedPrevious24h = usageRows.filter((row) => row.createdAt >= previous24hStart && row.createdAt < todayRowsStart && row.statusSnapshot === 'failed' && !row.providerAcceptedAt).length
-    const providerAcceptedInWindow = usageInWindow.filter((row) => row.providerAcceptedAt).length
-    const providerAcceptedOrderIds = new Set(usageInWindow.filter((row) => row.providerAcceptedAt).map((row) => row.orderId))
+    const providerAcceptedInWindow = launchAttemptRows
+      ? attemptsInWindow.filter((row) => row.result === 'provider_accepted').length
+      : usageInWindow.filter((row) => row.providerAcceptedAt).length
+    const providerAcceptedOrderIds = new Set(
+      launchAttemptRows
+        ? attemptsInWindow.filter((row) => row.result === 'provider_accepted').map((row) => row.orderId)
+        : usageInWindow.filter((row) => row.providerAcceptedAt).map((row) => row.orderId),
+    )
+    const blockedAttemptsToday = launchAttemptRows
+      ? attemptsToday.filter((row) => row.result === 'blocked').length
+      : failedBeforeAcceptToday
     const stalePendingReserves = ledgerRows.filter(
       (row) => row.eventType === 'reserve' && row.status === 'pending' && now.getTime() - row.createdAt.getTime() > STALE_RESERVE_MS,
     )
@@ -90,10 +130,12 @@ export async function getAdminUsageSnapshot(rangeInput?: AdminDateRange): Promis
     liveSnapshot.selectedRange = windowConfig.range
     liveSnapshot.windowLabel = windowConfig.label
     liveSnapshot.implementationNote =
-      'Overview, runtime, billing, and user drilldown are live from the current Postgres schema. Launch-attempt blocker attribution remains derived until `launch_attempts` exists.'
+      launchAttemptRows
+        ? 'Overview, runtime, billing, user drilldown, and launch funnel attribution are live from the current Postgres schema.'
+        : 'Overview, runtime, billing, and user drilldown are live from the current Postgres schema. Launch-attempt blocker attribution remains derived until `launch_attempts` exists in the database.'
     liveSnapshot.alerts = buildAlerts({
-      failedPrevious24h,
-      failedToday,
+      failedPrevious24h: failedBeforeAcceptPrevious24h,
+      failedToday: failedBeforeAcceptToday,
       mismatchCount: mismatchRows.length,
       stalePendingReserves,
     })
@@ -119,20 +161,27 @@ export async function getAdminUsageSnapshot(rangeInput?: AdminDateRange): Promis
       {
         key: 'launch-success-rate',
         label: 'Launch Success Rate',
-        value: usageInWindow.length > 0 ? providerAcceptedInWindow / usageInWindow.length : 0,
+        value:
+          (launchAttemptRows ? attemptsInWindow.length : usageInWindow.length) > 0
+            ? providerAcceptedInWindow / (launchAttemptRows ? attemptsInWindow.length : usageInWindow.length)
+            : 0,
         format: 'percent',
-        delta: `${providerAcceptedInWindow}/${usageInWindow.length || 0} attempts`,
-        detail: 'Provider accepted divided by observed launch attempts from `run_usage`.',
-        tone: failedToday > failedPrevious24h ? 'warning' : 'stable',
+        delta: `${providerAcceptedInWindow}/${launchAttemptRows ? attemptsInWindow.length : usageInWindow.length || 0} attempts`,
+        detail: launchAttemptRows
+          ? 'Provider accepted divided by observed launch attempts from `launch_attempts`.'
+          : 'Provider accepted divided by observed launch attempts from `run_usage`.',
+        tone: failedBeforeAcceptToday > failedBeforeAcceptPrevious24h ? 'warning' : 'stable',
       },
       {
         key: 'blocked-launches-today',
         label: 'Blocked Launches Today',
-        value: failedToday,
+        value: blockedAttemptsToday,
         format: 'count',
-        delta: 'Derived from failed launch attempts before provider accept',
-        detail: 'Current schema fallback until `launch_attempts` lands.',
-        tone: failedToday > 0 ? 'warning' : 'stable',
+        delta: launchAttemptRows ? 'Direct from launch_attempts' : 'Derived from failed launch attempts before provider accept',
+        detail: launchAttemptRows
+          ? 'Blocked precheck launch attempts recorded today.'
+          : 'Current schema fallback until `launch_attempts` lands.',
+        tone: blockedAttemptsToday > 0 ? 'warning' : 'stable',
       },
       {
         key: 'credits-committed-today',
@@ -163,37 +212,62 @@ export async function getAdminUsageSnapshot(rangeInput?: AdminDateRange): Promis
         step: 'Pairing completed',
         count: paidOrdersInWindow.filter((order) => channelRows.find((row) => row.orderId === order.id)?.recipientBindingStatus === 'paired').length,
       },
-      { step: 'Launch attempted', count: new Set(usageInWindow.map((row) => row.orderId)).size },
+      {
+        step: 'Launch attempted',
+        count: launchAttemptRows ? new Set(attemptsInWindow.map((row) => row.orderId)).size : new Set(usageInWindow.map((row) => row.orderId)).size,
+      },
       {
         step: 'Launch admitted',
-        count: new Set(usageInWindow.filter((row) => row.statusSnapshot !== 'failed' || row.providerAcceptedAt).map((row) => row.orderId)).size,
+        count: launchAttemptRows
+          ? new Set(
+              attemptsInWindow
+                .filter((row) => row.result === 'reserved' || row.result === 'provider_accepted' || row.result === 'failed_before_accept')
+                .map((row) => row.orderId),
+            ).size
+          : new Set(usageInWindow.filter((row) => row.statusSnapshot !== 'failed' || row.providerAcceptedAt).map((row) => row.orderId)).size,
       },
-      { step: 'Provider accepted', count: new Set(usageInWindow.filter((row) => row.providerAcceptedAt).map((row) => row.orderId)).size },
+      { step: 'Provider accepted', count: providerAcceptedOrderIds.size },
       { step: 'Run completed', count: new Set(usageInWindow.filter((row) => row.completedAt).map((row) => row.orderId)).size },
     ]
-    const blockerRows: Array<{ reason: string; count: number; tone: AdminSignal }> = [
-      {
-        reason: 'telegram_not_ready',
-        count: paidOrdersInWindow.filter((order) => {
-          const channel = channelRows.find((row) => row.orderId === order.id)
-          return !channel || channel.tokenStatus !== 'validated' || channel.recipientBindingStatus !== 'paired'
-        }).length,
-        tone: 'critical',
-      },
-      {
-        reason: 'credits_exhausted',
-        count: subscriptionRows.filter((row) => row.status === 'active' && row.remainingCredits <= 0).length,
-        tone: 'warning',
-      },
-      {
-        reason: 'no_runtime_access',
-        count: paidOrdersInWindow.filter((order) => !subscriptionRows.some((row) => row.userId === order.userId && row.status === 'active' && row.planId !== 'free')).length,
-        tone: 'warning',
-      },
-      { reason: 'bundle_too_large', count: 0, tone: 'info' },
-      { reason: 'concurrent_limit', count: 0, tone: 'info' },
-      { reason: 'active_bundle_limit', count: 0, tone: 'info' },
-    ]
+    const blockerRows: Array<{ reason: string; count: number; tone: AdminSignal }> = launchAttemptRows
+      ? Array.from(
+          attemptsInWindow
+            .filter((row) => row.result === 'blocked')
+            .reduce((map, row) => {
+              const reason = row.blockerReason ?? 'unknown'
+              map.set(reason, (map.get(reason) ?? 0) + 1)
+              return map
+            }, new Map<string, number>()),
+        )
+          .map(([reason, count]) => ({
+            reason,
+            count,
+            tone: getAdminBlockerTone(reason),
+          }))
+          .sort((left, right) => right.count - left.count)
+      : [
+          {
+            reason: 'telegram_not_ready',
+            count: paidOrdersInWindow.filter((order) => {
+              const channel = channelRows.find((row) => row.orderId === order.id)
+              return !channel || channel.tokenStatus !== 'validated' || channel.recipientBindingStatus !== 'paired'
+            }).length,
+            tone: 'critical',
+          },
+          {
+            reason: 'credits_exhausted',
+            count: subscriptionRows.filter((row) => row.status === 'active' && row.remainingCredits <= 0).length,
+            tone: 'warning',
+          },
+          {
+            reason: 'no_runtime_access',
+            count: paidOrdersInWindow.filter((order) => !subscriptionRows.some((row) => row.userId === order.userId && row.status === 'active' && row.planId !== 'free')).length,
+            tone: 'warning',
+          },
+          { reason: 'bundle_too_large', count: 0, tone: 'info' },
+          { reason: 'concurrent_limit', count: 0, tone: 'info' },
+          { reason: 'active_bundle_limit', count: 0, tone: 'info' },
+        ]
     const totalBlocked = sum(blockerRows.map((row) => row.count))
     liveSnapshot.blockedLaunches = blockerRows.map((row) => ({
       ...row,

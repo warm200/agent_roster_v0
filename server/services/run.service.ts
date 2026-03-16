@@ -409,16 +409,55 @@ export class RunService {
     const launchPolicy = await subscriptionService.getLaunchPolicy(userId, order)
 
     if (!launchPolicy.allowed) {
+      await this.createLaunchAttemptSafe({
+        agentCountSnapshot: order.items.length,
+        attemptedAt: new Date(),
+        blockerReason: toLaunchAttemptBlockerReason(launchPolicy.blockers[0] ?? 'unknown'),
+        id: crypto.randomUUID(),
+        metadataJson: {
+          blockers: launchPolicy.blockers,
+          source: 'launch_policy',
+        },
+        orderId,
+        planCodeSnapshot: launchPolicy.plan.id,
+        remainingCreditsSnapshot: launchPolicy.subscription?.remainingCredits ?? null,
+        result: 'blocked',
+        runId: null,
+        userId,
+      })
       throw new HttpError(409, launchPolicy.blockers.join(' '))
     }
 
     const providerApiKeys = runServiceDeps.getOrderProviderApiKeysForUser
       ? await runServiceDeps.getOrderProviderApiKeysForUser({ orderId, userId })
       : {}
-    ensureLaunchable(order)
+    try {
+      ensureLaunchable(order)
+    } catch (error) {
+      if (error instanceof HttpError) {
+        await this.createLaunchAttemptSafe({
+          agentCountSnapshot: order.items.length,
+          attemptedAt: new Date(),
+          blockerReason: toLaunchAttemptBlockerReason(error.message),
+          id: crypto.randomUUID(),
+          metadataJson: {
+            error: error.message,
+            source: 'ensure_launchable',
+          },
+          orderId,
+          planCodeSnapshot: launchPolicy.plan.id,
+          remainingCreditsSnapshot: launchPolicy.subscription?.remainingCredits ?? null,
+          result: 'blocked',
+          runId: null,
+          userId,
+        })
+      }
+      throw error
+    }
 
     const provider = runServiceDeps.getRunProvider()
     const runId = `run-${Date.now()}`
+    const launchAttemptId = `launch-attempt-${runId}`
     const pendingRun = buildPendingRun(order, runId, provider.name)
     const lifecyclePolicy = getRuntimeLifecyclePolicy(launchPolicy.plan)
     await subscriptionService.reserveLaunchCredit?.({
@@ -426,6 +465,21 @@ export class RunService {
       plan: launchPolicy.plan,
       runId,
       subscriptionId: launchPolicy.subscription?.id ?? null,
+      userId,
+    })
+    await this.createLaunchAttemptSafe({
+      agentCountSnapshot: order.items.length,
+      attemptedAt: new Date(),
+      blockerReason: null,
+      id: launchAttemptId,
+      metadataJson: {
+        source: 'create_run',
+      },
+      orderId,
+      planCodeSnapshot: launchPolicy.plan.id,
+      remainingCreditsSnapshot: launchPolicy.subscription?.remainingCredits ?? null,
+      result: 'reserved',
+      runId,
       userId,
     })
 
@@ -447,6 +501,14 @@ export class RunService {
         reasonCode: 'run_row_create_failed',
         runId,
         userId,
+      })
+      await this.updateLaunchAttemptSafe(launchAttemptId, {
+        blockerReason: 'run_row_create_failed',
+        metadataJson: {
+          message: error instanceof Error ? error.message : 'run row create failed',
+          source: 'create_provisioning_run',
+        },
+        result: 'failed_before_accept',
       })
       throw error
     }
@@ -504,6 +566,14 @@ export class RunService {
               ? providerRun.completedAt ?? nowIso()
               : null,
         })
+        await this.updateLaunchAttemptSafe(launchAttemptId, {
+          blockerReason: null,
+          metadataJson: {
+            providerStatus: providerRun.status,
+            source: 'provider_accept',
+          },
+          result: 'provider_accepted',
+        })
       })
       .catch(async (error) => {
         const failedAt = new Date().toISOString()
@@ -532,6 +602,15 @@ export class RunService {
           terminationReason: getProvisioningFailureReason(launchPolicy.plan.id),
           updatedAt: failedAt,
           workspaceReleasedAt: failedAt,
+        })
+        await this.updateLaunchAttemptSafe(launchAttemptId, {
+          blockerReason:
+            message.toLowerCase().includes('timeout') ? 'provisioning_timeout' : 'provider_not_accepted',
+          metadataJson: {
+            message,
+            source: 'provider_reject',
+          },
+          result: 'failed_before_accept',
         })
       })
 
@@ -786,6 +865,14 @@ export class RunService {
         updatedAt: nowIso(),
         workspaceReleasedAt: null,
       })
+      await this.updateLaunchAttemptSafe(`launch-attempt-${run.id}`, {
+        blockerReason: null,
+        metadataJson: {
+          providerStatus: restarted.status,
+          source: 'restart_provider_accept',
+        },
+        result: 'provider_accepted',
+      })
       return (await this.repository.updateRun(run.id, restarted)) ?? restarted
     }
 
@@ -941,6 +1028,14 @@ export class RunService {
           statusSnapshot: persistedRun.status,
           updatedAt: nowIso(),
           workspaceReleasedAt: null,
+        })
+        await this.updateLaunchAttemptSafe(`launch-attempt-${run.id}`, {
+          blockerReason: null,
+          metadataJson: {
+            providerStatus: persistedRun.status,
+            source: 'sync_runtime_accept',
+          },
+          result: 'provider_accepted',
         })
       }
       if (
@@ -1101,6 +1196,14 @@ export class RunService {
         updatedAt: nowIso(),
         workspaceReleasedAt: null,
       })
+      await this.updateLaunchAttemptSafe(`launch-attempt-${run.id}`, {
+        blockerReason: null,
+        metadataJson: {
+          providerStatus: persistedRun.status,
+          source: 'sync_provider_accept',
+        },
+        result: 'provider_accepted',
+      })
     }
     if (
       persistedRuntime &&
@@ -1176,6 +1279,22 @@ export class RunService {
   ) {
     try {
       return await this.runtimeRepository.closeRuntimeInterval(runtimeInstanceId, endedAt, closeReason)
+    } catch {
+      return null
+    }
+  }
+
+  private async createLaunchAttemptSafe(input: typeof launchAttempts.$inferInsert) {
+    try {
+      return await this.launchAttemptRepository.createLaunchAttempt(input)
+    } catch {
+      return null
+    }
+  }
+
+  private async updateLaunchAttemptSafe(id: string, input: Partial<typeof launchAttempts.$inferInsert>) {
+    try {
+      return await this.launchAttemptRepository.updateLaunchAttempt(id, input)
     } catch {
       return null
     }

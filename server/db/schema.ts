@@ -60,6 +60,12 @@ export const creditLedgerUnitTypeEnum = pgEnum('credit_ledger_unit_type', [
   'fair_use_adjustment',
 ])
 export const creditLedgerStatusEnum = pgEnum('credit_ledger_status', ['pending', 'committed', 'reversed'])
+export const launchAttemptResultEnum = pgEnum('launch_attempt_result', [
+  'blocked',
+  'reserved',
+  'provider_accepted',
+  'failed_before_accept',
+])
 
 export const users = pgTable(
   'users',
@@ -315,6 +321,30 @@ export const runUsage = pgTable(
   },
   (table) => ({
     runIdx: uniqueIndex('run_usage_run_idx').on(table.runId),
+  }),
+)
+
+export const launchAttempts = pgTable(
+  'launch_attempts',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    orderId: text('order_id')
+      .notNull()
+      .references(() => orders.id, { onDelete: 'cascade' }),
+    runId: text('run_id').references(() => runs.id, { onDelete: 'set null' }),
+    planCodeSnapshot: text('plan_code_snapshot').notNull(),
+    agentCountSnapshot: integer('agent_count_snapshot').notNull(),
+    remainingCreditsSnapshot: integer('remaining_credits_snapshot'),
+    attemptedAt: timestamp('attempted_at', { withTimezone: true }).notNull().defaultNow(),
+    result: launchAttemptResultEnum('result').notNull(),
+    blockerReason: text('blocker_reason'),
+    metadataJson: jsonb('metadata_json').$type<Record<string, unknown>>().notNull(),
+  },
+  (table) => ({
+    runIdx: uniqueIndex('launch_attempts_run_idx').on(table.runId),
   }),
 )
 
