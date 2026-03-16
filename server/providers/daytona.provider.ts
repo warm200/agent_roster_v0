@@ -90,12 +90,14 @@ type PreviewLinkLike = {
 }
 
 type DaytonaSandboxLike = Pick<Sandbox, 'createdAt' | 'errorReason' | 'id' | 'state'> & {
+  archive?: () => Promise<void>
   delete?: (timeout?: number) => Promise<void>
   fs: DaytonaFsLike
   process: DaytonaProcessLike
   getPreviewLink?: (port: number) => Promise<PreviewLinkLike>
   getSignedPreviewUrl?: (port: number, expiresInSeconds?: number) => Promise<PreviewLinkLike>
   getUserHomeDir?: () => Promise<string | undefined>
+  recover?: (timeout?: number) => Promise<void>
   start?: (timeout?: number) => Promise<void>
   stop?: (timeout?: number) => Promise<void>
 }
@@ -1231,6 +1233,28 @@ export class DaytonaRunProvider implements RunProvider {
       : null
   }
 
+  async archiveRuntimeInstance(runId: string): Promise<RuntimeProviderInstance | null> {
+    const sandbox = await this.getSandbox(runId)
+    if (!sandbox?.archive) {
+      return null
+    }
+    await sandbox.archive()
+    return this.getRuntimeInstance(runId)
+  }
+
+  async recoverRuntimeInstance(runId: string): Promise<RuntimeProviderInstance | null> {
+    const sandbox = await this.getSandbox(runId)
+    if (!sandbox) {
+      return null
+    }
+    if (sandbox.recover) {
+      await sandbox.recover(60)
+    } else if (sandbox.start) {
+      await sandbox.start(60)
+    }
+    return this.getRuntimeInstance(runId)
+  }
+
   async deleteRuntimeInstance(runId: string): Promise<void> {
     const sandbox = await this.getSandbox(runId)
     if (!sandbox) {
@@ -1247,6 +1271,13 @@ export class DaytonaRunProvider implements RunProvider {
     lifecyclePolicy: RuntimeLifecyclePolicy,
     runtimeConfig?: RunProviderRuntimeConfig,
   ): Promise<RuntimeProviderInstance | null> {
+    const sandbox = await this.getSandbox(runId)
+    if (!sandbox) {
+      return null
+    }
+    if ((sandbox.state === SandboxState.ARCHIVED || sandbox.state === SandboxState.ARCHIVING) && sandbox.recover) {
+      await sandbox.recover(60)
+    }
     const runtime = await this.restartRun(runId, order, undefined, runtimeConfig)
     if (!runtime) {
       return null
@@ -1310,8 +1341,8 @@ export class DaytonaRunProvider implements RunProvider {
     const envVars = await readOptionalEnvFile(this.envSandboxPath)
     const sandbox = await this.client.create(
       {
-        autoArchiveInterval: lifecyclePolicy.autoArchiveMinutes ?? 0,
-        autoDeleteInterval: lifecyclePolicy.autoDeleteMinutes ?? 0,
+        autoArchiveInterval: lifecyclePolicy.autoArchiveMinutes ?? undefined,
+        autoDeleteInterval: lifecyclePolicy.autoDeleteMinutes ?? -1,
         autoStopInterval: lifecyclePolicy.autoStopMinutes ?? 0,
         envVars,
         ephemeral: lifecyclePolicy.persistenceMode === 'ephemeral',
@@ -1534,7 +1565,11 @@ export class DaytonaRunProvider implements RunProvider {
       return null
     }
 
-    if (sandbox.start) {
+    if (
+      sandbox.start &&
+      sandbox.state !== SandboxState.ARCHIVED &&
+      sandbox.state !== SandboxState.ARCHIVING
+    ) {
       await sandbox.start(60)
     }
 

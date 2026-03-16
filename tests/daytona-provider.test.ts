@@ -8,6 +8,7 @@ import { afterEach, test } from 'node:test'
 import type { Order } from '@/lib/types'
 import { setLocalAgentsRootForTesting } from '@/server/services/local-agent-files'
 import { DaytonaRunProvider } from '@/server/providers/daytona.provider'
+import { getRuntimeLifecyclePolicy } from '@/server/services/runtime-policy'
 import { DaytonaNotFoundError, SandboxState } from '@daytonaio/sdk'
 
 const TEST_TELEGRAM_SECRET_SEED = 'test-telegram-secret-seed'
@@ -1247,4 +1248,107 @@ test('daytona run provider restarts the same stopped sandbox in place', async ()
     processCommands.some((command) => command.includes('nohup /tmp/agent-roster/bootstrap-openclaw.sh')),
     true,
   )
+})
+
+test('daytona run provider recovers archived sandboxes before restart', async () => {
+  const runId = 'run-recover-archived-sandbox'
+  const createdAt = new Date().toISOString()
+  let recovered = false
+  const files: Record<string, string> = {
+    '/tmp/agent-roster/manifest.json': JSON.stringify({
+      agentTitles: ['Inbox Triage Agent'],
+      channelConfigId: 'channel-test-1',
+      combinedRiskLevel: 'low',
+      createdAt,
+      networkEnabled: true,
+      orderId: 'order-test-1',
+      persistenceMode: 'recoverable',
+      planId: 'warm_standby',
+      providerInstanceRef: runId,
+      recipientExternalId: '77',
+      runId,
+      runtimeMode: 'wakeable_recoverable',
+      userId: 'user-test-1',
+      usesTools: true,
+    }),
+    '/tmp/agent-roster/status.json': JSON.stringify({
+      completedAt: createdAt,
+      resultSummary: 'Managed runtime is archived.',
+      startedAt: createdAt,
+      status: 'failed',
+      updatedAt: createdAt,
+    }),
+    '/tmp/agent-roster/result.json': JSON.stringify({
+      artifacts: [],
+      summary: 'Managed runtime is archived.',
+    }),
+    '/tmp/agent-roster/bootstrap-openclaw.sh': '#!/usr/bin/env bash\necho recover\n',
+  }
+
+  const provider = new DaytonaRunProvider({
+    apiKey: 'daytona-test',
+    clientFactory: () => ({
+      async create() {
+        throw new Error('not used')
+      },
+      async get(id) {
+        assert.equal(id, runId)
+        return {
+          createdAt,
+          fs: {
+            async downloadFile(filePath: string) {
+              const value = files[filePath]
+              if (value === undefined) {
+                const error = new Error(`404 ${filePath}`)
+                ;(error as Error & { status: number }).status = 404
+                throw error
+              }
+
+              return Buffer.from(value, 'utf8')
+            },
+            async uploadFile(file: Buffer, filePath: string) {
+              files[filePath] = file.toString('utf8')
+            },
+          },
+          id,
+          process: {
+            async executeCommand() {
+              return { exitCode: 0, result: '' }
+            },
+          },
+          recover: async () => {
+            recovered = true
+          },
+          start: async () => {
+            throw new Error('start should not be used for archived recover')
+          },
+          state: SandboxState.ARCHIVED,
+        }
+      },
+    }),
+  })
+
+  const restarted = await provider.restartRuntimeInstance?.(
+    runId,
+    order,
+    getRuntimeLifecyclePolicy({
+      id: 'warm_standby',
+      name: 'Warm Standby',
+      priceLabel: '$19/mo',
+      priceCents: 1900,
+      billingInterval: 'month',
+      includedCredits: 10,
+      activeBundles: 3,
+      agentsPerBundle: 5,
+      triggerMode: 'auto_wake',
+      concurrentRuns: 3,
+      alwaysOnBundles: 0,
+      runtimeAccess: true,
+      planIncludes: [],
+      suitFor: '',
+    }),
+  )
+
+  assert.ok(restarted)
+  assert.equal(recovered, true)
 })

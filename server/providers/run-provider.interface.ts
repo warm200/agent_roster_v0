@@ -54,6 +54,8 @@ export interface RunProvider {
   readonly name: string
   createRuntimeInstance?(input: CreateRuntimeInstanceInput): Promise<RuntimeProviderInstance>
   getRuntimeInstance?(runId: string): Promise<RuntimeProviderInstance | null>
+  archiveRuntimeInstance?(runId: string): Promise<RuntimeProviderInstance | null>
+  recoverRuntimeInstance?(runId: string): Promise<RuntimeProviderInstance | null>
   stopRuntimeInstance?(
     runId: string,
     reason?: RunTerminationReason,

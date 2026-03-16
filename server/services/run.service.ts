@@ -1,4 +1,5 @@
 import { riskProfileSchema, runLogSchema, runResultSchema } from '@/lib/schemas'
+import { getSubscriptionPlan } from '@/lib/subscription-plans'
 import type {
   AgentVersion,
   Order,
@@ -270,6 +271,21 @@ function buildRunPatchFromRuntime(
     status,
     updatedAt: instance.lastReconciledAt ?? nowIso(),
   }
+}
+
+function shouldArchiveRecoverableRuntime(runtime: RuntimeInstance) {
+  if (runtime.persistenceMode !== 'recoverable' || runtime.state !== 'stopped' || !runtime.stoppedAt) {
+    return false
+  }
+  const policy = getRuntimeLifecyclePolicy(getSubscriptionPlan(runtime.planId))
+  if (policy.autoArchiveMinutes == null) {
+    return false
+  }
+  const stoppedAtMs = new Date(runtime.stoppedAt).getTime()
+  if (Number.isNaN(stoppedAtMs)) {
+    return false
+  }
+  return Date.now() - stoppedAtMs >= policy.autoArchiveMinutes * 60 * 1000
 }
 
 export class RunService {
@@ -756,7 +772,20 @@ export class RunService {
         : null
 
       if (persistedRuntime) {
-        if (runtimeInstance.state === 'running') {
+        if (shouldArchiveRecoverableRuntime(persistedRuntime) && provider.archiveRuntimeInstance) {
+          const archived = await provider.archiveRuntimeInstance(run.id)
+          if (archived) {
+            persistedRuntime = await this.updateRuntimeRecordSafe(run.id, {
+              ...archived,
+              archivedAt: archived.archivedAt ?? nowIso(),
+              lastReconciledAt: archived.lastReconciledAt ?? nowIso(),
+              preservedStateAvailable: true,
+              state: 'archived',
+            })
+          }
+        }
+
+        if (persistedRuntime && runtimeInstance.state === 'running') {
           const openInterval = await this.findOpenRuntimeIntervalSafe(persistedRuntime.id)
           if (!openInterval) {
             await this.createRuntimeIntervalSafe({
@@ -774,10 +803,11 @@ export class RunService {
         }
 
         if (
-          runtimeInstance.state === 'stopped' ||
-          runtimeInstance.state === 'archived' ||
-          runtimeInstance.state === 'deleted' ||
-          runtimeInstance.state === 'failed'
+          persistedRuntime &&
+          (runtimeInstance.state === 'stopped' ||
+            runtimeInstance.state === 'archived' ||
+            runtimeInstance.state === 'deleted' ||
+            runtimeInstance.state === 'failed')
         ) {
           await this.closeRuntimeIntervalSafe(
             persistedRuntime.id,
@@ -787,6 +817,7 @@ export class RunService {
         }
 
         if (
+          persistedRuntime &&
           runtimeInstance.state === 'stopped' &&
           runtimeInstance.persistenceMode === 'ephemeral' &&
           provider.deleteRuntimeInstance
