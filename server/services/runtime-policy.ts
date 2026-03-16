@@ -127,6 +127,24 @@ export function getRuntimeLifecyclePolicy(plan: SubscriptionPlan): RuntimeLifecy
   }
 }
 
+export function getRecoverableUntilAt(plan: SubscriptionPlan, stoppedAt: string | null) {
+  if (!stoppedAt) {
+    return null
+  }
+
+  const lifecyclePolicy = getRuntimeLifecyclePolicy(plan)
+  if (lifecyclePolicy.persistenceMode !== 'recoverable' || lifecyclePolicy.autoArchiveMinutes == null) {
+    return null
+  }
+
+  const stoppedAtMs = new Date(stoppedAt).getTime()
+  if (Number.isNaN(stoppedAtMs)) {
+    return null
+  }
+
+  return new Date(stoppedAtMs + lifecyclePolicy.autoArchiveMinutes * 60 * 1000).toISOString()
+}
+
 export function planConsumesLaunchCredits(planId: SubscriptionPlanId) {
   return planId === 'run' || planId === 'warm_standby'
 }

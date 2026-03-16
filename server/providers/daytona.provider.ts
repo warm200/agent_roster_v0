@@ -15,10 +15,11 @@ import type {
   RuntimeInstanceState,
   SubscriptionPlanId,
 } from '@/lib/types'
+import { getSubscriptionPlan } from '@/lib/subscription-plans'
 
 import { HttpError, logServerError } from '../lib/http'
 import { loadRuntimeAssetsFromSnapshot } from '../services/local-agent-files'
-import type { RuntimeLifecyclePolicy } from '../services/runtime-policy'
+import { getRecoverableUntilAt, type RuntimeLifecyclePolicy } from '../services/runtime-policy'
 import { buildOpenClawTelegramChannelConfig } from '../services/telegram.service'
 import type {
   CreateRuntimeInstanceInput,
@@ -369,7 +370,10 @@ function buildRuntimeInstanceFromManifest(
     preservedStateAvailable: manifest.persistenceMode !== 'ephemeral' && runtimeState !== 'deleted',
     providerInstanceRef: manifest.providerInstanceRef,
     providerName: 'daytona',
-    recoverableUntilAt: null,
+    recoverableUntilAt: getRecoverableUntilAt(
+      getSubscriptionPlan(manifest.planId),
+      runtimeState === 'stopped' ? stoppedAt : null,
+    ),
     runId: manifest.runId,
     runtimeMode: manifest.runtimeMode,
     startedAt: status.startedAt,

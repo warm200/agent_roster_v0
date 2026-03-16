@@ -103,6 +103,34 @@ Capacity Release Rule:
     - run must stop counting toward active bundle limits
     - completed runs with released workspace must not continue to consume runtime occupancy
 
+Current MVP Backend Notes:
+  reconciliation_model:
+    - lifecycle is pull-based for now
+    - when run detail, run list, stop, or restart touches a run, backend re-reads provider runtime state and reconciles local DB
+    - webhook-driven lifecycle reconciliation is intentionally deferred
+  runtime_instance_states:
+    - provisioning
+    - running
+    - stopped
+    - archived
+    - deleted
+    - failed
+  plan_specific_stop_behavior:
+    Run:
+      - stopped runtime is treated as ephemeral
+      - backend deletes the sandbox on reconciliation/stop after outputs are persisted
+    WarmStandby:
+      - stopped runtime is preserved as recoverable state
+      - backend may archive it later once the configured stopped duration is exceeded
+      - `recoverableUntilAt` is derived from the archive policy window
+    AlwaysOn:
+      - no short-session cleanup path by default
+      - stop is exceptional and reconciled as operational state, not the normal product flow
+  interval_accounting:
+    - runtime start/stop windows are stored separately from credit ledger entries
+    - a stopped or archived runtime closes the open runtime interval
+    - a recovered/restarted runtime opens a new interval
+
 Do Not Do:
   - do not let Run remain alive indefinitely after one launch credit
   - do not let passive UI polling reset idle timeout

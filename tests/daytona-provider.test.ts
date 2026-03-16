@@ -1352,3 +1352,76 @@ test('daytona run provider recovers archived sandboxes before restart', async ()
   assert.ok(restarted)
   assert.equal(recovered, true)
 })
+
+test('daytona run provider exposes recoverableUntilAt for stopped warm standby sandboxes', async () => {
+  const runId = 'run-warm-stopped-runtime'
+  const createdAt = new Date().toISOString()
+  const stoppedAt = new Date().toISOString()
+  const files: Record<string, string> = {
+    '/tmp/agent-roster/manifest.json': JSON.stringify({
+      agentTitles: ['Inbox Triage Agent'],
+      channelConfigId: 'channel-test-1',
+      combinedRiskLevel: 'low',
+      createdAt,
+      networkEnabled: true,
+      orderId: 'order-test-1',
+      persistenceMode: 'recoverable',
+      planId: 'warm_standby',
+      providerInstanceRef: runId,
+      recipientExternalId: '77',
+      runId,
+      runtimeMode: 'wakeable_recoverable',
+      userId: 'user-test-1',
+      usesTools: true,
+    }),
+    '/tmp/agent-roster/status.json': JSON.stringify({
+      completedAt: stoppedAt,
+      resultSummary: 'Managed runtime is sleeping and can be resumed later.',
+      startedAt: createdAt,
+      status: 'completed',
+      updatedAt: stoppedAt,
+    }),
+    '/tmp/agent-roster/result.json': JSON.stringify({
+      artifacts: [],
+      summary: 'Managed runtime is sleeping and can be resumed later.',
+    }),
+  }
+
+  const provider = new DaytonaRunProvider({
+    apiKey: 'daytona-test',
+    clientFactory: () => ({
+      async create() {
+        throw new Error('not used')
+      },
+      async get(id) {
+        assert.equal(id, runId)
+        return {
+          createdAt,
+          fs: {
+            async downloadFile(filePath: string) {
+              const value = files[filePath]
+              if (value === undefined) {
+                const error = new Error(`404 ${filePath}`)
+                ;(error as Error & { status: number }).status = 404
+                throw error
+              }
+              return Buffer.from(value, 'utf8')
+            },
+            async uploadFile() {},
+          },
+          id,
+          process: {
+            async executeCommand() {
+              return { exitCode: 0, result: '' }
+            },
+          },
+          state: SandboxState.STOPPED,
+        }
+      },
+    }),
+  })
+
+  const runtime = await provider.getRuntimeInstance(runId)
+
+  assert.ok(runtime?.recoverableUntilAt)
+})

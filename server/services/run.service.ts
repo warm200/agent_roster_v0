@@ -17,6 +17,8 @@ import { HttpError } from '../lib/http'
 import { scanAgentVersion as scanAgentVersionRiskProfile } from '../lib/risk-engine'
 import { getRunProvider } from '../providers'
 import type { RunControlUiLink, RuntimeProviderInstance } from '../providers/run-provider.interface'
+import { launchAttempts } from '../db/schema'
+import { LaunchAttemptRepository } from './launch-attempt.repository'
 import { getOrderByIdForUser, getOrderProviderApiKeysForUser } from './order.service'
 import { RunRepository } from './run.repository'
 import { RuntimeInstanceRepository } from './runtime-instance.repository'
@@ -193,6 +195,48 @@ function buildReleasedUsagePatch(run: Run, reason: RunTerminationReason): Partia
   }
 }
 
+function toLaunchAttemptBlockerReason(message: string) {
+  const normalized = message.toLowerCase()
+
+  if (
+    normalized.includes('telegram setup is missing') ||
+    normalized.includes('telegram bot token must be validated') ||
+    normalized.includes('telegram pairing must be completed')
+  ) {
+    return 'telegram_not_ready'
+  }
+
+  if (normalized.includes('does not include run launches')) {
+    return 'no_runtime_access'
+  }
+
+  if (normalized.includes('at most') && normalized.includes('agent')) {
+    return 'bundle_too_large'
+  }
+
+  if (normalized.includes('active managed session')) {
+    return 'concurrent_limit'
+  }
+
+  if (normalized.includes('live managed setup')) {
+    return 'active_bundle_limit'
+  }
+
+  if (normalized.includes('no credits remaining')) {
+    return 'credits_exhausted'
+  }
+
+  if (normalized.includes('order must be paid')) {
+    return 'order_not_paid'
+  }
+
+  if (normalized.includes('order has no agent versions')) {
+    return 'empty_bundle'
+  }
+
+  return 'unknown'
+}
+
 function mapRuntimeStateToRunStatus(
   state: RuntimeInstanceState,
 ): Run['status'] {
@@ -243,9 +287,49 @@ function buildRuntimeInstanceRecord(
   }
 }
 
-function buildRunPatchFromRuntime(
+function buildRuntimeInstanceRecordFromRun(
   run: Run,
   instance: RuntimeProviderInstance,
+): RuntimeInstance {
+  const now = nowIso()
+  return {
+    id: crypto.randomUUID(),
+    runId: instance.runId,
+    userId: run.userId,
+    orderId: run.orderId,
+    providerName: instance.providerName,
+    providerInstanceRef: instance.providerInstanceRef,
+    planId: instance.planId,
+    runtimeMode: instance.runtimeMode,
+    persistenceMode: instance.persistenceMode,
+    state: instance.state,
+    stopReason: instance.stopReason,
+    preservedStateAvailable: instance.preservedStateAvailable,
+    startedAt: instance.startedAt,
+    stoppedAt: instance.stoppedAt,
+    archivedAt: instance.archivedAt,
+    deletedAt: instance.deletedAt,
+    recoverableUntilAt: instance.recoverableUntilAt,
+    workspaceReleasedAt: instance.workspaceReleasedAt,
+    lastReconciledAt: instance.lastReconciledAt ?? now,
+    metadataJson: instance.metadataJson,
+    createdAt: now,
+    updatedAt: now,
+  }
+}
+
+function buildRunPatchFromRuntime(
+  run: Run,
+  instance: Pick<
+    RuntimeProviderInstance,
+    | 'archivedAt'
+    | 'deletedAt'
+    | 'lastReconciledAt'
+    | 'persistenceMode'
+    | 'startedAt'
+    | 'state'
+    | 'stoppedAt'
+  >,
 ): Partial<Run> {
   const status = mapRuntimeStateToRunStatus(instance.state)
   const defaultSummary =
@@ -273,6 +357,29 @@ function buildRunPatchFromRuntime(
   }
 }
 
+function applyRuntimeStateToRun(
+  run: Run,
+  instance: Pick<
+    RuntimeProviderInstance,
+    | 'archivedAt'
+    | 'deletedAt'
+    | 'lastReconciledAt'
+    | 'persistenceMode'
+    | 'startedAt'
+    | 'state'
+    | 'stoppedAt'
+  > | null,
+): Run {
+  if (!instance) {
+    return run
+  }
+
+  return {
+    ...run,
+    ...buildRunPatchFromRuntime(run, instance),
+  }
+}
+
 function shouldArchiveRecoverableRuntime(runtime: RuntimeInstance) {
   if (runtime.persistenceMode !== 'recoverable' || runtime.state !== 'stopped' || !runtime.stoppedAt) {
     return false
@@ -292,6 +399,7 @@ export class RunService {
   constructor(
     private readonly repository: RunRepository = new RunRepository(),
     private readonly runtimeRepository: RuntimeInstanceRepository = new RuntimeInstanceRepository(),
+    private readonly launchAttemptRepository: LaunchAttemptRepository = new LaunchAttemptRepository(),
   ) {}
 
   async createRun(userId: string, orderId: string) {
@@ -730,13 +838,137 @@ export class RunService {
     }
 
     if (!providerRun) {
+      let persistedRuntime = runtimeRecord
+      let effectiveRuntime: RuntimeProviderInstance | RuntimeInstance | null = runtimeInstance
+
       if (runtimeInstance && persist) {
-        await this.updateRuntimeRecordSafe(run.id, {
-          ...runtimeInstance,
-          lastReconciledAt: runtimeInstance.lastReconciledAt ?? nowIso(),
+        persistedRuntime = runtimeRecord
+          ? await this.updateRuntimeRecordSafe(run.id, {
+              ...runtimeInstance,
+              lastReconciledAt: runtimeInstance.lastReconciledAt ?? nowIso(),
+            })
+          : await this.createRuntimeRecordSafe(buildRuntimeInstanceRecordFromRun(run, runtimeInstance))
+
+        if (persistedRuntime) {
+          if (shouldArchiveRecoverableRuntime(persistedRuntime) && provider.archiveRuntimeInstance) {
+            const archived = await provider.archiveRuntimeInstance(run.id)
+            if (archived) {
+              persistedRuntime = await this.updateRuntimeRecordSafe(run.id, {
+                ...archived,
+                archivedAt: archived.archivedAt ?? nowIso(),
+                lastReconciledAt: archived.lastReconciledAt ?? nowIso(),
+                preservedStateAvailable: true,
+                state: 'archived',
+              })
+              effectiveRuntime = {
+                ...archived,
+                archivedAt: archived.archivedAt ?? nowIso(),
+                lastReconciledAt: archived.lastReconciledAt ?? nowIso(),
+                preservedStateAvailable: true,
+                state: 'archived',
+              }
+            }
+          }
+
+          if (persistedRuntime && runtimeInstance.state === 'running') {
+            const openInterval = await this.findOpenRuntimeIntervalSafe(persistedRuntime.id)
+            if (!openInterval) {
+              await this.createRuntimeIntervalSafe({
+                id: crypto.randomUUID(),
+                runtimeInstanceId: persistedRuntime.id,
+                runId: run.id,
+                providerInstanceRef: persistedRuntime.providerInstanceRef,
+                startedAt: runtimeInstance.startedAt ?? nowIso(),
+                endedAt: null,
+                closeReason: null,
+                createdAt: nowIso(),
+                updatedAt: nowIso(),
+              })
+            }
+          }
+
+          if (
+            persistedRuntime &&
+            (runtimeInstance.state === 'stopped' ||
+              runtimeInstance.state === 'archived' ||
+              runtimeInstance.state === 'deleted' ||
+              runtimeInstance.state === 'failed')
+          ) {
+            await this.closeRuntimeIntervalSafe(
+              persistedRuntime.id,
+              runtimeInstance.stoppedAt ?? runtimeInstance.archivedAt ?? runtimeInstance.deletedAt ?? nowIso(),
+              runtimeInstance.stopReason,
+            )
+          }
+
+          if (
+            persistedRuntime &&
+            runtimeInstance.state === 'stopped' &&
+            runtimeInstance.persistenceMode === 'ephemeral' &&
+            provider.deleteRuntimeInstance
+          ) {
+            const deletedAt = nowIso()
+            await provider.deleteRuntimeInstance(run.id)
+            persistedRuntime = await this.updateRuntimeRecordSafe(run.id, {
+              deletedAt,
+              lastReconciledAt: deletedAt,
+              preservedStateAvailable: false,
+              state: 'deleted',
+              workspaceReleasedAt: deletedAt,
+            })
+            effectiveRuntime = {
+              ...runtimeInstance,
+              deletedAt,
+              lastReconciledAt: deletedAt,
+              preservedStateAvailable: false,
+              state: 'deleted',
+              workspaceReleasedAt: deletedAt,
+            }
+          }
+        }
+      }
+
+      const runtimeOnlyRun = applyRuntimeStateToRun(run, effectiveRuntime)
+      if (!persist) {
+        return sanitizeRun(runtimeOnlyRun)
+      }
+
+      const persistedRun = (await this.repository.updateRun(run.id, runtimeOnlyRun)) ?? runtimeOnlyRun
+      if (persistedRuntime?.state === 'running') {
+        await this.repository.updateRunUsage?.(run.id, {
+          providerAcceptedAt: persistedRuntime.startedAt ?? nowIso(),
+          runningStartedAt: persistedRuntime.startedAt ?? nowIso(),
+          statusSnapshot: persistedRun.status,
+          updatedAt: nowIso(),
+          workspaceReleasedAt: null,
         })
       }
-      return sanitizeRun(run)
+      if (
+        persistedRuntime &&
+        (persistedRuntime.state === 'stopped' ||
+          persistedRuntime.state === 'archived' ||
+          persistedRuntime.state === 'deleted' ||
+          persistedRuntime.state === 'failed')
+      ) {
+        await this.repository.updateRunUsage?.(run.id, {
+          completedAt:
+            persistedRun.completedAt ??
+            persistedRuntime.deletedAt ??
+            persistedRuntime.archivedAt ??
+            persistedRuntime.stoppedAt ??
+            nowIso(),
+          statusSnapshot: persistedRun.status,
+          terminationReason: persistedRuntime.stopReason ?? 'idle_timeout',
+          updatedAt: nowIso(),
+          workspaceReleasedAt:
+            persistedRuntime.workspaceReleasedAt ??
+            persistedRuntime.deletedAt ??
+            persistedRuntime.archivedAt ??
+            persistedRuntime.stoppedAt ??
+            nowIso(),
+        })
+      }
+      return sanitizeRun(persistedRun)
     }
 
     let result: RunResult | null = null
@@ -763,13 +995,14 @@ export class RunService {
     }
 
     let persistedRuntime = runtimeRecord
+    let effectiveRuntime: RuntimeProviderInstance | RuntimeInstance | null = runtimeInstance
     if (runtimeInstance && persist) {
       persistedRuntime = runtimeRecord
         ? await this.updateRuntimeRecordSafe(run.id, {
             ...runtimeInstance,
             lastReconciledAt: runtimeInstance.lastReconciledAt ?? nowIso(),
           })
-        : null
+        : await this.createRuntimeRecordSafe(buildRuntimeInstanceRecordFromRun(run, runtimeInstance))
 
       if (persistedRuntime) {
         if (shouldArchiveRecoverableRuntime(persistedRuntime) && provider.archiveRuntimeInstance) {
@@ -782,6 +1015,13 @@ export class RunService {
               preservedStateAvailable: true,
               state: 'archived',
             })
+            effectiveRuntime = {
+              ...archived,
+              archivedAt: archived.archivedAt ?? nowIso(),
+              lastReconciledAt: archived.lastReconciledAt ?? nowIso(),
+              preservedStateAvailable: true,
+              state: 'archived',
+            }
           }
         }
 
@@ -822,23 +1062,34 @@ export class RunService {
           runtimeInstance.persistenceMode === 'ephemeral' &&
           provider.deleteRuntimeInstance
         ) {
+          const deletedAt = nowIso()
           await provider.deleteRuntimeInstance(run.id)
           persistedRuntime = await this.updateRuntimeRecordSafe(run.id, {
-            deletedAt: nowIso(),
-            lastReconciledAt: nowIso(),
+            deletedAt,
+            lastReconciledAt: deletedAt,
             preservedStateAvailable: false,
             state: 'deleted',
-            workspaceReleasedAt: nowIso(),
+            workspaceReleasedAt: deletedAt,
           })
+          effectiveRuntime = {
+            ...runtimeInstance,
+            deletedAt,
+            lastReconciledAt: deletedAt,
+            preservedStateAvailable: false,
+            state: 'deleted',
+            workspaceReleasedAt: deletedAt,
+          }
         }
       }
     }
 
+    const reconciledRun = applyRuntimeStateToRun(nextRun, effectiveRuntime)
+
     if (!persist) {
-      return sanitizeRun(nextRun)
+      return sanitizeRun(reconciledRun)
     }
 
-    const persistedRun = (await this.repository.updateRun(run.id, nextRun)) ?? nextRun
+    const persistedRun = (await this.repository.updateRun(run.id, reconciledRun)) ?? reconciledRun
     if (persist && persistedRun.status === 'failed') {
       await this.repository.updateRunUsage?.(run.id, buildReleasedUsagePatch(persistedRun, 'provider_unhealthy'))
     }
