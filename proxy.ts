@@ -18,7 +18,9 @@ function rewriteAdminToNotFound(request: NextRequest) {
 }
 
 export async function proxy(request: NextRequest) {
-  const isAdminRoute = request.nextUrl.pathname.startsWith('/admin')
+  const isAdminRoute =
+    request.nextUrl.pathname.startsWith('/admin') ||
+    request.nextUrl.pathname.startsWith('/api/admin')
 
   if (!isAuthConfigured()) {
     if (isAdminRoute) {
@@ -57,5 +59,5 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/app/:path*', '/admin/:path*'],
+  matcher: ['/app/:path*', '/admin/:path*', '/api/admin/:path*'],
 }

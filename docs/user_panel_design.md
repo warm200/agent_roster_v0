@@ -512,6 +512,11 @@ create table billing_alerts (
 * `GET /api/always-on-shadow`
 * `GET /api/alerts`
 
+当前实现备注：
+
+* 已落地站内只读内部接口：`/api/admin/usage` 及 overview / funnel / runtime-usage / billing-health / users / always-on-shadow / alerts 子路由
+* 页面仍可直接走 server service；后续可切换到这些内部 API 而不改聚合逻辑
+
 这样以后你想把底层换成 view/materialized view，不会牵连 UI。
 
 ---

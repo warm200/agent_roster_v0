@@ -49,6 +49,19 @@ test('proxy blocks admin routes when auth providers are not configured', async (
   assert.equal(response.headers.get('cache-control'), 'no-store')
 })
 
+test('proxy blocks admin api routes when auth providers are not configured', async () => {
+  delete process.env.GITHUB_CLIENT_ID
+  delete process.env.GITHUB_CLIENT_SECRET
+  delete process.env.GOOGLE_CLIENT_ID
+  delete process.env.GOOGLE_CLIENT_SECRET
+
+  const request = new NextRequest('http://localhost/api/admin/usage')
+  const response = await proxy(request)
+
+  assert.equal(response.headers.get('x-middleware-rewrite'), 'http://localhost/_not-found')
+  assert.equal(response.headers.get('cache-control'), 'no-store')
+})
+
 test('proxy redirects unauthenticated app traffic when auth is configured', async () => {
   process.env.AUTH_SECRET = 'test-secret'
   process.env.GITHUB_CLIENT_ID = 'github-client'
@@ -118,6 +131,31 @@ test('proxy allows authenticated admin traffic from the allowlist', async () => 
   })
 
   const request = new NextRequest('http://localhost/admin/usage', {
+    headers: {
+      cookie: `next-auth.session-token=${token}`,
+    },
+  })
+  const response = await proxy(request)
+
+  assert.equal(response.headers.get('x-middleware-next'), '1')
+})
+
+test('proxy allows authenticated admin api traffic from the allowlist', async () => {
+  process.env.AUTH_SECRET = 'test-secret'
+  process.env.ADMIN_ALLOWED_EMAILS = 'woody@example.com'
+  process.env.GITHUB_CLIENT_ID = 'github-client'
+  process.env.GITHUB_CLIENT_SECRET = 'github-secret'
+
+  const token = await encode({
+    secret: process.env.AUTH_SECRET,
+    token: {
+      email: 'woody@example.com',
+      name: 'Woody',
+      sub: 'user-1',
+    },
+  })
+
+  const request = new NextRequest('http://localhost/api/admin/usage?range=30d', {
     headers: {
       cookie: `next-auth.session-token=${token}`,
     },
