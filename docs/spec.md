@@ -103,3 +103,5 @@ Current reconciliation model:
   - idle timeout when meaningful activity timestamps are recorded
 - internal activity trigger:
   - `POST /api/internal/runs/[runId]/activity`
+- first live activity producer:
+  - paired Telegram inbound messages on an order

@@ -9,6 +9,7 @@ import { POST as validateToken } from '@/app/api/me/orders/[orderId]/run-channel
 import { POST as telegramWebhook } from '@/app/api/webhooks/telegram/route'
 import { HttpError } from '@/server/lib/http'
 import { setRequestUserIdForTesting } from '@/server/lib/request-user'
+import { RunService, setRunServiceForTesting } from '@/server/services/run.service'
 import {
   setTelegramServiceForTesting,
   type TelegramBotProfile,
@@ -32,6 +33,7 @@ const channelConfig = {
 
 afterEach(() => {
   setRequestUserIdForTesting(null)
+  setRunServiceForTesting(null)
   setTelegramServiceForTesting(null)
 })
 
@@ -220,4 +222,53 @@ test('telegram webhook route surfaces paired outcome and secret mismatch', async
 
   assert.equal(forbiddenResponse.status, 401)
   assert.equal(forbiddenPayload.error, 'Webhook secret mismatch.')
+})
+
+test('telegram webhook route records runtime activity for paired inbound messages', async () => {
+  let recorded:
+    | { occurredAt?: string; orderId: string }
+    | undefined
+
+  setTelegramServiceForTesting({
+    async handleWebhook(): Promise<TelegramWebhookResult> {
+      return {
+        chatId: '77',
+        outcome: 'runtime_activity',
+      }
+    },
+  } as never)
+
+  setRunServiceForTesting({
+    async recordMeaningfulActivityForOrder(orderId: string, occurredAt?: string) {
+      recorded = { occurredAt, orderId }
+      return {
+        occurredAt: occurredAt ?? 'now',
+        orderId,
+        touchedRunIds: ['run-1'],
+      }
+    },
+  } as RunService)
+
+  const response = await telegramWebhook(
+    new NextRequest('http://localhost/api/webhooks/telegram?orderId=order-test-1', {
+      body: JSON.stringify({
+        message: {
+          chat: { id: 77 },
+          text: 'hello',
+        },
+      }),
+      headers: {
+        'x-telegram-bot-api-secret-token': 'secret-token',
+      },
+      method: 'POST',
+    }),
+  )
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.deepEqual(recorded, {
+    occurredAt: undefined,
+    orderId: 'order-test-1',
+  })
+  assert.equal(payload.outcome, 'runtime_activity')
 })

@@ -177,6 +177,17 @@ export class RunRepository {
     return rows.map(toPublicRun)
   }
 
+  async listRunsForOrder(orderId: string) {
+    const db = getDb()
+    const rows = await db
+      .select()
+      .from(runs)
+      .where(eq(runs.orderId, orderId))
+      .orderBy(desc(runs.createdAt))
+
+    return rows.map(toPublicRun)
+  }
+
   async findRunForUser(runId: string, userId: string) {
     const db = getDb()
     const [row] = await db

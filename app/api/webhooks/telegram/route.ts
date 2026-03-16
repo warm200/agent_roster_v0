@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 import { HttpError } from '@/server/lib/http'
+import { getRunService } from '@/server/services/run.service'
 import { getTelegramService, type TelegramUpdate } from '@/server/services/telegram.service'
 
 export async function POST(request: NextRequest) {
@@ -18,6 +19,10 @@ export async function POST(request: NextRequest) {
       secretToken,
       update,
     })
+
+    if (result.outcome === 'runtime_activity') {
+      await getRunService().recordMeaningfulActivityForOrder(orderId)
+    }
 
     return NextResponse.json(result)
   } catch (error) {

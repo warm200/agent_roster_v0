@@ -117,6 +117,7 @@ Current MVP Backend Notes:
   activity_clock:
     - `run_usage.lastMeaningfulActivityAt` stores the last meaningful activity timestamp
     - an internal route can advance it without relying on UI polling
+    - paired Telegram inbound messages can now advance it for active runs on the order
   runtime_instance_states:
     - provisioning
     - running

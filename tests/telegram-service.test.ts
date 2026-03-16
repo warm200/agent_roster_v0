@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { createHmac } from 'node:crypto'
 import { afterEach, test } from 'node:test'
 
 import { HttpError } from '@/server/lib/http'
@@ -41,6 +42,16 @@ function createRepository() {
     },
     async findPendingPairing(orderId) {
       if (orderId !== context.orderId || context.config.recipientBindingStatus !== 'pending') {
+        return null
+      }
+
+      return {
+        ...context,
+        config: { ...context.config },
+      }
+    },
+    async findOrderChannel(orderId) {
+      if (orderId !== context.orderId) {
         return null
       }
 
@@ -303,4 +314,57 @@ test('telegram service surfaces unreadable stored bot credentials clearly', asyn
       return true
     },
   )
+})
+
+test('telegram service marks paired recipient messages as runtime activity', async () => {
+  process.env.NEXTAUTH_URL = 'https://example.com'
+  process.env.TELEGRAM_WEBHOOK_URL = 'https://example.com/api/webhooks/telegram'
+
+  const { repository, context } = createRepository()
+  Object.assign(context.config, {
+    recipientBindingStatus: 'paired' as const,
+    recipientExternalId: '77',
+  })
+
+  const service = createTelegramService({
+    apiClient: {
+      async deleteWebhook() {},
+      async getMe() {
+        return {
+          id: 42,
+          username: 'ops_bot',
+        }
+      },
+      async getUpdates() {
+        return []
+      },
+      async setWebhook() {},
+    },
+    repository,
+    secretSeed: 'test-secret',
+    secretStore: {
+      async read() {
+        return 'telegram-token'
+      },
+      async write() {
+        return 'secret-ref'
+      },
+    },
+  })
+
+  const result = await service.handleWebhook({
+    orderId: context.orderId,
+    secretToken: createHmac('sha256', 'test-secret').update(context.orderId).digest('hex'),
+    update: {
+      message: {
+        chat: { id: 77 },
+        text: 'hello',
+      },
+    },
+  })
+
+  assert.deepEqual(result, {
+    chatId: '77',
+    outcome: 'runtime_activity',
+  })
 })

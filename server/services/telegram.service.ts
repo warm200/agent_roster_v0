@@ -37,6 +37,7 @@ export type TelegramPairingResult = {
 export type TelegramWebhookResult =
   | { outcome: 'ignored'; reason: string }
   | { outcome: 'paired'; config: typeof runChannelConfigs.$inferSelect }
+  | { outcome: 'runtime_activity'; chatId: string }
 
 export type TelegramUpdate = {
   update_id?: number
@@ -61,6 +62,7 @@ export interface TelegramRepository {
   ensureOrderChannelForUser(orderId: string, userId: string): Promise<OrderChannelContext | null>
   updateChannelConfig(orderId: string, update: ChannelConfigUpdate): Promise<typeof runChannelConfigs.$inferSelect>
   findPendingPairing(orderId: string): Promise<OrderChannelContext | null>
+  findOrderChannel(orderId: string): Promise<OrderChannelContext | null>
 }
 
 export interface SecretStore {
@@ -175,6 +177,30 @@ class DatabaseTelegramRepository implements TelegramRepository {
           eq(runChannelConfigs.recipientBindingStatus, 'pending'),
         ),
       )
+      .limit(1)
+
+    if (!row) {
+      return null
+    }
+
+    return {
+      orderId: row.order.id,
+      userId: row.order.userId,
+      orderStatus: row.order.status,
+      config: row.config,
+    }
+  }
+
+  async findOrderChannel(orderId: string) {
+    const db = getDb()
+    const [row] = await db
+      .select({
+        order: orders,
+        config: runChannelConfigs,
+      })
+      .from(orders)
+      .innerJoin(runChannelConfigs, eq(runChannelConfigs.orderId, orders.id))
+      .where(eq(orders.id, orderId))
       .limit(1)
 
     if (!row) {
@@ -493,6 +519,22 @@ export function createTelegramService(options: CreateTelegramServiceOptions = {}
       const context = await repository.findPendingPairing(args.orderId)
 
       if (!context) {
+        const activeContext = await repository.findOrderChannel(args.orderId)
+        const chatId = args.update.message?.chat?.id != null ? String(args.update.message.chat.id) : null
+
+        if (
+          activeContext &&
+          activeContext.config.tokenStatus === 'validated' &&
+          activeContext.config.recipientBindingStatus === 'paired' &&
+          activeContext.config.recipientExternalId &&
+          chatId === activeContext.config.recipientExternalId
+        ) {
+          return {
+            outcome: 'runtime_activity',
+            chatId,
+          }
+        }
+
         return {
           outcome: 'ignored',
           reason: 'no_pending_pairing',

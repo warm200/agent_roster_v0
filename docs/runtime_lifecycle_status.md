@@ -66,6 +66,8 @@ read_when:
 - internal activity touch route exists at:
   - `POST /api/internal/runs/[runId]/activity`
 - page reads do not update the activity clock
+- first real producer is wired:
+  - inbound Telegram messages for already-paired orders touch active unreleased runs on that order
 
 ### Plan-aware stop behavior
 

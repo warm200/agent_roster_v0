@@ -930,6 +930,32 @@ export class RunService {
     }
   }
 
+  async recordMeaningfulActivityForOrder(orderId: string, occurredAt = nowIso()) {
+    const runs = 'listRunsForOrder' in this.repository && typeof this.repository.listRunsForOrder === 'function'
+      ? await this.repository.listRunsForOrder(orderId)
+      : []
+    const touchedRunIds: string[] = []
+
+    for (const run of runs) {
+      const usage = await this.repository.findRunUsage?.(run.id)
+      if (!usage || usage.workspaceReleasedAt) {
+        continue
+      }
+
+      await this.repository.updateRunUsage?.(run.id, {
+        lastMeaningfulActivityAt: occurredAt,
+        updatedAt: nowIso(),
+      })
+      touchedRunIds.push(run.id)
+    }
+
+    return {
+      occurredAt,
+      orderId,
+      touchedRunIds,
+    }
+  }
+
   private async requireRun(userId: string, runId: string) {
     const run = await this.repository.findRunForUser(runId, userId)
 
