@@ -1,6 +1,7 @@
 import { desc } from 'drizzle-orm'
 
 import {
+  type AdminDateRange,
   adminUsageSnapshot as fallbackSnapshot,
   type AdminSignal,
   type AdminUsageSnapshot,
@@ -18,7 +19,6 @@ import {
 import {
   DAY_MS,
   STALE_RESERVE_MS,
-  WINDOW_DAYS,
   average,
   buildAlerts,
   buildAlwaysOnRanks,
@@ -28,22 +28,28 @@ import {
   buildUserRows,
   cloneFallback,
   formatDayLabel,
+  getAdminWindowConfig,
   isWithinWindow,
   resolvePostgresConnectionString,
   startOfUtcDay,
   sum,
 } from './admin-usage.helpers'
 
-export async function getAdminUsageSnapshot(): Promise<AdminUsageSnapshot> {
+export async function getAdminUsageSnapshot(rangeInput?: AdminDateRange): Promise<AdminUsageSnapshot> {
   const connectionString = resolvePostgresConnectionString()
+  const windowConfig = getAdminWindowConfig(rangeInput)
 
   if (!connectionString?.startsWith('postgres')) {
-    return cloneFallback('Live admin queries are disabled because no PostgreSQL DATABASE_URL is available. Showing staged dashboard data.')
+    return cloneFallback(
+      'Live admin queries are disabled because no PostgreSQL DATABASE_URL is available. Showing staged dashboard data.',
+      windowConfig.range,
+    )
   }
 
   try {
     const db = createDb(connectionString)
     const now = new Date()
+    const windowStart = new Date(now.getTime() - windowConfig.windowMs)
     const todayStart = startOfUtcDay(now)
     const previous24hStart = new Date(now.getTime() - 2 * DAY_MS)
     const todayRowsStart = new Date(now.getTime() - DAY_MS)
@@ -58,8 +64,8 @@ export async function getAdminUsageSnapshot(): Promise<AdminUsageSnapshot> {
     ])
 
     const liveSnapshot = structuredClone(fallbackSnapshot)
-    const paidOrdersInWindow = orderRows.filter((row) => row.status === 'paid' && isWithinWindow(row.createdAt, now))
-    const usageInWindow = usageRows.filter((row) => isWithinWindow(row.createdAt, now))
+    const paidOrdersInWindow = orderRows.filter((row) => row.status === 'paid' && isWithinWindow(row.createdAt, now, windowConfig.windowMs))
+    const usageInWindow = usageRows.filter((row) => isWithinWindow(row.createdAt, now, windowConfig.windowMs))
     const usageToday = usageRows.filter((row) => row.createdAt >= todayRowsStart)
     const failedToday = usageRows.filter((row) => row.createdAt >= todayRowsStart && row.statusSnapshot === 'failed' && !row.providerAcceptedAt).length
     const failedPrevious24h = usageRows.filter((row) => row.createdAt >= previous24hStart && row.createdAt < todayRowsStart && row.statusSnapshot === 'failed' && !row.providerAcceptedAt).length
@@ -81,7 +87,8 @@ export async function getAdminUsageSnapshot(): Promise<AdminUsageSnapshot> {
 
     liveSnapshot.generatedAt = now.toISOString()
     liveSnapshot.environment = 'live-db'
-    liveSnapshot.windowLabel = 'Last 7 days'
+    liveSnapshot.selectedRange = windowConfig.range
+    liveSnapshot.windowLabel = windowConfig.label
     liveSnapshot.implementationNote =
       'Overview, runtime, billing, and user drilldown are live from the current Postgres schema. Launch-attempt blocker attribution remains derived until `launch_attempts` exists.'
     liveSnapshot.alerts = buildAlerts({
@@ -96,7 +103,7 @@ export async function getAdminUsageSnapshot(): Promise<AdminUsageSnapshot> {
         label: 'Active Paid Users',
         value: subscriptionRows.filter((row) => row.status === 'active' && row.planId !== 'free').length,
         format: 'count',
-        delta: `${paidOrdersInWindow.length} paid orders / 7d`,
+        delta: `${paidOrdersInWindow.length} paid orders / ${windowConfig.range}`,
         detail: 'Runtime-entitled users with active non-free subscriptions.',
         tone: 'stable',
       },
@@ -106,7 +113,7 @@ export async function getAdminUsageSnapshot(): Promise<AdminUsageSnapshot> {
         value: paidOrdersInWindow.length > 0 ? providerAcceptedOrderIds.size / paidOrdersInWindow.length : 0,
         format: 'percent',
         delta: `${providerAcceptedOrderIds.size}/${paidOrdersInWindow.length || 0} bundles`,
-        detail: 'Paid bundles in the last 7 days that reached provider acceptance.',
+        detail: `Paid bundles in ${windowConfig.label.toLowerCase()} that reached provider acceptance.`,
         tone: 'stable',
       },
       {
@@ -201,19 +208,25 @@ export async function getAdminUsageSnapshot(): Promise<AdminUsageSnapshot> {
           plan: planId === 'warm_standby' ? 'Warm Standby' : planId === 'always_on' ? 'Always On' : 'Run',
         }
       }),
-      launchesPerDay: Array.from({ length: WINDOW_DAYS }, (_, index) => {
-        const day = new Date(startOfUtcDay(now).getTime() - (WINDOW_DAYS - index - 1) * DAY_MS)
-        const dayEnd = new Date(day.getTime() + DAY_MS)
+      launchesPerDay: Array.from({ length: windowConfig.bucketCount }, (_, index) => {
+        const day =
+          windowConfig.bucketMs === DAY_MS
+            ? new Date(startOfUtcDay(windowStart).getTime() + index * windowConfig.bucketMs)
+            : new Date(Math.floor(windowStart.getTime() / windowConfig.bucketMs) * windowConfig.bucketMs + index * windowConfig.bucketMs)
+        const dayEnd = new Date(day.getTime() + windowConfig.bucketMs)
 
         return {
           completed: usageRows.filter((row) => row.completedAt && row.completedAt >= day && row.completedAt < dayEnd).length,
-          day: formatDayLabel(day),
+          day:
+            windowConfig.range === '24h'
+              ? day.toLocaleTimeString('en-US', { hour: 'numeric', hour12: true, timeZone: 'UTC' })
+              : formatDayLabel(day),
           failedBeforeAccept: usageRows.filter((row) => row.createdAt >= day && row.createdAt < dayEnd && row.statusSnapshot === 'failed' && !row.providerAcceptedAt).length,
           providerAccepted: usageRows.filter((row) => row.providerAcceptedAt && row.providerAcceptedAt >= day && row.providerAcceptedAt < dayEnd).length,
           refunded: ledgerRows.filter((row) => row.eventType === 'refund' && row.createdAt >= day && row.createdAt < dayEnd).length,
         }
       }),
-      peakConcurrentRuns: buildPeakConcurrentSeries(usageRows, now),
+      peakConcurrentRuns: buildPeakConcurrentSeries(usageRows, now, windowConfig),
     }
     liveSnapshot.billingHealth = {
       anomalies: buildBillingAnomalies({
@@ -246,6 +259,6 @@ export async function getAdminUsageSnapshot(): Promise<AdminUsageSnapshot> {
     return liveSnapshot
   } catch (error) {
     const message = error instanceof Error ? error.message : 'unknown error'
-    return cloneFallback(`Live admin queries failed (${message}). Showing staged dashboard data instead.`)
+    return cloneFallback(`Live admin queries failed (${message}). Showing staged dashboard data instead.`, windowConfig.range)
   }
 }

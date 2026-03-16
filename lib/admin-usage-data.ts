@@ -1,3 +1,4 @@
+export type AdminDateRange = '24h' | '7d' | '30d'
 export type AdminMetricFormat = 'count' | 'percent' | 'credits' | 'currency'
 export type AdminSignal = 'stable' | 'info' | 'warning' | 'critical'
 export type AdminUserHealth = 'stable' | 'watch' | 'blocked'
@@ -90,6 +91,7 @@ export type AdminUserRecord = {
   id: string
   name: string
   email: string
+  orderIds: string[]
   currentPlan: 'run' | 'warm_standby' | 'always_on'
   health: AdminUserHealth
   remainingCredits: number
@@ -126,6 +128,7 @@ export type RankRow = {
 export type AdminUsageSnapshot = {
   generatedAt: string
   environment: string
+  selectedRange: AdminDateRange
   windowLabel: string
   implementationNote: string
   alerts: Array<{
@@ -161,6 +164,7 @@ export type AdminUsageSnapshot = {
 export const adminUsageSnapshot: AdminUsageSnapshot = {
   generatedAt: '2026-03-15T14:52:00-04:00',
   environment: 'internal-preview',
+  selectedRange: '7d',
   windowLabel: 'Last 7 days',
   implementationNote:
     'Overview, billing, and user drilldown are implemented as a UI-first console. Launch-attempt and billing-alert rows are staged sample data until those tables land.',

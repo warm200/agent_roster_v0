@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { startTransition, useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle,
   Search,
@@ -10,6 +10,7 @@ import {
   ShieldAlert,
   Users,
 } from 'lucide-react'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { Input } from '@/components/ui/input'
 import {
   Select,
@@ -18,7 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import type { AdminUsageSnapshot } from '@/lib/admin-usage-data'
+import type { AdminDateRange, AdminUsageSnapshot } from '@/lib/admin-usage-data'
 import { formatDateTime } from '@/lib/utils'
 
 import {
@@ -43,12 +44,31 @@ const sectionLinks = [
   { id: 'always-on', label: 'Always On', icon: ShieldAlert },
 ]
 
+function buildUserSearchText(user: AdminUsageSnapshot['users'][number]) {
+  return [
+    user.id,
+    user.name,
+    user.email,
+    ...user.orderIds,
+    ...user.runTimeline.map((run) => run.id),
+  ]
+    .join(' ')
+    .toLowerCase()
+}
+
 export function AdminUsageDashboard({ snapshot }: { snapshot: AdminUsageSnapshot }) {
-  const [dateRange, setDateRange] = useState('7d')
+  const pathname = usePathname()
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const [dateRange, setDateRange] = useState<AdminDateRange>(snapshot.selectedRange)
   const [planFilter, setPlanFilter] = useState('all')
   const [healthFilter, setHealthFilter] = useState('all')
   const [search, setSearch] = useState('')
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null)
+
+  useEffect(() => {
+    setDateRange(snapshot.selectedRange)
+  }, [snapshot.selectedRange])
 
   const filteredUsers = useMemo(() => {
     const query = search.trim().toLowerCase()
@@ -66,7 +86,7 @@ export function AdminUsageDashboard({ snapshot }: { snapshot: AdminUsageSnapshot
         return true
       }
 
-      return [user.id, user.name, user.email].join(' ').toLowerCase().includes(query)
+      return buildUserSearchText(user).includes(query)
     })
   }, [healthFilter, planFilter, search, snapshot.users])
 
@@ -75,6 +95,24 @@ export function AdminUsageDashboard({ snapshot }: { snapshot: AdminUsageSnapshot
       setSelectedUserId(null)
     }
   }, [filteredUsers, selectedUserId])
+
+  const handleRangeChange = (nextRange: string) => {
+    const normalizedRange = nextRange as AdminDateRange
+    const params = new URLSearchParams(searchParams.toString())
+
+    setDateRange(normalizedRange)
+
+    if (normalizedRange === '7d') {
+      params.delete('range')
+    } else {
+      params.set('range', normalizedRange)
+    }
+
+    startTransition(() => {
+      const query = params.toString()
+      router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false })
+    })
+  }
 
   const selectedUser = snapshot.users.find((user) => user.id === selectedUserId) ?? null
 
@@ -124,7 +162,7 @@ export function AdminUsageDashboard({ snapshot }: { snapshot: AdminUsageSnapshot
                 </div>
 
                 <div className="grid gap-3 sm:grid-cols-2 xl:w-[42rem] xl:grid-cols-4">
-                  <Select value={dateRange} onValueChange={setDateRange}>
+                  <Select value={dateRange} onValueChange={handleRangeChange}>
                     <SelectTrigger className="w-full border-white/10 bg-black/20 text-white">
                       <SelectValue placeholder="Date range" />
                     </SelectTrigger>
@@ -132,7 +170,7 @@ export function AdminUsageDashboard({ snapshot }: { snapshot: AdminUsageSnapshot
                       <SelectItem value="24h">24 hours</SelectItem>
                       <SelectItem value="7d">7 days</SelectItem>
                       <SelectItem value="30d">30 days</SelectItem>
-                      <SelectItem value="custom">Custom</SelectItem>
+                      <SelectItem disabled value="custom">Custom</SelectItem>
                     </SelectContent>
                   </Select>
                   <Select value={planFilter} onValueChange={setPlanFilter}>

@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 
 import type {
+  AdminDateRange,
   AdminSignal,
   AdminUsageSnapshot,
   AdminUserHealth,
@@ -27,6 +28,53 @@ export const DAY_MS = 24 * 60 * 60 * 1000
 export const WINDOW_DAYS = 7
 export const STALE_RESERVE_MS = 30 * 60 * 1000
 
+export type AdminWindowConfig = {
+  bucketCount: number
+  bucketMs: number
+  label: string
+  range: AdminDateRange
+  windowMs: number
+}
+
+export function normalizeAdminDateRange(value: string | null | undefined): AdminDateRange {
+  if (value === '24h' || value === '30d') {
+    return value
+  }
+
+  return '7d'
+}
+
+export function getAdminWindowConfig(rangeInput: string | null | undefined): AdminWindowConfig {
+  const range = normalizeAdminDateRange(rangeInput)
+
+  switch (range) {
+    case '24h':
+      return {
+        bucketCount: 24,
+        bucketMs: 60 * 60 * 1000,
+        label: 'Last 24 hours',
+        range,
+        windowMs: DAY_MS,
+      }
+    case '30d':
+      return {
+        bucketCount: 30,
+        bucketMs: DAY_MS,
+        label: 'Last 30 days',
+        range,
+        windowMs: 30 * DAY_MS,
+      }
+    default:
+      return {
+        bucketCount: 7,
+        bucketMs: DAY_MS,
+        label: 'Last 7 days',
+        range: '7d',
+        windowMs: 7 * DAY_MS,
+      }
+  }
+}
+
 export function resolvePostgresConnectionString() {
   if (process.env.DATABASE_URL?.startsWith('postgres')) {
     return process.env.DATABASE_URL
@@ -49,20 +97,22 @@ export function resolvePostgresConnectionString() {
   return value.startsWith('postgres') ? value : process.env.DATABASE_URL
 }
 
-export function cloneFallback(note: string): AdminUsageSnapshot {
+export function cloneFallback(note: string, range: AdminDateRange = '7d'): AdminUsageSnapshot {
   const snapshot = structuredClone(fallbackSnapshot)
   snapshot.generatedAt = new Date().toISOString()
   snapshot.environment = 'staged-fallback'
   snapshot.implementationNote = note
+  snapshot.selectedRange = range
+  snapshot.windowLabel = getAdminWindowConfig(range).label
   return snapshot
 }
 
-export function isWithinWindow(date: Date | null, now: Date) {
+export function isWithinWindow(date: Date | null, now: Date, windowMs = WINDOW_DAYS * DAY_MS) {
   if (!date) {
     return false
   }
 
-  return now.getTime() - date.getTime() <= WINDOW_DAYS * DAY_MS
+  return now.getTime() - date.getTime() <= windowMs
 }
 
 export function toIso(date: Date | null | undefined) {
@@ -102,26 +152,46 @@ function computeResultingBalance(entries: Array<typeof creditLedger.$inferSelect
 export function buildPeakConcurrentSeries(
   usageRows: Array<typeof runUsage.$inferSelect>,
   now: Date,
+  config: AdminWindowConfig,
 ) {
-  return Array.from({ length: WINDOW_DAYS }, (_, index) => {
-    const date = new Date(startOfUtcDay(now).getTime() - (WINDOW_DAYS - index - 1) * DAY_MS)
+  const windowStart = new Date(now.getTime() - config.windowMs)
+  const alignedStart =
+    config.bucketMs === DAY_MS
+      ? startOfUtcDay(windowStart)
+      : new Date(Math.floor(windowStart.getTime() / config.bucketMs) * config.bucketMs)
+
+  return Array.from({ length: config.bucketCount }, (_, index) => {
+    const date = new Date(alignedStart.getTime() + index * config.bucketMs)
 
     return {
-      alwaysOn: computePeakConcurrentForDay(usageRows, date, 'always_on', now),
-      day: formatDayLabel(date),
-      run: computePeakConcurrentForDay(usageRows, date, 'run', now),
-      warmStandby: computePeakConcurrentForDay(usageRows, date, 'warm_standby', now),
+      alwaysOn: computePeakConcurrentForBucket(usageRows, date, config.bucketMs, 'always_on', now),
+      day: formatBucketLabel(date, config),
+      run: computePeakConcurrentForBucket(usageRows, date, config.bucketMs, 'run', now),
+      warmStandby: computePeakConcurrentForBucket(usageRows, date, config.bucketMs, 'warm_standby', now),
     }
   })
 }
 
-function computePeakConcurrentForDay(
+function formatBucketLabel(date: Date, config: AdminWindowConfig) {
+  if (config.range === '24h') {
+    return date.toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      hour12: true,
+      timeZone: 'UTC',
+    })
+  }
+
+  return formatDayLabel(date)
+}
+
+function computePeakConcurrentForBucket(
   usageRows: Array<typeof runUsage.$inferSelect>,
-  dayStart: Date,
+  bucketStart: Date,
+  bucketMs: number,
   planId: 'run' | 'warm_standby' | 'always_on',
   now: Date,
 ) {
-  const dayEnd = new Date(dayStart.getTime() + DAY_MS)
+  const bucketEnd = new Date(bucketStart.getTime() + bucketMs)
   const relevant = usageRows
     .filter((row) => row.planId === planId)
     .map((row) => {
@@ -140,13 +210,13 @@ function computePeakConcurrentForDay(
         start: startedAt,
       }
     })
-    .filter((row) => row.start && row.end && row.start < dayEnd && row.end > dayStart)
+    .filter((row) => row.start && row.end && row.start < bucketEnd && row.end > bucketStart)
 
-  const checkpoints = new Set<number>([dayStart.getTime(), dayEnd.getTime()])
+  const checkpoints = new Set<number>([bucketStart.getTime(), bucketEnd.getTime()])
 
   for (const row of relevant) {
-    checkpoints.add(Math.max(row.start!.getTime(), dayStart.getTime()))
-    checkpoints.add(Math.min(row.end!.getTime(), dayEnd.getTime()))
+    checkpoints.add(Math.max(row.start!.getTime(), bucketStart.getTime()))
+    checkpoints.add(Math.min(row.end!.getTime(), bucketEnd.getTime()))
   }
 
   let peak = 0
@@ -301,6 +371,7 @@ export function buildUserRows(input: {
           type: row.eventType,
         })),
         name: user?.name ?? userId,
+        orderIds: paidOrders.map((order) => order.id),
         pairingReady,
         remainingCredits,
         runTimeline: userUsage.slice(0, 20).map<UserRunEvent>((row) => ({
