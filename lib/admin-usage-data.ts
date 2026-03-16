@@ -92,6 +92,7 @@ export type AdminUserRecord = {
   name: string
   email: string
   orderIds: string[]
+  latestRunStatus: UserRunEvent['status'] | 'none'
   currentPlan: 'run' | 'warm_standby' | 'always_on'
   health: AdminUserHealth
   remainingCredits: number

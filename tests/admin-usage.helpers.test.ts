@@ -51,4 +51,5 @@ test('cloneFallback preserves the selected admin range label', () => {
 
 test('staged admin user records include order ids for dashboard search', () => {
   assert.ok(adminUserRecords.every((user) => user.orderIds.length > 0))
+  assert.ok(adminUserRecords.every((user) => user.latestRunStatus))
 })

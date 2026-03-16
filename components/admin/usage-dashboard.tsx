@@ -62,7 +62,10 @@ export function AdminUsageDashboard({ snapshot }: { snapshot: AdminUsageSnapshot
   const searchParams = useSearchParams()
   const [dateRange, setDateRange] = useState<AdminDateRange>(snapshot.selectedRange)
   const [planFilter, setPlanFilter] = useState('all')
+  const [statusFilter, setStatusFilter] = useState('all')
   const [healthFilter, setHealthFilter] = useState('all')
+  const [orderIdFilter, setOrderIdFilter] = useState('')
+  const [runIdFilter, setRunIdFilter] = useState('')
   const [search, setSearch] = useState('')
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null)
 
@@ -72,13 +75,27 @@ export function AdminUsageDashboard({ snapshot }: { snapshot: AdminUsageSnapshot
 
   const filteredUsers = useMemo(() => {
     const query = search.trim().toLowerCase()
+    const orderQuery = orderIdFilter.trim().toLowerCase()
+    const runQuery = runIdFilter.trim().toLowerCase()
 
     return snapshot.users.filter((user) => {
       if (planFilter !== 'all' && user.currentPlan !== planFilter) {
         return false
       }
 
+      if (statusFilter !== 'all' && user.latestRunStatus !== statusFilter) {
+        return false
+      }
+
       if (healthFilter !== 'all' && user.health !== healthFilter) {
+        return false
+      }
+
+      if (orderQuery && !user.orderIds.some((orderId) => orderId.toLowerCase().includes(orderQuery))) {
+        return false
+      }
+
+      if (runQuery && !user.runTimeline.some((run) => run.id.toLowerCase().includes(runQuery))) {
         return false
       }
 
@@ -88,7 +105,7 @@ export function AdminUsageDashboard({ snapshot }: { snapshot: AdminUsageSnapshot
 
       return buildUserSearchText(user).includes(query)
     })
-  }, [healthFilter, planFilter, search, snapshot.users])
+  }, [healthFilter, orderIdFilter, planFilter, runIdFilter, search, snapshot.users, statusFilter])
 
   useEffect(() => {
     if (selectedUserId && !filteredUsers.some((user) => user.id === selectedUserId)) {
@@ -161,7 +178,7 @@ export function AdminUsageDashboard({ snapshot }: { snapshot: AdminUsageSnapshot
                   </div>
                 </div>
 
-                <div className="grid gap-3 sm:grid-cols-2 xl:w-[42rem] xl:grid-cols-4">
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:w-[72rem] xl:grid-cols-6">
                   <Select value={dateRange} onValueChange={handleRangeChange}>
                     <SelectTrigger className="w-full border-white/10 bg-black/20 text-white">
                       <SelectValue placeholder="Date range" />
@@ -184,6 +201,19 @@ export function AdminUsageDashboard({ snapshot }: { snapshot: AdminUsageSnapshot
                       <SelectItem value="always_on">Always on</SelectItem>
                     </SelectContent>
                   </Select>
+                  <Select value={statusFilter} onValueChange={setStatusFilter}>
+                    <SelectTrigger className="w-full border-white/10 bg-black/20 text-white">
+                      <SelectValue placeholder="Status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All statuses</SelectItem>
+                      <SelectItem value="provisioning">Provisioning</SelectItem>
+                      <SelectItem value="running">Running</SelectItem>
+                      <SelectItem value="completed">Completed</SelectItem>
+                      <SelectItem value="failed">Failed</SelectItem>
+                      <SelectItem value="none">No runs</SelectItem>
+                    </SelectContent>
+                  </Select>
                   <Select value={healthFilter} onValueChange={setHealthFilter}>
                     <SelectTrigger className="w-full border-white/10 bg-black/20 text-white">
                       <SelectValue placeholder="Health" />
@@ -204,6 +234,18 @@ export function AdminUsageDashboard({ snapshot }: { snapshot: AdminUsageSnapshot
                       value={search}
                     />
                   </div>
+                  <Input
+                    className="border-white/10 bg-black/20 text-white placeholder:text-zinc-500"
+                    onChange={(event) => setOrderIdFilter(event.target.value)}
+                    placeholder="order_id"
+                    value={orderIdFilter}
+                  />
+                  <Input
+                    className="border-white/10 bg-black/20 text-white placeholder:text-zinc-500"
+                    onChange={(event) => setRunIdFilter(event.target.value)}
+                    placeholder="run_id"
+                    value={runIdFilter}
+                  />
                 </div>
               </div>
 

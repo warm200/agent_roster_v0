@@ -361,6 +361,7 @@ export function buildUserRows(input: {
         health,
         id: userId,
         lastLaunchAt: latestUsage?.createdAt.toISOString() ?? subscription?.updatedAt.toISOString() ?? now.toISOString(),
+        latestRunStatus: latestUsage?.statusSnapshot ?? 'none',
         launchesThisPeriod,
         ledgerTimeline: userLedger.slice(0, 20).map<LedgerEvent>((row) => ({
           createdAt: row.createdAt.toISOString(),
