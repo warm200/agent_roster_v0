@@ -26,3 +26,15 @@ test('admin overview api returns the overview slice with selected range metadata
   assert.ok(Array.isArray(payload.alerts))
   assert.ok(Array.isArray(payload.overviewMetrics))
 })
+
+test('admin usage api accepts custom start and end dates', async () => {
+  const response = await getAdminUsage(
+    new NextRequest('http://localhost/api/admin/usage?range=custom&start=2026-03-10&end=2026-03-15'),
+  )
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(payload.selectedRange, 'custom')
+  assert.equal(payload.customStartDate, '2026-03-10')
+  assert.equal(payload.customEndDate, '2026-03-15')
+})

@@ -1,7 +1,6 @@
 import { desc } from 'drizzle-orm'
 
 import {
-  type AdminDateRange,
   adminUsageSnapshot as fallbackSnapshot,
   type AdminSignal,
   type AdminUsageSnapshot,
@@ -30,9 +29,9 @@ import {
   buildPeakConcurrentSeries,
   buildUserRows,
   cloneFallback,
-  formatDayLabel,
+  cloneFallbackForWindow,
   getAdminWindowConfig,
-  isWithinWindow,
+  isWithinRange,
   resolvePostgresConnectionString,
   startOfUtcDay,
   sum,
@@ -50,21 +49,26 @@ function getAdminBlockerTone(reason: string): AdminSignal {
   return 'info'
 }
 
-export async function getAdminUsageSnapshot(rangeInput?: AdminDateRange): Promise<AdminUsageSnapshot> {
+export async function getAdminUsageSnapshot(input?: {
+  end?: string | null
+  range?: string | null
+  start?: string | null
+}): Promise<AdminUsageSnapshot> {
   const connectionString = resolvePostgresConnectionString()
-  const windowConfig = getAdminWindowConfig(rangeInput)
+  const windowConfig = getAdminWindowConfig(input)
 
   if (!connectionString?.startsWith('postgres')) {
-    return cloneFallback(
+    return cloneFallbackForWindow(
       'Live admin queries are disabled because no PostgreSQL DATABASE_URL is available. Showing staged dashboard data.',
-      windowConfig.range,
+      input ?? { range: windowConfig.range },
     )
   }
 
   try {
     const db = createDb(connectionString)
     const now = new Date()
-    const windowStart = new Date(now.getTime() - windowConfig.windowMs)
+    const windowStart = windowConfig.rangeStart
+    const windowEnd = windowConfig.rangeEnd
     const todayStart = startOfUtcDay(now)
     const previous24hStart = new Date(now.getTime() - 2 * DAY_MS)
     const todayRowsStart = new Date(now.getTime() - DAY_MS)
@@ -92,9 +96,9 @@ export async function getAdminUsageSnapshot(rangeInput?: AdminDateRange): Promis
     }
 
     const liveSnapshot = structuredClone(fallbackSnapshot)
-    const paidOrdersInWindow = orderRows.filter((row) => row.status === 'paid' && isWithinWindow(row.createdAt, now, windowConfig.windowMs))
-    const usageInWindow = usageRows.filter((row) => isWithinWindow(row.createdAt, now, windowConfig.windowMs))
-    const attemptsInWindow = (launchAttemptRows ?? []).filter((row) => isWithinWindow(row.attemptedAt, now, windowConfig.windowMs))
+    const paidOrdersInWindow = orderRows.filter((row) => row.status === 'paid' && isWithinRange(row.createdAt, windowStart, windowEnd))
+    const usageInWindow = usageRows.filter((row) => isWithinRange(row.createdAt, windowStart, windowEnd))
+    const attemptsInWindow = (launchAttemptRows ?? []).filter((row) => isWithinRange(row.attemptedAt, windowStart, windowEnd))
     const attemptsToday = (launchAttemptRows ?? []).filter((row) => row.attemptedAt >= todayRowsStart)
     const failedBeforeAcceptToday = launchAttemptRows
       ? attemptsToday.filter((row) => row.result === 'failed_before_accept').length
@@ -136,6 +140,8 @@ export async function getAdminUsageSnapshot(rangeInput?: AdminDateRange): Promis
     liveSnapshot.generatedAt = now.toISOString()
     liveSnapshot.environment = 'live-db'
     liveSnapshot.selectedRange = windowConfig.range
+    liveSnapshot.customStartDate = windowConfig.customStartDate
+    liveSnapshot.customEndDate = windowConfig.customEndDate
     liveSnapshot.windowLabel = windowConfig.label
     liveSnapshot.implementationNote =
       launchAttemptRows
@@ -320,7 +326,7 @@ export async function getAdminUsageSnapshot(rangeInput?: AdminDateRange): Promis
           day:
             windowConfig.range === '24h'
               ? day.toLocaleTimeString('en-US', { hour: 'numeric', hour12: true, timeZone: 'UTC' })
-              : formatDayLabel(day),
+              : day.toLocaleDateString('en-US', { day: '2-digit', month: 'short', timeZone: 'UTC' }),
           failedBeforeAccept: usageRows.filter((row) => row.createdAt >= day && row.createdAt < dayEnd && row.statusSnapshot === 'failed' && !row.providerAcceptedAt).length,
           providerAccepted: usageRows.filter((row) => row.providerAcceptedAt && row.providerAcceptedAt >= day && row.providerAcceptedAt < dayEnd).length,
           refunded: ledgerRows.filter((row) => row.eventType === 'refund' && row.createdAt >= day && row.createdAt < dayEnd).length,
@@ -361,6 +367,6 @@ export async function getAdminUsageSnapshot(rangeInput?: AdminDateRange): Promis
     return liveSnapshot
   } catch (error) {
     const message = error instanceof Error ? error.message : 'unknown error'
-    return cloneFallback(`Live admin queries failed (${message}). Showing staged dashboard data instead.`, windowConfig.range)
+    return cloneFallbackForWindow(`Live admin queries failed (${message}). Showing staged dashboard data instead.`, input ?? { range: windowConfig.range })
   }
 }

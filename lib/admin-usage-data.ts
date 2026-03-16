@@ -1,4 +1,4 @@
-export type AdminDateRange = '24h' | '7d' | '30d'
+export type AdminDateRange = '24h' | '7d' | '30d' | 'custom'
 export type AdminMetricFormat = 'count' | 'percent' | 'credits' | 'currency'
 export type AdminSignal = 'stable' | 'info' | 'warning' | 'critical'
 export type AdminUserHealth = 'stable' | 'watch' | 'blocked'
@@ -131,6 +131,8 @@ export type AdminUsageSnapshot = {
   generatedAt: string
   environment: string
   selectedRange: AdminDateRange
+  customEndDate: string | null
+  customStartDate: string | null
   windowLabel: string
   implementationNote: string
   alerts: Array<{
@@ -167,6 +169,8 @@ export const adminUsageSnapshot: AdminUsageSnapshot = {
   generatedAt: '2026-03-15T14:52:00-04:00',
   environment: 'internal-preview',
   selectedRange: '7d',
+  customEndDate: null,
+  customStartDate: null,
   windowLabel: 'Last 7 days',
   implementationNote:
     'Overview, billing, and user drilldown are implemented as a UI-first console. Launch-attempt and billing-alert rows are staged sample data until those tables land.',

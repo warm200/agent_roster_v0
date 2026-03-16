@@ -506,6 +506,12 @@ create table billing_alerts (
 * order_id
 * run_id
 
+当前实现备注：
+
+* 预置时间窗口 `24h / 7d / 30d` 已可用
+* `custom` 已支持，通过 `range=custom&start=YYYY-MM-DD&end=YYYY-MM-DD` 驱动服务端聚合
+* UI 侧已提供自定义起止日期输入并刷新 dashboard
+
 ---
 
 ## 9. API 设计建议

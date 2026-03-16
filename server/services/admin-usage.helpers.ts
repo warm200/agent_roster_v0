@@ -31,45 +31,134 @@ export const STALE_RESERVE_MS = 30 * 60 * 1000
 export type AdminWindowConfig = {
   bucketCount: number
   bucketMs: number
+  customEndDate: string | null
+  customStartDate: string | null
   label: string
   range: AdminDateRange
+  rangeEnd: Date
+  rangeStart: Date
   windowMs: number
 }
 
 export function normalizeAdminDateRange(value: string | null | undefined): AdminDateRange {
-  if (value === '24h' || value === '30d') {
+  if (value === '24h' || value === '30d' || value === 'custom') {
     return value
   }
 
   return '7d'
 }
 
-export function getAdminWindowConfig(rangeInput: string | null | undefined): AdminWindowConfig {
+function formatAdminDateValue(date: Date) {
+  return date.toISOString().slice(0, 10)
+}
+
+function formatAdminDateLabel(date: Date) {
+  return date.toLocaleDateString('en-US', {
+    day: '2-digit',
+    month: 'short',
+    timeZone: 'UTC',
+    year: 'numeric',
+  })
+}
+
+function parseAdminDateValue(value: string | null | undefined) {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return null
+  }
+
+  const [year, month, day] = value.split('-').map((segment) => Number.parseInt(segment, 10))
+  const parsed = new Date(Date.UTC(year, month - 1, day))
+
+  if (
+    Number.isNaN(parsed.getTime()) ||
+    parsed.getUTCFullYear() !== year ||
+    parsed.getUTCMonth() !== month - 1 ||
+    parsed.getUTCDate() !== day
+  ) {
+    return null
+  }
+
+  return parsed
+}
+
+export type AdminWindowInput = {
+  end?: string | null
+  range?: string | null
+  start?: string | null
+}
+
+export function getAdminWindowConfig(
+  input: string | AdminWindowInput | null | undefined,
+): AdminWindowConfig {
+  const rangeInput = typeof input === 'string' ? input : input?.range
+  const startInput = typeof input === 'string' ? null : input?.start
+  const endInput = typeof input === 'string' ? null : input?.end
   const range = normalizeAdminDateRange(rangeInput)
+  const now = new Date()
+
+  if (range === 'custom') {
+    const customStart = parseAdminDateValue(startInput)
+    const customEnd = parseAdminDateValue(endInput)
+
+    if (customStart && customEnd && customStart.getTime() <= customEnd.getTime()) {
+      const rangeStart = customStart
+      const rangeEnd = new Date(customEnd.getTime() + DAY_MS)
+      const bucketCount = Math.max(1, Math.round((rangeEnd.getTime() - rangeStart.getTime()) / DAY_MS))
+
+      return {
+        bucketCount,
+        bucketMs: DAY_MS,
+        customEndDate: formatAdminDateValue(customEnd),
+        customStartDate: formatAdminDateValue(customStart),
+        label: `Custom · ${formatAdminDateLabel(customStart)} - ${formatAdminDateLabel(customEnd)}`,
+        range,
+        rangeEnd,
+        rangeStart,
+        windowMs: rangeEnd.getTime() - rangeStart.getTime(),
+      }
+    }
+  }
 
   switch (range) {
     case '24h':
-      return {
-        bucketCount: 24,
-        bucketMs: 60 * 60 * 1000,
-        label: 'Last 24 hours',
-        range,
-        windowMs: DAY_MS,
+      {
+        const rangeEnd = now
+        const rangeStart = new Date(now.getTime() - DAY_MS)
+
+        return {
+          bucketCount: 24,
+          bucketMs: 60 * 60 * 1000,
+          customEndDate: null,
+          customStartDate: null,
+          label: 'Last 24 hours',
+          range,
+          rangeEnd,
+          rangeStart,
+          windowMs: DAY_MS,
+        }
       }
     case '30d':
       return {
         bucketCount: 30,
         bucketMs: DAY_MS,
+        customEndDate: null,
+        customStartDate: null,
         label: 'Last 30 days',
         range,
+        rangeEnd: now,
+        rangeStart: new Date(now.getTime() - 30 * DAY_MS),
         windowMs: 30 * DAY_MS,
       }
     default:
       return {
         bucketCount: 7,
         bucketMs: DAY_MS,
+        customEndDate: null,
+        customStartDate: null,
         label: 'Last 7 days',
         range: '7d',
+        rangeEnd: now,
+        rangeStart: new Date(now.getTime() - 7 * DAY_MS),
         windowMs: 7 * DAY_MS,
       }
   }
@@ -99,11 +188,27 @@ export function resolvePostgresConnectionString() {
 
 export function cloneFallback(note: string, range: AdminDateRange = '7d'): AdminUsageSnapshot {
   const snapshot = structuredClone(fallbackSnapshot)
+  const config = getAdminWindowConfig(range)
   snapshot.generatedAt = new Date().toISOString()
   snapshot.environment = 'staged-fallback'
   snapshot.implementationNote = note
-  snapshot.selectedRange = range
-  snapshot.windowLabel = getAdminWindowConfig(range).label
+  snapshot.selectedRange = config.range
+  snapshot.customStartDate = config.customStartDate
+  snapshot.customEndDate = config.customEndDate
+  snapshot.windowLabel = config.label
+  return snapshot
+}
+
+export function cloneFallbackForWindow(note: string, input: AdminWindowInput): AdminUsageSnapshot {
+  const snapshot = structuredClone(fallbackSnapshot)
+  const config = getAdminWindowConfig(input)
+  snapshot.generatedAt = new Date().toISOString()
+  snapshot.environment = 'staged-fallback'
+  snapshot.implementationNote = note
+  snapshot.selectedRange = config.range
+  snapshot.customStartDate = config.customStartDate
+  snapshot.customEndDate = config.customEndDate
+  snapshot.windowLabel = config.label
   return snapshot
 }
 
@@ -113,6 +218,14 @@ export function isWithinWindow(date: Date | null, now: Date, windowMs = WINDOW_D
   }
 
   return now.getTime() - date.getTime() <= windowMs
+}
+
+export function isWithinRange(date: Date | null, rangeStart: Date, rangeEnd: Date) {
+  if (!date) {
+    return false
+  }
+
+  return date >= rangeStart && date < rangeEnd
 }
 
 export function toIso(date: Date | null | undefined) {
@@ -154,11 +267,10 @@ export function buildPeakConcurrentSeries(
   now: Date,
   config: AdminWindowConfig,
 ) {
-  const windowStart = new Date(now.getTime() - config.windowMs)
   const alignedStart =
     config.bucketMs === DAY_MS
-      ? startOfUtcDay(windowStart)
-      : new Date(Math.floor(windowStart.getTime() / config.bucketMs) * config.bucketMs)
+      ? startOfUtcDay(config.rangeStart)
+      : new Date(Math.floor(config.rangeStart.getTime() / config.bucketMs) * config.bucketMs)
 
   return Array.from({ length: config.bucketCount }, (_, index) => {
     const date = new Date(alignedStart.getTime() + index * config.bucketMs)

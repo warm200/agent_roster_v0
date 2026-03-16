@@ -1,15 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-import { type AdminDateRange, type AdminUsageSnapshot } from '@/lib/admin-usage-data'
+import type { AdminUsageSnapshot } from '@/lib/admin-usage-data'
 import { getAdminUsageSnapshot } from '@/server/services/admin-usage.service'
 
-export function getAdminRange(request: NextRequest): AdminDateRange | undefined {
-  const value = request.nextUrl.searchParams.get('range')
-  return value === '24h' || value === '7d' || value === '30d' ? value : undefined
+export function getAdminWindowInput(request: NextRequest) {
+  return {
+    end: request.nextUrl.searchParams.get('end'),
+    range: request.nextUrl.searchParams.get('range'),
+    start: request.nextUrl.searchParams.get('start'),
+  }
 }
 
 export async function getAdminSnapshotFromRequest(request: NextRequest) {
-  return getAdminUsageSnapshot(getAdminRange(request))
+  return getAdminUsageSnapshot(getAdminWindowInput(request))
 }
 
 export function adminJson(data: unknown) {
@@ -24,6 +27,8 @@ export function adminJson(data: unknown) {
 export function buildAdminOverview(snapshot: AdminUsageSnapshot) {
   return {
     alerts: snapshot.alerts,
+    customEndDate: snapshot.customEndDate,
+    customStartDate: snapshot.customStartDate,
     environment: snapshot.environment,
     generatedAt: snapshot.generatedAt,
     implementationNote: snapshot.implementationNote,
@@ -36,6 +41,8 @@ export function buildAdminOverview(snapshot: AdminUsageSnapshot) {
 export function buildAdminAlerts(snapshot: AdminUsageSnapshot) {
   return {
     alerts: snapshot.alerts,
+    customEndDate: snapshot.customEndDate,
+    customStartDate: snapshot.customStartDate,
     generatedAt: snapshot.generatedAt,
     selectedRange: snapshot.selectedRange,
     windowLabel: snapshot.windowLabel,
@@ -45,6 +52,8 @@ export function buildAdminAlerts(snapshot: AdminUsageSnapshot) {
 export function buildAdminFunnel(snapshot: AdminUsageSnapshot) {
   return {
     blockedLaunches: snapshot.blockedLaunches,
+    customEndDate: snapshot.customEndDate,
+    customStartDate: snapshot.customStartDate,
     generatedAt: snapshot.generatedAt,
     launchFunnel: snapshot.launchFunnel,
     selectedRange: snapshot.selectedRange,
@@ -54,6 +63,8 @@ export function buildAdminFunnel(snapshot: AdminUsageSnapshot) {
 
 export function buildAdminRuntimeUsage(snapshot: AdminUsageSnapshot) {
   return {
+    customEndDate: snapshot.customEndDate,
+    customStartDate: snapshot.customStartDate,
     generatedAt: snapshot.generatedAt,
     runtimeUsage: snapshot.runtimeUsage,
     selectedRange: snapshot.selectedRange,
@@ -64,6 +75,8 @@ export function buildAdminRuntimeUsage(snapshot: AdminUsageSnapshot) {
 export function buildAdminBillingHealth(snapshot: AdminUsageSnapshot) {
   return {
     billingHealth: snapshot.billingHealth,
+    customEndDate: snapshot.customEndDate,
+    customStartDate: snapshot.customStartDate,
     generatedAt: snapshot.generatedAt,
     selectedRange: snapshot.selectedRange,
     windowLabel: snapshot.windowLabel,
@@ -72,6 +85,8 @@ export function buildAdminBillingHealth(snapshot: AdminUsageSnapshot) {
 
 export function buildAdminUsers(snapshot: AdminUsageSnapshot) {
   return {
+    customEndDate: snapshot.customEndDate,
+    customStartDate: snapshot.customStartDate,
     generatedAt: snapshot.generatedAt,
     selectedRange: snapshot.selectedRange,
     users: snapshot.users,
@@ -82,6 +97,8 @@ export function buildAdminUsers(snapshot: AdminUsageSnapshot) {
 export function buildAdminAlwaysOn(snapshot: AdminUsageSnapshot) {
   return {
     alwaysOnShadow: snapshot.alwaysOnShadow,
+    customEndDate: snapshot.customEndDate,
+    customStartDate: snapshot.customStartDate,
     generatedAt: snapshot.generatedAt,
     selectedRange: snapshot.selectedRange,
     windowLabel: snapshot.windowLabel,

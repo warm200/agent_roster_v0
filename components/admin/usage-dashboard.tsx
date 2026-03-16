@@ -11,6 +11,7 @@ import {
   Users,
 } from 'lucide-react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
   Select,
@@ -44,6 +45,24 @@ const sectionLinks = [
   { id: 'always-on', label: 'Always On', icon: ShieldAlert },
 ]
 
+function formatDateInputValue(date: Date) {
+  const year = date.getFullYear()
+  const month = `${date.getMonth() + 1}`.padStart(2, '0')
+  const day = `${date.getDate()}`.padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function getDefaultCustomDates() {
+  const end = new Date()
+  const start = new Date(end)
+  start.setDate(end.getDate() - 6)
+
+  return {
+    end: formatDateInputValue(end),
+    start: formatDateInputValue(start),
+  }
+}
+
 function buildUserSearchText(user: AdminUsageSnapshot['users'][number]) {
   return [
     user.id,
@@ -61,6 +80,8 @@ export function AdminUsageDashboard({ snapshot }: { snapshot: AdminUsageSnapshot
   const router = useRouter()
   const searchParams = useSearchParams()
   const [dateRange, setDateRange] = useState<AdminDateRange>(snapshot.selectedRange)
+  const [customStartDate, setCustomStartDate] = useState(snapshot.customStartDate ?? getDefaultCustomDates().start)
+  const [customEndDate, setCustomEndDate] = useState(snapshot.customEndDate ?? getDefaultCustomDates().end)
   const [planFilter, setPlanFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
   const [healthFilter, setHealthFilter] = useState('all')
@@ -71,6 +92,8 @@ export function AdminUsageDashboard({ snapshot }: { snapshot: AdminUsageSnapshot
 
   useEffect(() => {
     setDateRange(snapshot.selectedRange)
+    setCustomStartDate(snapshot.customStartDate ?? getDefaultCustomDates().start)
+    setCustomEndDate(snapshot.customEndDate ?? getDefaultCustomDates().end)
   }, [snapshot.selectedRange])
 
   const filteredUsers = useMemo(() => {
@@ -113,11 +136,31 @@ export function AdminUsageDashboard({ snapshot }: { snapshot: AdminUsageSnapshot
     }
   }, [filteredUsers, selectedUserId])
 
+  const updateAdminWindow = (params: URLSearchParams) => {
+    startTransition(() => {
+      const query = params.toString()
+      router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false })
+    })
+  }
+
   const handleRangeChange = (nextRange: string) => {
     const normalizedRange = nextRange as AdminDateRange
     const params = new URLSearchParams(searchParams.toString())
 
     setDateRange(normalizedRange)
+
+    if (normalizedRange === 'custom') {
+      const start = snapshot.customStartDate ?? customStartDate
+      const end = snapshot.customEndDate ?? customEndDate
+      params.set('range', 'custom')
+      params.set('start', start)
+      params.set('end', end)
+      updateAdminWindow(params)
+      return
+    }
+
+    params.delete('start')
+    params.delete('end')
 
     if (normalizedRange === '7d') {
       params.delete('range')
@@ -125,10 +168,20 @@ export function AdminUsageDashboard({ snapshot }: { snapshot: AdminUsageSnapshot
       params.set('range', normalizedRange)
     }
 
-    startTransition(() => {
-      const query = params.toString()
-      router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false })
-    })
+    updateAdminWindow(params)
+  }
+
+  const handleApplyCustomRange = () => {
+    if (!customStartDate || !customEndDate || customStartDate > customEndDate) {
+      return
+    }
+
+    const params = new URLSearchParams(searchParams.toString())
+    params.set('range', 'custom')
+    params.set('start', customStartDate)
+    params.set('end', customEndDate)
+    setDateRange('custom')
+    updateAdminWindow(params)
   }
 
   const selectedUser = snapshot.users.find((user) => user.id === selectedUserId) ?? null
@@ -187,9 +240,35 @@ export function AdminUsageDashboard({ snapshot }: { snapshot: AdminUsageSnapshot
                       <SelectItem value="24h">24 hours</SelectItem>
                       <SelectItem value="7d">7 days</SelectItem>
                       <SelectItem value="30d">30 days</SelectItem>
-                      <SelectItem disabled value="custom">Custom</SelectItem>
+                      <SelectItem value="custom">Custom</SelectItem>
                     </SelectContent>
                   </Select>
+                  {dateRange === 'custom' ? (
+                    <>
+                      <Input
+                        className="border-white/10 bg-black/20 text-white"
+                        max={customEndDate}
+                        onChange={(event) => setCustomStartDate(event.target.value)}
+                        type="date"
+                        value={customStartDate}
+                      />
+                      <Input
+                        className="border-white/10 bg-black/20 text-white"
+                        min={customStartDate}
+                        onChange={(event) => setCustomEndDate(event.target.value)}
+                        type="date"
+                        value={customEndDate}
+                      />
+                      <Button
+                        className="border-white/10 bg-black/20 text-white hover:bg-white/10"
+                        disabled={!customStartDate || !customEndDate || customStartDate > customEndDate}
+                        onClick={handleApplyCustomRange}
+                        variant="outline"
+                      >
+                        Apply
+                      </Button>
+                    </>
+                  ) : null}
                   <Select value={planFilter} onValueChange={setPlanFilter}>
                     <SelectTrigger className="w-full border-white/10 bg-black/20 text-white">
                       <SelectValue placeholder="Plan" />
