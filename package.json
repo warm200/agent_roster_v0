@@ -9,6 +9,7 @@
     "lint": "eslint .",
     "docs:list": "tsx scripts/docs-list.ts",
     "runtime:maintenance": "tsx scripts/runtime-maintenance.ts",
+    "runtime:maintenance:watch": "tsx scripts/runtime-maintenance.ts --watch",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test tests/**/*.test.ts",
     "test:e2e": "tsx --test tests/browser-smoke.test.ts",

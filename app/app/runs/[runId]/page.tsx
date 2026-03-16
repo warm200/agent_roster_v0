@@ -23,6 +23,23 @@ interface RunDetailPageProps {
   params: Promise<{ runId: string }>
 }
 
+function canResumeRun(run: NonNullable<ReturnType<typeof useRunStatus>['run']>) {
+  return Boolean(
+    run.preservedStateAvailable &&
+      (run.runtimeState === 'stopped' || run.runtimeState === 'archived'),
+  )
+}
+
+function canStopRun(run: NonNullable<ReturnType<typeof useRunStatus>['run']>) {
+  if (!run.usesRealWorkspace || run.status === 'failed') {
+    return false
+  }
+  if (!run.runtimeState) {
+    return true
+  }
+  return run.runtimeState === 'provisioning' || run.runtimeState === 'running'
+}
+
 export default function RunDetailPage({ params }: RunDetailPageProps) {
   const { runId } = use(params)
   const router = useRouter()
@@ -62,7 +79,9 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
   }
 
   const isActive = run.status === 'provisioning' || run.status === 'running'
-  const canStop = run.status !== 'failed' && run.usesRealWorkspace
+  const canResume = canResumeRun(run)
+  const canOpenControlUi = run.runtimeState ? run.runtimeState === 'running' : run.status === 'running'
+  const canStop = canStopRun(run)
   const timeline = buildTimeline(run)
 
   const handleStop = async () => {
@@ -118,7 +137,7 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
         toast.success('Restart started. Redirecting to new run...')
         router.push(`/app/runs/${payload.id}`)
       } else {
-        toast.success('Sandbox restart requested')
+        toast.success(canResume ? 'Runtime resume requested' : 'Sandbox restart requested')
       }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Network error while restarting run')
@@ -205,7 +224,7 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
             <Button
               variant="outline"
               onClick={handleOpenControlUi}
-              disabled={isOpeningControlUi || run.status === 'provisioning' || run.status === 'failed'}
+              disabled={!canOpenControlUi || isOpeningControlUi}
             >
               {isOpeningControlUi ? (
                 <>
@@ -220,17 +239,17 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
               )}
             </Button>
           )}
-          {run.status === 'failed' && (
+          {(run.status === 'failed' || canResume) && (
             <Button variant="outline" onClick={handleRetry} disabled={isRetrying}>
               {isRetrying ? (
                 <>
                   <Spinner className="mr-2 h-4 w-4" />
-                  Restarting...
+                  {canResume ? 'Resuming...' : 'Restarting...'}
                 </>
               ) : (
                 <>
                   <RefreshCw className="mr-2 h-4 w-4" />
-                  Restart Run
+                  {canResume ? (run.runtimeState === 'archived' ? 'Recover Run' : 'Resume Run') : 'Restart Run'}
                 </>
               )}
             </Button>

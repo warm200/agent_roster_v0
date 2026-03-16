@@ -86,6 +86,8 @@ function buildStoppedRun(run: Run): Run {
   return {
     ...run,
     completedAt: run.completedAt ?? stoppedAt,
+    preservedStateAvailable: run.preservedStateAvailable ?? false,
+    runtimeState: run.runtimeState ?? 'stopped',
     resultSummary:
       run.status === 'failed' && run.resultSummary
         ? run.resultSummary
@@ -139,8 +141,12 @@ function buildPendingRun(order: Order, runId: string, providerName: string): Run
     userId: order.userId,
     orderId: order.id,
     channelConfigId: order.channelConfig?.id ?? 'channel-pending',
+    recoverableUntilAt: null,
     status: 'provisioning',
+    persistenceMode: null,
+    preservedStateAvailable: false,
     combinedRiskLevel: order.bundleRisk.level,
+    runtimeState: 'provisioning',
     usesRealWorkspace: providerName !== 'openai',
     usesTools,
     networkEnabled: order.items.some((item) => item.agentVersion.riskProfile.network),
@@ -344,6 +350,8 @@ function buildRunPatchFromRuntime(
     | 'deletedAt'
     | 'lastReconciledAt'
     | 'persistenceMode'
+    | 'preservedStateAvailable'
+    | 'recoverableUntilAt'
     | 'startedAt'
     | 'state'
     | 'stoppedAt'
@@ -368,7 +376,11 @@ function buildRunPatchFromRuntime(
       status === 'completed' || status === 'failed'
         ? instance.deletedAt ?? instance.archivedAt ?? instance.stoppedAt ?? run.completedAt ?? nowIso()
         : null,
+    persistenceMode: instance.persistenceMode,
+    preservedStateAvailable: instance.preservedStateAvailable,
+    recoverableUntilAt: instance.recoverableUntilAt ?? null,
     resultSummary: run.resultSummary ?? defaultSummary,
+    runtimeState: instance.state,
     startedAt: instance.startedAt ?? run.startedAt,
     status,
     updatedAt: instance.lastReconciledAt ?? nowIso(),
@@ -383,6 +395,8 @@ function applyRuntimeStateToRun(
     | 'deletedAt'
     | 'lastReconciledAt'
     | 'persistenceMode'
+    | 'preservedStateAvailable'
+    | 'recoverableUntilAt'
     | 'startedAt'
     | 'state'
     | 'stoppedAt'
@@ -411,6 +425,15 @@ function shouldArchiveRecoverableRuntime(runtime: RuntimeInstance) {
     return false
   }
   return Date.now() - stoppedAtMs >= policy.autoArchiveMinutes * 60 * 1000
+}
+
+function isRecoverableResumeCandidate(
+  runtime: Pick<RuntimeInstance, 'persistenceMode' | 'state'> | null,
+) {
+  if (!runtime || runtime.persistenceMode !== 'recoverable') {
+    return false
+  }
+  return runtime.state === 'stopped' || runtime.state === 'archived'
 }
 
 export class RunService {
@@ -771,8 +794,10 @@ export class RunService {
     const run = await this.requireRun(userId, runId)
     const provider = runServiceDeps.getRunProvider()
     const subscriptionService = runServiceDeps.getSubscriptionService()
+    const runtimeRecord = await this.findRuntimeRecordSafe(run.id)
+    const recoverableResume = isRecoverableResumeCandidate(runtimeRecord)
 
-    if (run.status !== 'failed') {
+    if (run.status !== 'failed' && !recoverableResume) {
       throw new HttpError(409, 'Only stopped runs can be restarted.')
     }
 
@@ -839,10 +864,13 @@ export class RunService {
               })
             }
 
-            restarted = (await provider.getStatus(run.id)) ?? {
-              ...run,
-              ...buildRunPatchFromRuntime(run, runtime),
-            }
+            restarted = applyRuntimeStateToRun(
+              (await provider.getStatus(run.id)) ?? {
+                ...run,
+                ...buildRunPatchFromRuntime(run, runtime),
+              },
+              runtime,
+            )
           } else {
             restarted = null
           }

@@ -88,6 +88,7 @@ Current lifecycle shape:
 - `Run` = bounded ephemeral session
 - `Warm Standby` = recoverable wakeable state
 - `Always On` = persistent live workspace intent
+- recoverable Warm Standby runs can now be resumed from stopped / archived state without creating a new run id
 
 Current reconciliation model:
 
@@ -97,6 +98,7 @@ Current reconciliation model:
 - internal maintenance trigger: `POST /api/internal/runtime-maintenance/reconcile`
 - CLI maintenance trigger:
   - `pnpm runtime:maintenance`
+  - `pnpm runtime:maintenance:watch`
 - current maintenance enforcement covers:
   - provisioning timeout
   - max session TTL

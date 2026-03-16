@@ -25,6 +25,23 @@ import { toast } from 'sonner'
 type RunFilter = 'all' | RunStatus
 type SortKey = 'date' | 'status'
 
+function canResumeRun(run: RunSummary) {
+  return Boolean(
+    run.preservedStateAvailable &&
+      (run.runtimeState === 'stopped' || run.runtimeState === 'archived'),
+  )
+}
+
+function canStopRun(run: RunSummary) {
+  if (!run.usesRealWorkspace || run.status === 'failed') {
+    return false
+  }
+  if (!run.runtimeState) {
+    return true
+  }
+  return run.runtimeState === 'provisioning' || run.runtimeState === 'running'
+}
+
 export default function RunsPage() {
   const [runs, setRuns] = useState<RunSummary[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -131,7 +148,13 @@ export default function RunsPage() {
               )
             : [payload, ...currentRuns],
         )
-        toast.success(payload.id === run.id ? 'Sandbox restart requested' : 'Restart started')
+        toast.success(
+          payload.id === run.id
+            ? canResumeRun(run)
+              ? 'Runtime resume requested'
+              : 'Sandbox restart requested'
+            : 'Restart started',
+        )
         return
       }
 
@@ -245,6 +268,8 @@ export default function RunsPage() {
             <div className="divide-y divide-border">
               {filteredRuns.map((run) => {
                 const [primaryAgent, ...restAgents] = run.agents
+                const canResume = canResumeRun(run)
+                const canStop = canStopRun(run)
 
                 return (
                   <div
@@ -279,7 +304,7 @@ export default function RunsPage() {
                             View Details
                           </Link>
                         </Button>
-                        {run.status === 'failed' && (
+                        {(run.status === 'failed' || canResume) && (
                           <Button
                             variant="outline"
                             size="sm"
@@ -294,12 +319,12 @@ export default function RunsPage() {
                             ) : (
                               <>
                                 <RefreshCw className="mr-2 h-4 w-4" />
-                                Restart Run
+                                {canResume ? (run.runtimeState === 'archived' ? 'Recover Run' : 'Resume Run') : 'Restart Run'}
                               </>
                             )}
                           </Button>
                         )}
-                        {run.usesRealWorkspace && run.status !== 'failed' && (
+                        {canStop && (
                           <Button
                             variant="destructive"
                             size="sm"

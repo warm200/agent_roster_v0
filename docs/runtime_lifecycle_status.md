@@ -54,6 +54,7 @@ read_when:
 - internal trigger route exists at `POST /api/internal/runtime-maintenance/reconcile`
 - CLI/cron entrypoint exists:
   - `pnpm runtime:maintenance`
+  - `pnpm runtime:maintenance:watch`
 - maintenance can now enforce:
   - provisioning timeout
   - max session TTL
@@ -78,6 +79,7 @@ read_when:
   - recoverable
   - stopped runtime is preserved
   - archived later when stopped long enough and reconciliation runs
+  - completed stopped / archived runtimes can be resumed on the same run id
 - `Always On`
   - no short-session cleanup policy by default
   - treated as live persistence intent
@@ -100,14 +102,19 @@ read_when:
 ### Background cleanup / maintenance loop
 
 - maintenance service exists for batch stale-runtime reconciliation
-- no recurring worker/cron is scheduling it yet
-- current cleanup depends on user reads plus explicit maintenance triggers
+- opt-in recurring loop exists through:
+  - `pnpm runtime:maintenance:watch`
+- external scheduling/hosting is still required
+- current cleanup no longer depends only on user reads if the loop or CLI is running
 
 ### Idle-time / TTL enforcement loop
 
-- policy exists in docs and config
-- maintenance can enforce provisioning timeout and max session TTL when invoked
-- idle-time enforcement is still pending because meaningful activity is not yet tracked separately from passive reads
+- maintenance can enforce:
+  - provisioning timeout
+  - max session TTL
+  - idle timeout
+- meaningful activity is now tracked separately from passive reads
+- coverage is still partial because only some producers currently touch the activity clock
 
 ### Webhook-driven reconciliation
 
@@ -134,7 +141,7 @@ read_when:
 
 ## Next Recommended Slice
 
-1. add a background runtime maintenance service
-2. expose or schedule it through cron/admin/internal job
-3. use it to apply archive/delete/release rules without waiting for page reads
-4. later add explicit idle/TTL evaluation on top
+1. add more meaningful-activity producers beyond Telegram
+2. wire recurring maintenance into real hosting/ops
+3. expose richer runtime lifecycle states in user-facing UI
+4. later add audit-log repair or webhook reconciliation if pull-based drift becomes a problem

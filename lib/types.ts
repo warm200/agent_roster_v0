@@ -222,6 +222,10 @@ export interface Run {
   orderId: string
   channelConfigId: string
   status: RunStatus
+  runtimeState?: RuntimeInstanceState | null
+  persistenceMode?: PersistenceMode | null
+  preservedStateAvailable?: boolean
+  recoverableUntilAt?: string | null
   combinedRiskLevel: RiskLevel
   usesRealWorkspace: boolean
   usesTools: boolean

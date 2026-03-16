@@ -208,6 +208,158 @@ test('run service preserves recoverable runtime state after stop', async () => {
   setRunServiceDepsForTesting(null)
 })
 
+test('run service resumes recoverable stopped runtime state from completed status', async () => {
+  const resumedAt = new Date().toISOString()
+  const calls: string[] = []
+  const completedRun: Run = {
+    ...baseRun,
+    completedAt: new Date().toISOString(),
+    resultSummary: 'Managed runtime is sleeping and can be resumed later.',
+    status: 'completed',
+  }
+
+  const service = new RunService(
+    {
+      async findRunForUser() {
+        return completedRun
+      },
+      async updateRun(_runId: string, nextRun: Partial<Run>) {
+        calls.push('repository.updateRun')
+        return { ...completedRun, ...nextRun }
+      },
+      async updateRunUsage() {
+        calls.push('repository.updateRunUsage')
+        return null
+      },
+    } as never,
+    {
+      async findRuntimeInstanceByRunId() {
+        return {
+          ...baseRuntimeRecord,
+          persistenceMode: 'recoverable',
+          planId: 'warm_standby',
+          runtimeMode: 'wakeable_recoverable',
+          state: 'stopped',
+          stoppedAt: completedRun.completedAt,
+          preservedStateAvailable: true,
+        }
+      },
+      async updateRuntimeInstance(_runId: string, _input: Partial<RuntimeInstance>) {
+        calls.push('runtime.updateRuntimeInstance')
+        return {
+          ...baseRuntimeRecord,
+          persistenceMode: 'recoverable',
+          planId: 'warm_standby',
+          runtimeMode: 'wakeable_recoverable',
+          state: 'running',
+          startedAt: resumedAt,
+          stoppedAt: null,
+          preservedStateAvailable: true,
+          workspaceReleasedAt: null,
+        }
+      },
+      async findOpenRuntimeInterval() {
+        return null
+      },
+      async createRuntimeInterval() {
+        calls.push('runtime.createRuntimeInterval')
+        return null
+      },
+    } as never,
+  )
+
+  setRunServiceDepsForTesting({
+    getOrderByIdForUser: async () =>
+      ({
+        id: completedRun.orderId,
+        userId: completedRun.userId,
+        items: [],
+      }) as never,
+    getOrderProviderApiKeysForUser: async () => ({}),
+    getSubscriptionService: () =>
+      ({
+        getLaunchPolicy: async () => ({
+          allowed: true,
+          blockers: [],
+          plan: { id: 'warm_standby' },
+          subscription: null,
+          usage: {
+            activeBundles: 0,
+            activeRunIds: [],
+            concurrentRuns: 0,
+          },
+        }),
+        reserveLaunchCredit: async () => {
+          calls.push('subscription.reserveLaunchCredit')
+          return null
+        },
+        commitReservedLaunchCredit: async () => {
+          calls.push('subscription.commitReservedLaunchCredit')
+          return null
+        },
+      }) as never,
+    getRunProvider: () => ({
+      name: 'daytona',
+      async createRun() {
+        return completedRun
+      },
+      async getLogs() {
+        return []
+      },
+      async getResult() {
+        return null
+      },
+      async getStatus() {
+        return {
+          ...completedRun,
+          completedAt: null,
+          startedAt: resumedAt,
+          status: 'running',
+        }
+      },
+      async restartRuntimeInstance() {
+        calls.push('provider.restartRuntimeInstance')
+        return {
+          ...baseRuntimeRecord,
+          persistenceMode: 'recoverable',
+          planId: 'warm_standby',
+          preservedStateAvailable: true,
+          providerName: 'daytona',
+          providerInstanceRef: 'sandbox-1',
+          recoverableUntilAt: null,
+          runId: completedRun.id,
+          runtimeMode: 'wakeable_recoverable',
+          startedAt: resumedAt,
+          state: 'running',
+          stoppedAt: null,
+          stopReason: null,
+          workspaceReleasedAt: null,
+        }
+      },
+      async stopRun() {
+        return null
+      },
+    }),
+  })
+
+  const resumed = await service.retryRun(completedRun.userId, completedRun.id)
+
+  assert.equal(resumed.status, 'running')
+  assert.equal(resumed.runtimeState, 'running')
+  assert.equal(resumed.preservedStateAvailable, true)
+  assert.deepEqual(calls, [
+    'subscription.reserveLaunchCredit',
+    'provider.restartRuntimeInstance',
+    'runtime.updateRuntimeInstance',
+    'runtime.createRuntimeInterval',
+    'subscription.commitReservedLaunchCredit',
+    'repository.updateRunUsage',
+    'repository.updateRun',
+  ])
+
+  setRunServiceDepsForTesting(null)
+})
+
 test('run service archives old recoverable runtime state on read when threshold is exceeded', async () => {
   const previousArchiveMinutes = process.env.WARM_STANDBY_AUTO_ARCHIVE_MINUTES
   process.env.WARM_STANDBY_AUTO_ARCHIVE_MINUTES = '1'

@@ -108,6 +108,7 @@ Current MVP Backend Notes:
     - lifecycle is pull-based for now
     - when run detail, run list, stop, or restart touches a run, backend re-reads provider runtime state and reconciles local DB
     - a maintenance service can also batch-reconcile stale runtime instances without webhooks
+    - a recurring maintenance loop can be run with `pnpm runtime:maintenance:watch`
     - webhook-driven lifecycle reconciliation is intentionally deferred
   timeout_enforcement:
     - provisioning timeout can now be enforced by the maintenance service
@@ -133,6 +134,7 @@ Current MVP Backend Notes:
       - stopped runtime is preserved as recoverable state
       - backend may archive it later once the configured stopped duration is exceeded
       - `recoverableUntilAt` is derived from the archive policy window
+      - a later trigger can resume the same run/sandbox lifecycle instead of forcing a brand-new launch
     AlwaysOn:
       - no short-session cleanup path by default
       - stop is exceptional and reconciled as operational state, not the normal product flow
