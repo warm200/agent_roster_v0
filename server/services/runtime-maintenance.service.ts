@@ -1,3 +1,6 @@
+import type { RunTerminationReason, RuntimeInstance, RunUsage } from '@/lib/types'
+
+import { RunRepository } from './run.repository'
 import { getRunService, type RunService } from './run.service'
 import { RuntimeInstanceRepository } from './runtime-instance.repository'
 
@@ -13,6 +16,42 @@ function readPositiveIntEnv(name: string, fallback: number) {
   return value
 }
 
+function hasElapsed(since: string | null, minutes: number | null) {
+  if (!since || minutes == null) {
+    return false
+  }
+  const sinceMs = new Date(since).getTime()
+  if (Number.isNaN(sinceMs)) {
+    return false
+  }
+  return Date.now() - sinceMs >= minutes * 60 * 1000
+}
+
+function determineMaintenanceStopReason(
+  runtime: RuntimeInstance,
+  usage: RunUsage | null,
+): RunTerminationReason | null {
+  if (!usage) {
+    return null
+  }
+
+  if (
+    runtime.state === 'provisioning' &&
+    hasElapsed(usage.provisioningStartedAt, usage.ttlPolicySnapshot.provisioningTimeoutMinutes)
+  ) {
+    return 'provisioning_timeout'
+  }
+
+  if (
+    runtime.state === 'running' &&
+    hasElapsed(usage.runningStartedAt, usage.ttlPolicySnapshot.maxSessionTtlMinutes)
+  ) {
+    return 'ttl_expired'
+  }
+
+  return null
+}
+
 export type RuntimeMaintenanceResult = {
   errored: number
   reconciled: number
@@ -24,9 +63,10 @@ export class RuntimeMaintenanceService {
   constructor(
     private readonly runtimeRepository: Pick<
       RuntimeInstanceRepository,
-      'listRuntimeInstancesNeedingReconcile'
+      'findRuntimeInstanceByRunId' | 'listRuntimeInstancesNeedingReconcile'
     > = new RuntimeInstanceRepository(),
-    private readonly runService: Pick<RunService, 'getRun'> = getRunService(),
+    private readonly runRepository: Pick<RunRepository, 'findRunUsage'> = new RunRepository(),
+    private readonly runService: Pick<RunService, 'getRun' | 'stopRunForReason'> = getRunService(),
   ) {}
 
   async reconcileStaleRuntimes(input?: {
@@ -51,6 +91,12 @@ export class RuntimeMaintenanceService {
         const run = await this.runService.getRun(runtime.userId, runtime.runId)
         touchedRunIds.push(run.id)
         reconciled += 1
+        const latestRuntime = (await this.runtimeRepository.findRuntimeInstanceByRunId(runtime.runId)) ?? runtime
+        const usage = await this.runRepository.findRunUsage(runtime.runId)
+        const stopReason = determineMaintenanceStopReason(latestRuntime, usage)
+        if (stopReason) {
+          await this.runService.stopRunForReason(runtime.userId, runtime.runId, stopReason)
+        }
       } catch {
         errored += 1
       }

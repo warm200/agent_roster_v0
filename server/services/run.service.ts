@@ -195,6 +195,23 @@ function buildReleasedUsagePatch(run: Run, reason: RunTerminationReason): Partia
   }
 }
 
+function buildTerminationSummary(reason: RunTerminationReason) {
+  switch (reason) {
+    case 'ttl_expired':
+      return 'Managed runtime reached its maximum session TTL and was stopped.'
+    case 'idle_timeout':
+      return 'Managed runtime was stopped after inactivity.'
+    case 'provisioning_timeout':
+      return 'Managed runtime provisioning timed out before the session became active.'
+    case 'backend_maintenance':
+      return 'Managed runtime was stopped during maintenance.'
+    case 'manual_stop':
+      return 'Run stopped by operator request.'
+    default:
+      return 'Managed runtime session ended.'
+  }
+}
+
 function toLaunchAttemptBlockerReason(message: string) {
   const normalized = message.toLowerCase()
 
@@ -680,10 +697,14 @@ export class RunService {
   }
 
   async stopRun(userId: string, runId: string) {
+    return this.stopRunForReason(userId, runId, 'manual_stop')
+  }
+
+  async stopRunForReason(userId: string, runId: string, reason: RunTerminationReason) {
     const run = await this.requireRun(userId, runId)
     const provider = runServiceDeps.getRunProvider()
     const runtime = provider.stopRuntimeInstance
-      ? await provider.stopRuntimeInstance(run.id, 'manual_stop', run)
+      ? await provider.stopRuntimeInstance(run.id, reason, run)
       : null
 
     if (runtime) {
@@ -710,9 +731,9 @@ export class RunService {
         ...run,
         ...buildRunPatchFromRuntime(run, runtime),
       }
-      await this.repository.updateRunUsage?.(run.id, buildReleasedUsagePatch(nextRun, 'manual_stop'))
+      await this.repository.updateRunUsage?.(run.id, buildReleasedUsagePatch(nextRun, reason))
       if (updatedRuntime?.id) {
-        await this.runtimeRepository.closeRuntimeInterval(updatedRuntime.id, nowIso(), 'manual_stop')
+        await this.runtimeRepository.closeRuntimeInterval(updatedRuntime.id, nowIso(), reason)
       }
       return nextRun
     }
@@ -720,25 +741,26 @@ export class RunService {
     const stopped = await provider.stopRun(run.id, run)
     if (!stopped) {
       const stoppedAt = new Date().toISOString()
+      const fallbackStatus = reason === 'provider_error' || reason === 'provider_unhealthy' ? 'failed' : 'completed'
       const nextRun =
         (await this.repository.updateRun(run.id, {
           completedAt: stoppedAt,
-          resultSummary: 'Run stopped by operator request.',
-          status: 'failed',
+          resultSummary: buildTerminationSummary(reason),
+          status: fallbackStatus,
           updatedAt: stoppedAt,
         })) ?? {
           ...run,
           completedAt: stoppedAt,
-          resultSummary: 'Run stopped by operator request.',
-          status: 'failed',
+          resultSummary: buildTerminationSummary(reason),
+          status: fallbackStatus,
           updatedAt: stoppedAt,
         }
-      await this.repository.updateRunUsage?.(run.id, buildReleasedUsagePatch(nextRun, 'manual_stop'))
+      await this.repository.updateRunUsage?.(run.id, buildReleasedUsagePatch(nextRun, reason))
       return nextRun
     }
 
     const nextRun = (await this.repository.updateRun(run.id, stopped)) ?? stopped
-    await this.repository.updateRunUsage?.(run.id, buildReleasedUsagePatch(nextRun, 'manual_stop'))
+    await this.repository.updateRunUsage?.(run.id, buildReleasedUsagePatch(nextRun, reason))
     return nextRun
   }
 

@@ -52,6 +52,9 @@ read_when:
 - missing `runtime_instances` rows can be backfilled from provider state on read
 - stale runtime instances can now be batch-reconciled by the maintenance service
 - internal trigger route exists at `POST /api/internal/runtime-maintenance/reconcile`
+- maintenance can now enforce:
+  - provisioning timeout
+  - max session TTL
 
 ### Plan-aware stop behavior
 
@@ -90,7 +93,8 @@ read_when:
 ### Idle-time / TTL enforcement loop
 
 - policy exists in docs and config
-- no autonomous backend loop currently enforces idle timeout or max session TTL
+- maintenance can enforce provisioning timeout and max session TTL when invoked
+- idle-time enforcement is still pending because meaningful activity is not yet tracked separately from passive reads
 
 ### Webhook-driven reconciliation
 

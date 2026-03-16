@@ -109,6 +109,10 @@ Current MVP Backend Notes:
     - when run detail, run list, stop, or restart touches a run, backend re-reads provider runtime state and reconciles local DB
     - a maintenance service can also batch-reconcile stale runtime instances without webhooks
     - webhook-driven lifecycle reconciliation is intentionally deferred
+  timeout_enforcement:
+    - provisioning timeout can now be enforced by the maintenance service
+    - max session TTL can now be enforced by the maintenance service
+    - idle timeout is still pending until meaningful activity is tracked independently from passive reads
   runtime_instance_states:
     - provisioning
     - running
