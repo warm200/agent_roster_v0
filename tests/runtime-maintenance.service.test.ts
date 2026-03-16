@@ -180,6 +180,7 @@ test('runtime maintenance stops provisioning runs that exceed provisioning timeo
           provisioningStartedAt: new Date(Date.now() - 20 * 60 * 1000).toISOString(),
           providerAcceptedAt: null,
           runningStartedAt: null,
+          lastMeaningfulActivityAt: null,
           completedAt: null,
           workspaceReleasedAt: null,
           terminationReason: null,
@@ -257,6 +258,7 @@ test('runtime maintenance stops running runs that exceed max session ttl', async
           provisioningStartedAt: new Date(Date.now() - 40 * 60 * 1000).toISOString(),
           providerAcceptedAt: new Date(Date.now() - 40 * 60 * 1000).toISOString(),
           runningStartedAt: new Date(Date.now() - 8 * 60 * 60 * 1000).toISOString(),
+          lastMeaningfulActivityAt: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
           completedAt: null,
           workspaceReleasedAt: null,
           terminationReason: null,
@@ -295,4 +297,82 @@ test('runtime maintenance stops running runs that exceed max session ttl', async
 
   assert.equal(result.reconciled, 1)
   assert.deepEqual(stopped, [{ reason: 'ttl_expired', runId: 'user-1:run-1' }])
+})
+
+test('runtime maintenance stops running runs that exceed idle timeout based on meaningful activity', async () => {
+  const stopped: Array<{ runId: string; reason: string }> = []
+
+  const service = new RuntimeMaintenanceService(
+    {
+      async listRuntimeInstancesNeedingReconcile() {
+        return [
+          {
+            ...baseRuntime,
+            state: 'running',
+          },
+        ]
+      },
+      async findRuntimeInstanceByRunId() {
+        return {
+          ...baseRuntime,
+          state: 'running',
+        }
+      },
+    },
+    {
+      async findRunUsage() {
+        return {
+          id: 'usage-1',
+          runId: 'run-1',
+          userId: 'user-1',
+          orderId: 'order-1',
+          planId: 'warm_standby',
+          planVersion: 'v1',
+          triggerModeSnapshot: 'auto_wake',
+          agentCount: 1,
+          usesRealWorkspace: true,
+          usesTools: true,
+          networkEnabled: true,
+          provisioningStartedAt: new Date(Date.now() - 90 * 60 * 1000).toISOString(),
+          providerAcceptedAt: new Date(Date.now() - 90 * 60 * 1000).toISOString(),
+          runningStartedAt: new Date(Date.now() - 90 * 60 * 1000).toISOString(),
+          lastMeaningfulActivityAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+          completedAt: null,
+          workspaceReleasedAt: null,
+          terminationReason: null,
+          workspaceMinutes: null,
+          toolCallsCount: null,
+          inputTokensEst: null,
+          outputTokensEst: null,
+          estimatedInternalCostCents: null,
+          statusSnapshot: 'running',
+          ttlPolicySnapshot: {
+            cleanupGraceMinutes: 10,
+            heartbeatMissingMinutes: null,
+            idleTimeoutMinutes: 45,
+            maxSessionTtlMinutes: 360,
+            provisioningTimeoutMinutes: 15,
+            triggerMode: 'auto_wake',
+            unhealthyProviderTimeoutMinutes: null,
+          },
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        }
+      },
+    },
+    {
+      async getRun(_userId: string, runId: string) {
+        return { id: runId }
+      },
+      async stopRunForReason(userId: string, runId: string, reason: string) {
+        stopped.push({ reason, runId: `${userId}:${runId}` })
+        return {} as never
+      },
+    } as never,
+  )
+
+  const result = await service.reconcileStaleRuntimes({ limit: 10, staleMinutes: 5 })
+
+  assert.equal(result.reconciled, 1)
+  assert.deepEqual(stopped, [{ reason: 'idle_timeout', runId: 'user-1:run-1' }])
 })

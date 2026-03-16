@@ -43,6 +43,13 @@
       "when": 1773868800000,
       "tag": "0005_runtime_instances_and_intervals",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1774040400000,
+      "tag": "0006_run_usage_activity_clock",
+      "breakpoints": true
     }
   ]
 }

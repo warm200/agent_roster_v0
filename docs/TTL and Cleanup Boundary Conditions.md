@@ -112,7 +112,11 @@ Current MVP Backend Notes:
   timeout_enforcement:
     - provisioning timeout can now be enforced by the maintenance service
     - max session TTL can now be enforced by the maintenance service
-    - idle timeout is still pending until meaningful activity is tracked independently from passive reads
+    - idle timeout can now be enforced when `lastMeaningfulActivityAt` is available
+    - passive reads still do not count as meaningful activity
+  activity_clock:
+    - `run_usage.lastMeaningfulActivityAt` stores the last meaningful activity timestamp
+    - an internal route can advance it without relying on UI polling
   runtime_instance_states:
     - provisioning
     - running

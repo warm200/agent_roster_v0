@@ -55,6 +55,15 @@ read_when:
 - maintenance can now enforce:
   - provisioning timeout
   - max session TTL
+  - idle timeout when meaningful activity timestamps are present
+
+### Meaningful activity clock
+
+- `run_usage.lastMeaningfulActivityAt` now exists
+- launch/restart/reconcile initialize it when runtime becomes active
+- internal activity touch route exists at:
+  - `POST /api/internal/runs/[runId]/activity`
+- page reads do not update the activity clock
 
 ### Plan-aware stop behavior
 

@@ -44,6 +44,16 @@ function determineMaintenanceStopReason(
 
   if (
     runtime.state === 'running' &&
+    hasElapsed(
+      usage.lastMeaningfulActivityAt ?? usage.runningStartedAt ?? usage.providerAcceptedAt,
+      usage.ttlPolicySnapshot.idleTimeoutMinutes,
+    )
+  ) {
+    return 'idle_timeout'
+  }
+
+  if (
+    runtime.state === 'running' &&
     hasElapsed(usage.runningStartedAt, usage.ttlPolicySnapshot.maxSessionTtlMinutes)
   ) {
     return 'ttl_expired'

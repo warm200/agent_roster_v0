@@ -98,3 +98,6 @@ Current reconciliation model:
 - current maintenance enforcement covers:
   - provisioning timeout
   - max session TTL
+  - idle timeout when meaningful activity timestamps are recorded
+- internal activity trigger:
+  - `POST /api/internal/runs/[runId]/activity`

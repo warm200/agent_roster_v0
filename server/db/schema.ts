@@ -314,6 +314,7 @@ export const runUsage = pgTable(
     provisioningStartedAt: timestamp('provisioning_started_at', { withTimezone: true }),
     providerAcceptedAt: timestamp('provider_accepted_at', { withTimezone: true }),
     runningStartedAt: timestamp('running_started_at', { withTimezone: true }),
+    lastMeaningfulActivityAt: timestamp('last_meaningful_activity_at', { withTimezone: true }),
     completedAt: timestamp('completed_at', { withTimezone: true }),
     workspaceReleasedAt: timestamp('workspace_released_at', { withTimezone: true }),
     terminationReason: text('termination_reason'),

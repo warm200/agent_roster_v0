@@ -320,6 +320,7 @@ export interface RunUsage {
   provisioningStartedAt: string | null
   providerAcceptedAt: string | null
   runningStartedAt: string | null
+  lastMeaningfulActivityAt: string | null
   completedAt: string | null
   workspaceReleasedAt: string | null
   terminationReason: RunTerminationReason | null

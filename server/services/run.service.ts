@@ -169,6 +169,7 @@ function buildRunUsage(run: Run, order: Order, plan: SubscriptionPlan): RunUsage
     provisioningStartedAt: run.createdAt,
     providerAcceptedAt: null,
     runningStartedAt: null,
+    lastMeaningfulActivityAt: null,
     completedAt: null,
     workspaceReleasedAt: null,
     terminationReason: null,
@@ -574,6 +575,8 @@ export class RunService {
           id: runId,
         })
         await this.repository.updateRunUsage?.(runId, {
+          lastMeaningfulActivityAt:
+            providerRun.startedAt ?? (providerRun.status === 'running' ? nowIso() : null),
           providerAcceptedAt: nowIso(),
           runningStartedAt: providerRun.startedAt ?? (providerRun.status === 'running' ? nowIso() : null),
           statusSnapshot: providerRun.status,
@@ -880,6 +883,7 @@ export class RunService {
       })
       await this.repository.updateRunUsage?.(run.id, {
         completedAt: null,
+        lastMeaningfulActivityAt: restarted.startedAt ?? nowIso(),
         providerAcceptedAt: nowIso(),
         runningStartedAt: restarted.startedAt ?? nowIso(),
         statusSnapshot: restarted.status,
@@ -907,6 +911,23 @@ export class RunService {
 
   scanAgentVersion(version: AgentVersion) {
     return riskProfileSchema.parse(scanAgentVersionRiskProfile(version))
+  }
+
+  async recordMeaningfulActivity(runId: string, occurredAt = nowIso()) {
+    const usage = await this.repository.findRunUsage?.(runId)
+    if (!usage) {
+      throw new HttpError(404, 'Run usage not found.')
+    }
+
+    await this.repository.updateRunUsage?.(runId, {
+      lastMeaningfulActivityAt: occurredAt,
+      updatedAt: nowIso(),
+    })
+
+    return {
+      occurredAt,
+      runId,
+    }
   }
 
   private async requireRun(userId: string, runId: string) {
@@ -1045,6 +1066,7 @@ export class RunService {
       const persistedRun = (await this.repository.updateRun(run.id, runtimeOnlyRun)) ?? runtimeOnlyRun
       if (persistedRuntime?.state === 'running') {
         await this.repository.updateRunUsage?.(run.id, {
+          lastMeaningfulActivityAt: persistedRuntime.startedAt ?? nowIso(),
           providerAcceptedAt: persistedRuntime.startedAt ?? nowIso(),
           runningStartedAt: persistedRuntime.startedAt ?? nowIso(),
           statusSnapshot: persistedRun.status,
@@ -1212,6 +1234,7 @@ export class RunService {
     }
     if (persistedRuntime?.state === 'running') {
       await this.repository.updateRunUsage?.(run.id, {
+        lastMeaningfulActivityAt: persistedRuntime.startedAt ?? nowIso(),
         providerAcceptedAt: persistedRuntime.startedAt ?? nowIso(),
         runningStartedAt: persistedRuntime.startedAt ?? nowIso(),
         statusSnapshot: persistedRun.status,

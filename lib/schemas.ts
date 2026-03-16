@@ -324,6 +324,7 @@ export const runUsageSchema = z.object({
   provisioningStartedAt: timestampSchema.nullable(),
   providerAcceptedAt: timestampSchema.nullable(),
   runningStartedAt: timestampSchema.nullable(),
+  lastMeaningfulActivityAt: timestampSchema.nullable(),
   completedAt: timestampSchema.nullable(),
   workspaceReleasedAt: timestampSchema.nullable(),
   terminationReason: runTerminationReasonSchema.nullable(),

@@ -55,6 +55,7 @@ function toPublicRunUsage(row: typeof runUsage.$inferSelect): RunUsage {
     provisioningStartedAt: row.provisioningStartedAt?.toISOString() ?? null,
     providerAcceptedAt: row.providerAcceptedAt?.toISOString() ?? null,
     runningStartedAt: row.runningStartedAt?.toISOString() ?? null,
+    lastMeaningfulActivityAt: row.lastMeaningfulActivityAt?.toISOString() ?? null,
     completedAt: row.completedAt?.toISOString() ?? null,
     workspaceReleasedAt: row.workspaceReleasedAt?.toISOString() ?? null,
     terminationReason: row.terminationReason,
@@ -106,6 +107,7 @@ function toRunUsageInsertValues(usage: RunUsage): typeof runUsage.$inferInsert {
     provisioningStartedAt: usage.provisioningStartedAt ? new Date(usage.provisioningStartedAt) : null,
     providerAcceptedAt: usage.providerAcceptedAt ? new Date(usage.providerAcceptedAt) : null,
     runningStartedAt: usage.runningStartedAt ? new Date(usage.runningStartedAt) : null,
+    lastMeaningfulActivityAt: usage.lastMeaningfulActivityAt ? new Date(usage.lastMeaningfulActivityAt) : null,
     completedAt: usage.completedAt ? new Date(usage.completedAt) : null,
     workspaceReleasedAt: usage.workspaceReleasedAt ? new Date(usage.workspaceReleasedAt) : null,
     terminationReason: usage.terminationReason,
@@ -203,6 +205,12 @@ export class RunRepository {
       .set({
         providerAcceptedAt: input.providerAcceptedAt ? new Date(input.providerAcceptedAt) : undefined,
         runningStartedAt: input.runningStartedAt ? new Date(input.runningStartedAt) : undefined,
+        lastMeaningfulActivityAt:
+          input.lastMeaningfulActivityAt
+            ? new Date(input.lastMeaningfulActivityAt)
+            : input.lastMeaningfulActivityAt === null
+              ? null
+              : undefined,
         completedAt: input.completedAt ? new Date(input.completedAt) : input.completedAt === null ? null : undefined,
         workspaceReleasedAt:
           input.workspaceReleasedAt ? new Date(input.workspaceReleasedAt) : input.workspaceReleasedAt === null ? null : undefined,
