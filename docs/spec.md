@@ -107,6 +107,7 @@ Current reconciliation model:
   - `pnpm runtime:maintenance`
   - `pnpm runtime:maintenance:watch`
   - `pnpm runtime:maintenance:trigger`
+- maintenance workers must resolve the same real provider as the app server, e.g. `RUN_PROVIDER=daytona`
 - auth can use either:
   - `INTERNAL_API_TOKEN`
   - `CRON_SECRET`
@@ -114,6 +115,7 @@ Current reconciliation model:
   - provisioning timeout
   - max session TTL
   - idle timeout when meaningful activity timestamps are recorded
+  - TTL/idle checks are not blocked just because run detail polling keeps reconciliation fresh
 - internal activity trigger:
   - `POST /api/internal/runs/[runId]/activity`
 - first live activity producer:

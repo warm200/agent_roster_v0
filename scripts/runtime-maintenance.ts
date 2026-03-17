@@ -1,5 +1,6 @@
 import { Command } from 'commander'
 
+import { getRunProvider } from '@/server/providers'
 import { getRuntimeMaintenanceService } from '@/server/services/runtime-maintenance.service'
 
 const program = new Command()
@@ -54,6 +55,13 @@ function resolveIntervalSeconds() {
 }
 
 async function runBatch() {
+  const provider = getRunProvider()
+  if (provider.name === 'mock' && process.env.RUN_PROVIDER !== 'mock') {
+    throw new Error(
+      'Runtime maintenance resolved the mock provider. Set RUN_PROVIDER=daytona (or another real provider) and inject a real provider API key before running maintenance.',
+    )
+  }
+
   const result = await getRuntimeMaintenanceService().reconcileStaleRuntimes({
     limit: Number.isFinite(options.limit) ? options.limit : undefined,
     staleMinutes: Number.isFinite(options.staleMinutes) ? options.staleMinutes : undefined,

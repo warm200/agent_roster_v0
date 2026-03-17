@@ -35,6 +35,9 @@ test('runtime maintenance reconciles stale runtime instances in batch', async ()
 
   const service = new RuntimeMaintenanceService(
     {
+      async listRuntimeInstancesByStates() {
+        return []
+      },
       async listRuntimeInstancesNeedingReconcile(input) {
         requested.push(input)
         return [
@@ -97,6 +100,9 @@ test('runtime maintenance reconciles stale runtime instances in batch', async ()
 test('runtime maintenance counts reconcile errors and keeps going', async () => {
   const service = new RuntimeMaintenanceService(
     {
+      async listRuntimeInstancesByStates() {
+        return []
+      },
       async listRuntimeInstancesNeedingReconcile() {
         return [
           baseRuntime,
@@ -146,6 +152,15 @@ test('runtime maintenance stops provisioning runs that exceed provisioning timeo
 
   const service = new RuntimeMaintenanceService(
     {
+      async listRuntimeInstancesByStates() {
+        return [
+          {
+            ...baseRuntime,
+            state: 'provisioning',
+            startedAt: null,
+          },
+        ]
+      },
       async listRuntimeInstancesNeedingReconcile() {
         return [
           {
@@ -226,6 +241,14 @@ test('runtime maintenance stops running runs that exceed max session ttl', async
 
   const service = new RuntimeMaintenanceService(
     {
+      async listRuntimeInstancesByStates() {
+        return [
+          {
+            ...baseRuntime,
+            state: 'running',
+          },
+        ]
+      },
       async listRuntimeInstancesNeedingReconcile() {
         return [
           {
@@ -304,6 +327,14 @@ test('runtime maintenance stops running runs that exceed idle timeout based on m
 
   const service = new RuntimeMaintenanceService(
     {
+      async listRuntimeInstancesByStates() {
+        return [
+          {
+            ...baseRuntime,
+            state: 'running',
+          },
+        ]
+      },
       async listRuntimeInstancesNeedingReconcile() {
         return [
           {
@@ -375,4 +406,87 @@ test('runtime maintenance stops running runs that exceed idle timeout based on m
 
   assert.equal(result.reconciled, 1)
   assert.deepEqual(stopped, [{ reason: 'idle_timeout', runId: 'user-1:run-1' }])
+})
+
+test('runtime maintenance enforces ttl even when runtime is too fresh for stale reconciliation', async () => {
+  const stopped: Array<{ runId: string; reason: string }> = []
+
+  const service = new RuntimeMaintenanceService(
+    {
+      async listRuntimeInstancesByStates() {
+        return [
+          {
+            ...baseRuntime,
+            lastReconciledAt: new Date().toISOString(),
+            state: 'running',
+          },
+        ]
+      },
+      async listRuntimeInstancesNeedingReconcile() {
+        return []
+      },
+      async findRuntimeInstanceByRunId() {
+        return {
+          ...baseRuntime,
+          lastReconciledAt: new Date().toISOString(),
+          state: 'running',
+        }
+      },
+    },
+    {
+      async findRunUsage() {
+        return {
+          id: 'usage-fresh-ttl',
+          runId: 'run-1',
+          userId: 'user-1',
+          orderId: 'order-1',
+          planId: 'run',
+          planVersion: 'v1',
+          triggerModeSnapshot: 'manual',
+          agentCount: 1,
+          usesRealWorkspace: true,
+          usesTools: true,
+          networkEnabled: true,
+          provisioningStartedAt: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
+          providerAcceptedAt: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
+          runningStartedAt: new Date(Date.now() - 3 * 60 * 1000).toISOString(),
+          lastMeaningfulActivityAt: new Date().toISOString(),
+          completedAt: null,
+          workspaceReleasedAt: null,
+          terminationReason: null,
+          workspaceMinutes: null,
+          toolCallsCount: null,
+          inputTokensEst: null,
+          outputTokensEst: null,
+          estimatedInternalCostCents: null,
+          statusSnapshot: 'running',
+          ttlPolicySnapshot: {
+            cleanupGraceMinutes: 5,
+            heartbeatMissingMinutes: null,
+            idleTimeoutMinutes: 20,
+            maxSessionTtlMinutes: 2,
+            provisioningTimeoutMinutes: 15,
+            triggerMode: 'manual',
+            unhealthyProviderTimeoutMinutes: null,
+          },
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        }
+      },
+    },
+    {
+      async getRun() {
+        throw new Error('stale reconciliation should not gate ttl enforcement')
+      },
+      async stopRunForReason(userId: string, runId: string, reason: string) {
+        stopped.push({ reason, runId: `${userId}:${runId}` })
+        return {} as never
+      },
+    } as never,
+  )
+
+  const result = await service.reconcileStaleRuntimes({ limit: 10, staleMinutes: 5 })
+
+  assert.equal(result.reconciled, 1)
+  assert.deepEqual(stopped, [{ reason: 'ttl_expired', runId: 'user-1:run-1' }])
 })

@@ -164,6 +164,21 @@ export class RuntimeInstanceRepository {
     return rows.map(toPublicRuntimeInstance)
   }
 
+  async listRuntimeInstancesByStates(input: {
+    limit: number
+    states: RuntimeInstance['state'][]
+  }) {
+    const db = getDb()
+    const rows = await db
+      .select()
+      .from(runtimeInstances)
+      .where(inArray(runtimeInstances.state, input.states))
+      .orderBy(desc(runtimeInstances.updatedAt))
+      .limit(input.limit)
+
+    return rows.map(toPublicRuntimeInstance)
+  }
+
   async createRuntimeInterval(input: RuntimeInterval) {
     const db = getDb()
     const [created] = await db.insert(runtimeIntervals).values(toRuntimeIntervalInsert(input)).returning()

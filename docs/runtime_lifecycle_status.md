@@ -51,16 +51,19 @@ read_when:
 - if provider status is unavailable but runtime state exists, capacity still gets released correctly
 - missing `runtime_instances` rows can be backfilled from provider state on read
 - stale runtime instances can now be batch-reconciled by the maintenance service
+- timeout enforcement no longer depends on a runtime becoming stale for reconciliation
 - internal trigger route exists at `POST /api/internal/runtime-maintenance/reconcile`
 - cron-compatible GET trigger exists at `GET /api/internal/runtime-maintenance/reconcile`
 - CLI/cron entrypoint exists:
   - `pnpm runtime:maintenance`
   - `pnpm runtime:maintenance:watch`
   - `pnpm runtime:maintenance:trigger`
+- maintenance CLI now fails fast if it resolves the mock provider unexpectedly
 - maintenance can now enforce:
   - provisioning timeout
   - max session TTL
   - idle timeout when meaningful activity timestamps are present
+  - even while active page reads keep provider state freshly reconciled
 
 ### Meaningful activity clock
 

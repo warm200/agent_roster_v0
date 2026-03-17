@@ -73,7 +73,7 @@ export class RuntimeMaintenanceService {
   constructor(
     private readonly runtimeRepository: Pick<
       RuntimeInstanceRepository,
-      'findRuntimeInstanceByRunId' | 'listRuntimeInstancesNeedingReconcile'
+      'findRuntimeInstanceByRunId' | 'listRuntimeInstancesByStates' | 'listRuntimeInstancesNeedingReconcile'
     > = new RuntimeInstanceRepository(),
     private readonly runRepository: Pick<RunRepository, 'findRunUsage'> = new RunRepository(),
     private readonly runService: Pick<RunService, 'getRun' | 'stopRunForReason'> = getRunService(),
@@ -86,17 +86,43 @@ export class RuntimeMaintenanceService {
     const limit = input?.limit ?? readPositiveIntEnv('RUNTIME_MAINTENANCE_BATCH_SIZE', 25)
     const staleMinutes = input?.staleMinutes ?? readPositiveIntEnv('RUNTIME_MAINTENANCE_STALE_MINUTES', 5)
     const cutoff = new Date(Date.now() - staleMinutes * 60 * 1000).toISOString()
-    const runtimes = await this.runtimeRepository.listRuntimeInstancesNeedingReconcile({
+    const staleRuntimes = await this.runtimeRepository.listRuntimeInstancesNeedingReconcile({
       lastReconciledBefore: cutoff,
       limit,
       states: ['archived', 'provisioning', 'running', 'stopped'],
+    })
+    const activePolicyRuntimes = await this.runtimeRepository.listRuntimeInstancesByStates({
+      limit,
+      states: ['provisioning', 'running'],
     })
 
     const touchedRunIds: string[] = []
     let reconciled = 0
     let errored = 0
+    const handledRunIds = new Set<string>()
 
-    for (const runtime of runtimes) {
+    for (const runtime of activePolicyRuntimes) {
+      try {
+        const usage = await this.runRepository.findRunUsage(runtime.runId)
+        const stopReason = determineMaintenanceStopReason(runtime, usage)
+        if (!stopReason) {
+          continue
+        }
+
+        await this.runService.stopRunForReason(runtime.userId, runtime.runId, stopReason)
+        touchedRunIds.push(runtime.runId)
+        handledRunIds.add(runtime.runId)
+        reconciled += 1
+      } catch {
+        handledRunIds.add(runtime.runId)
+        errored += 1
+      }
+    }
+
+    for (const runtime of staleRuntimes) {
+      if (handledRunIds.has(runtime.runId)) {
+        continue
+      }
       try {
         const run = await this.runService.getRun(runtime.userId, runtime.runId)
         touchedRunIds.push(run.id)

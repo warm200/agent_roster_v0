@@ -323,6 +323,7 @@ Maintenance can enforce:
 - provisioning timeout
 - max session TTL
 - idle timeout
+- timeout enforcement is evaluated on active runtimes directly; it does not wait for a runtime to become stale for reconciliation
 
 Current default intent:
 

@@ -96,11 +96,18 @@ Required for remote trigger or hosted cron auth:
 
 Useful config:
 
+- `RUN_PROVIDER`
 - `RUNTIME_MAINTENANCE_BATCH_SIZE`
 - `RUNTIME_MAINTENANCE_STALE_MINUTES`
 - `RUNTIME_MAINTENANCE_INTERVAL_SECONDS`
 - `RUNTIME_MAINTENANCE_BASE_URL`
 - `RUNTIME_MAINTENANCE_HTTP_TIMEOUT_SECONDS`
+
+Important:
+
+- maintenance must resolve the same real runtime provider as the app server
+- for Daytona, set `RUN_PROVIDER=daytona`
+- do not rely on unresolved `op://...` secrets plus implicit provider fallback, because that can silently resolve maintenance to the mock provider
 
 ## Vercel cron guidance
 
