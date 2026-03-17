@@ -740,3 +740,77 @@ test('run service backfills missing runtime records from provider state on read'
 
   setRunServiceDepsForTesting(null)
 })
+
+test('run service records provider progress time as meaningful activity on read', async () => {
+  const progressedAt = new Date(Date.now() + 60_000).toISOString()
+  const usageUpdates: Array<Record<string, unknown>> = []
+
+  const service = new RunService(
+    {
+      async findRunForUser() {
+        return baseRun
+      },
+      async updateRun(_runId: string, nextRun: Partial<Run>) {
+        return { ...baseRun, ...nextRun }
+      },
+      async updateRunUsage(_runId: string, input: Record<string, unknown>) {
+        usageUpdates.push(input)
+        return null
+      },
+    } as never,
+    {
+      async findRuntimeInstanceByRunId() {
+        return baseRuntimeRecord
+      },
+      async updateRuntimeInstance(_runId: string, input: Partial<RuntimeInstance>) {
+        return { ...baseRuntimeRecord, ...input }
+      },
+      async findOpenRuntimeInterval() {
+        return { id: 'interval-1' }
+      },
+    } as never,
+  )
+
+  setRunServiceDepsForTesting({
+    getRunProvider: () => ({
+      name: 'daytona',
+      async createRun() {
+        return baseRun
+      },
+      async getLogs() {
+        return []
+      },
+      async getResult() {
+        return null
+      },
+      async getRuntimeInstance() {
+        return {
+          ...baseRuntimeRecord,
+          providerName: 'daytona',
+          runtimeMode: 'temporary_execution',
+          lastReconciledAt: progressedAt,
+        }
+      },
+      async getStatus() {
+        return {
+          ...baseRun,
+          status: 'running',
+          updatedAt: progressedAt,
+        }
+      },
+      async stopRun() {
+        return null
+      },
+    }),
+  })
+
+  const run = await service.getRun(baseRun.userId, baseRun.id)
+
+  assert.equal(run.updatedAt, progressedAt)
+  assert.equal(
+    usageUpdates.some((update) => update.lastMeaningfulActivityAt === progressedAt),
+    true,
+  )
+
+  setRunServiceDepsForTesting(null)
+})

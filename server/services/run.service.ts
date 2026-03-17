@@ -101,6 +101,16 @@ function nowIso() {
   return new Date().toISOString()
 }
 
+function resolveProviderActivityTimestamp(run: Pick<Run, 'startedAt' | 'updatedAt' | 'status'>) {
+  if (run.updatedAt) {
+    return run.updatedAt
+  }
+  if (run.startedAt) {
+    return run.startedAt
+  }
+  return run.status === 'running' ? nowIso() : null
+}
+
 function ensureLaunchable(order: Order) {
   const failures: string[] = []
 
@@ -598,8 +608,7 @@ export class RunService {
           id: runId,
         })
         await this.repository.updateRunUsage?.(runId, {
-          lastMeaningfulActivityAt:
-            providerRun.startedAt ?? (providerRun.status === 'running' ? nowIso() : null),
+          lastMeaningfulActivityAt: resolveProviderActivityTimestamp(providerRun),
           providerAcceptedAt: nowIso(),
           runningStartedAt: providerRun.startedAt ?? (providerRun.status === 'running' ? nowIso() : null),
           statusSnapshot: providerRun.status,
@@ -911,7 +920,7 @@ export class RunService {
       })
       await this.repository.updateRunUsage?.(run.id, {
         completedAt: null,
-        lastMeaningfulActivityAt: restarted.startedAt ?? nowIso(),
+        lastMeaningfulActivityAt: resolveProviderActivityTimestamp(restarted),
         providerAcceptedAt: nowIso(),
         runningStartedAt: restarted.startedAt ?? nowIso(),
         statusSnapshot: restarted.status,
@@ -1288,7 +1297,7 @@ export class RunService {
     }
     if (persistedRuntime?.state === 'running') {
       await this.repository.updateRunUsage?.(run.id, {
-        lastMeaningfulActivityAt: persistedRuntime.startedAt ?? nowIso(),
+        lastMeaningfulActivityAt: resolveProviderActivityTimestamp(persistedRun),
         providerAcceptedAt: persistedRuntime.startedAt ?? nowIso(),
         runningStartedAt: persistedRuntime.startedAt ?? nowIso(),
         statusSnapshot: persistedRun.status,

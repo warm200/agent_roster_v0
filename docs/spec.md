@@ -46,6 +46,9 @@ Use these docs by topic:
 - [runtime_lifecycle_status.md](/Users/wallacewang/agent_projects/v0_version/docs/runtime_lifecycle_status.md)
   - implementation tracker
   - what is shipped vs pending
+- [runtime_maintenance_ops.md](/Users/wallacewang/agent_projects/v0_version/docs/runtime_maintenance_ops.md)
+  - worker / cron / hosted scheduling guidance
+  - how to trigger maintenance in production
 - [prd.md](/Users/wallacewang/agent_projects/v0_version/docs/prd.md)
   - broader phase requirements and product scope
 
@@ -96,10 +99,14 @@ Current reconciliation model:
 - run detail, list, stop, restart, and maintenance reads reconcile provider state back into DB
 - webhook-driven lifecycle reconciliation is intentionally deferred for now
 - internal maintenance trigger: `POST /api/internal/runtime-maintenance/reconcile`
+- cron-compatible maintenance trigger: `GET /api/internal/runtime-maintenance/reconcile`
 - CLI maintenance trigger:
   - `pnpm runtime:maintenance`
   - `pnpm runtime:maintenance:watch`
   - `pnpm runtime:maintenance:trigger`
+- auth can use either:
+  - `INTERNAL_API_TOKEN`
+  - `CRON_SECRET`
 - current maintenance enforcement covers:
   - provisioning timeout
   - max session TTL
@@ -108,6 +115,7 @@ Current reconciliation model:
   - `POST /api/internal/runs/[runId]/activity`
 - first live activity producer:
   - paired Telegram inbound messages on an order
+- provider-synced runtime progress can also advance the activity clock during reconciliation
 - run list/detail now surface secondary lifecycle labels such as:
   - Sleeping
   - Archived

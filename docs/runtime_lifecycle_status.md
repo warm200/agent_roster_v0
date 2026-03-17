@@ -52,6 +52,7 @@ read_when:
 - missing `runtime_instances` rows can be backfilled from provider state on read
 - stale runtime instances can now be batch-reconciled by the maintenance service
 - internal trigger route exists at `POST /api/internal/runtime-maintenance/reconcile`
+- cron-compatible GET trigger exists at `GET /api/internal/runtime-maintenance/reconcile`
 - CLI/cron entrypoint exists:
   - `pnpm runtime:maintenance`
   - `pnpm runtime:maintenance:watch`
@@ -70,6 +71,7 @@ read_when:
 - page reads do not update the activity clock
 - first real producer is wired:
   - inbound Telegram messages for already-paired orders touch active unreleased runs on that order
+- provider-side progress timestamps now advance meaningful activity when a synced run reports newer runtime progress
 
 ### Plan-aware stop behavior
 
@@ -110,6 +112,8 @@ read_when:
   - `pnpm runtime:maintenance:trigger`
 - external scheduling/hosting is still required
 - current cleanup no longer depends only on user reads if the loop or CLI is running
+- ops runbook exists in:
+  - `docs/runtime_maintenance_ops.md`
 
 ### Idle-time / TTL enforcement loop
 

@@ -110,6 +110,7 @@ Current MVP Backend Notes:
     - a maintenance service can also batch-reconcile stale runtime instances without webhooks
     - a recurring maintenance loop can be run with `pnpm runtime:maintenance:watch`
     - a hosted scheduler can trigger the same maintenance route with `pnpm runtime:maintenance:trigger`
+    - the internal maintenance route now accepts token-authenticated `GET` requests for scheduler compatibility
     - webhook-driven lifecycle reconciliation is intentionally deferred
   timeout_enforcement:
     - provisioning timeout can now be enforced by the maintenance service
@@ -120,6 +121,7 @@ Current MVP Backend Notes:
     - `run_usage.lastMeaningfulActivityAt` stores the last meaningful activity timestamp
     - an internal route can advance it without relying on UI polling
     - paired Telegram inbound messages can now advance it for active runs on the order
+    - provider-synced runtime progress timestamps can also advance it when newer than the stored activity clock
   runtime_instance_states:
     - provisioning
     - running
