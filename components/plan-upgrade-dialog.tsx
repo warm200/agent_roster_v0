@@ -35,6 +35,21 @@ const planIconMap = {
   warm_standby: TimerReset,
 } as const
 
+function getPlanSupportNote(
+  plan: Awaited<ReturnType<typeof listPricingPlans>>['plans'][number],
+) {
+  switch (plan.id) {
+    case 'run':
+      return 'Includes 15 runtime credits.'
+    case 'warm_standby':
+      return 'Includes 10 runtime credits per month.'
+    case 'always_on':
+      return 'Persistent managed runtime.'
+    default:
+      return 'No managed runtime.'
+  }
+}
+
 export function PlanUpgradeDialog({
   currentPlanId,
   currentCredits,
@@ -143,13 +158,29 @@ export function PlanUpgradeDialog({
                       {plan.priceLabel}
                     </div>
                     <p className="mt-4 text-sm leading-6 text-zinc-400">{plan.suitFor}</p>
+                    <p className="mt-2 text-xs leading-5 text-zinc-500">{getPlanSupportNote(plan)}</p>
                   </div>
 
                   <div className="mt-5 space-y-2 text-sm text-zinc-300">
-                    <div>{plan.includedCredits} credits{plan.billingInterval === 'month' ? '/mo' : ''}</div>
                     <div>{plan.agentsPerBundle} agents per launched bundle</div>
-                    <div>{plan.concurrentRuns} concurrent active runs</div>
-                    <div>{plan.activeBundles} active bundles</div>
+                    <div>
+                      {plan.triggerMode === 'manual'
+                        ? 'Manual only'
+                        : plan.triggerMode === 'auto_wake'
+                          ? 'Wake on Telegram'
+                          : plan.triggerMode === 'always_active'
+                            ? 'Persistent workspace'
+                            : 'No runtime'}
+                    </div>
+                    <div>
+                      {plan.id === 'run'
+                        ? 'Manual bounded session'
+                        : plan.id === 'warm_standby'
+                          ? 'Auto-sleeps when idle'
+                          : plan.id === 'always_on'
+                            ? 'Long-running workspace support'
+                            : 'Browse and preview only'}
+                    </div>
                   </div>
 
                   <div className="mt-5 space-y-2 text-sm text-zinc-400">

@@ -52,8 +52,8 @@ const plans = [
   {
     name: 'Run',
     price: '$5',
-    budgetBadge: 'Launch budget included',
-    budgetDetail: 'Built for bounded manual test sessions.',
+    budgetBadge: 'Usage budget included',
+    budgetDetail: 'Includes 15 runtime credits.',
     bestFor: 'Test one workflow manually',
     runtimeBehavior: 'Manual bounded session. Start it yourself, test the workflow, and let it auto-stop after inactivity.',
     whyExists: 'This is the first paid step after preview when you want one real managed run without parallel operating complexity.',
@@ -70,7 +70,7 @@ const plans = [
     tone: 'Starting point',
     highlight: undefined,
     hideBudget: undefined,
-    includes: ['Manual start', 'Bounded session', 'Auto-stop after inactivity'],
+    includes: ['Usage budget included', 'Manual bounded session', 'Auto-stop after inactivity'],
     metrics: [
       { label: 'Runtime behavior', value: 'Bounded manual session', icon: Zap },
       { label: 'Agents in bundle', value: '3', icon: Bot },
@@ -83,8 +83,8 @@ const plans = [
   {
     name: 'Warm Standby',
     price: '$19/mo',
-    budgetBadge: 'Wake budget with recoverable state',
-    budgetDetail: 'Monthly wake budget for repeat workflows that should sleep and resume later.',
+    budgetBadge: 'Fair-use runtime budget included',
+    budgetDetail: 'Includes 10 runtime credits per month.',
     bestFor: 'Repeat Telegram-triggered workflows',
     runtimeBehavior: 'Wake on message, work, then auto-sleep when idle. Designed for recoverable runtime state without self-hosting.',
     whyExists: 'This exists for workflows that should wake repeatedly from Telegram without behaving like a permanent live workspace.',
@@ -101,7 +101,7 @@ const plans = [
     tone: 'Wake on demand',
     highlight: 'Wake on demand',
     hideBudget: undefined,
-    includes: ['Wake on message', 'Auto-sleeps when idle', 'No self-hosting'],
+    includes: ['Fair-use runtime budget included', 'Wake on message', 'Auto-sleeps when idle'],
     metrics: [
       { label: 'Runtime behavior', value: 'Wake on message', icon: Zap },
       { label: 'Agents in bundle', value: '5', icon: Bot },
@@ -131,7 +131,7 @@ const plans = [
     icon: Flame,
     tone: 'Persistent',
     highlight: undefined,
-    includes: ['Persistent workspace', 'Long-running setup', 'Managed runtime'],
+    includes: ['Persistent managed runtime', 'Long-running workspace support', 'Persistent workspace'],
     metrics: [
       { label: 'Runtime behavior', value: 'Persistent workspace', icon: Zap },
       { label: 'Agents in bundle', value: '8', icon: Bot },
@@ -209,6 +209,11 @@ const decisionFaqs = [
       'Agents are free to collect and evaluate. Paid plans cover managed runtime access when you want to actually launch a bundle.',
   },
   {
+    question: 'What is a runtime credit?',
+    answer:
+      'For Run and Warm Standby, a credit is used when a managed launch or wake successfully starts. It is an entry budget for managed runtime, not minute-by-minute billing.',
+  },
+  {
     question: 'What is the difference between Run and Warm Standby after a session stops?',
     answer:
       'Run is the bounded test-session tier: once it stops, you should think in terms of a fresh launch. Warm Standby is the wake-and-recover tier: it is meant to sleep when idle and later resume from preserved state instead of acting like a brand-new environment every time.',
@@ -222,6 +227,11 @@ const decisionFaqs = [
     question: 'Does stopping always mean deleting everything?',
     answer:
       'No. In this product model, stopping can mean different things depending on the plan. Run is treated as ephemeral. Warm Standby is positioned as a sleep-and-recover mode. Always On is not meant to stop as part of normal operation.',
+  },
+  {
+    question: 'Do plans auto-stop?',
+    answer:
+      'Yes. Run is designed as a bounded session, Warm Standby sleeps when idle, and Always On is for a persistent workspace instead of a sleep-first model.',
   },
   {
     question: 'Why not just self-host OpenClaw?',
@@ -389,8 +399,12 @@ export default function PricingPage() {
             </div>
 
             <p className="mt-6 text-xs leading-6 text-muted-foreground">
-              Runtime plans include a usage budget. Exact runtime consumption rules may evolve as the
-              platform matures.
+              For Run and Warm Standby, 1 credit is used when a managed launch or wake successfully
+              starts.
+            </p>
+            <p className="mt-1 text-xs leading-6 text-muted-foreground/80">
+              Credits are an entry budget for managed runtime, not a full minute-by-minute metering
+              model.
             </p>
           </div>
         </section>
