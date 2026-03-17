@@ -65,6 +65,7 @@ read_when:
 ### Meaningful activity clock
 
 - `run_usage.lastMeaningfulActivityAt` now exists
+- repository access is backward-compatible with pre-`0006` dev databases that do not have the column yet
 - launch/restart/reconcile initialize it when runtime becomes active
 - internal activity touch route exists at:
   - `POST /api/internal/runs/[runId]/activity`

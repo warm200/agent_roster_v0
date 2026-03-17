@@ -46,6 +46,9 @@ Use these docs by topic:
 - [runtime_lifecycle_status.md](/Users/wallacewang/agent_projects/v0_version/docs/runtime_lifecycle_status.md)
   - implementation tracker
   - what is shipped vs pending
+- [backend_runtime_lifecycle.md](/Users/wallacewang/agent_projects/v0_version/docs/backend_runtime_lifecycle.md)
+  - backend plan-aware lifecycle behavior
+  - Run vs Warm Standby vs Always On implementation details
 - [runtime_maintenance_ops.md](/Users/wallacewang/agent_projects/v0_version/docs/runtime_maintenance_ops.md)
   - worker / cron / hosted scheduling guidance
   - how to trigger maintenance in production
@@ -120,3 +123,4 @@ Current reconciliation model:
   - Sleeping
   - Archived
   - Released
+- backend is tolerant of pre-`0006` dev databases missing `run_usage.last_meaningful_activity_at`, though migration is still recommended
