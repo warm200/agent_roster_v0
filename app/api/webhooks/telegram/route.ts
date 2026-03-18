@@ -21,7 +21,11 @@ export async function POST(request: NextRequest) {
     })
 
     if (result.outcome === 'runtime_activity') {
-      await getRunService().recordMeaningfulActivityForOrder(orderId)
+      const wake = await getRunService().wakeStoppedRunForOrder(orderId)
+      return NextResponse.json({
+        ...result,
+        wake,
+      })
     }
 
     return NextResponse.json(result)

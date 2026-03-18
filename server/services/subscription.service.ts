@@ -6,7 +6,7 @@ import { getFreeSubscriptionPlan, getSubscriptionPlan, listSubscriptionPlans } f
 import type { LaunchPolicyCheck, Order, SubscriptionPlan, UserSubscription } from '@/lib/types'
 
 import { createDb, type DbClient } from '../db'
-import { creditLedger, runUsage, runs, userSubscriptions } from '../db/schema'
+import { creditLedger, runUsage, runs, runtimeInstances, userSubscriptions } from '../db/schema'
 import { HttpError } from '../lib/http'
 import { getStripe } from '../lib/stripe'
 import { getPlanLedgerUnitType, planConsumesLaunchCredits, RUNTIME_PLAN_VERSION } from './runtime-policy'
@@ -118,6 +118,9 @@ export function buildLaunchPolicyCheck(input: {
   runRows: Array<{
     id: string
     orderId: string
+    persistenceMode?: 'ephemeral' | 'recoverable' | 'live' | null
+    preservedStateAvailable?: boolean | null
+    runtimeState?: 'provisioning' | 'running' | 'stopped' | 'archived' | 'deleted' | 'failed' | null
     status: string
     usesRealWorkspace: boolean
     workspaceReleasedAt: string | null
@@ -126,6 +129,13 @@ export function buildLaunchPolicyCheck(input: {
 }) {
   const activeRuns = input.runRows.filter(isCountedActiveRun)
   const activeBundleIds = new Set(activeRuns.map((run) => run.orderId))
+  const recoverableStoppedRun = input.runRows.find(
+    (run) =>
+      run.orderId === input.order.id &&
+      run.persistenceMode === 'recoverable' &&
+      run.preservedStateAvailable === true &&
+      (run.runtimeState === 'stopped' || run.runtimeState === 'archived'),
+  )
   const blockers: string[] = []
 
   if (!input.plan.runtimeAccess) {
@@ -140,6 +150,10 @@ export function buildLaunchPolicyCheck(input: {
 
   if (activeRuns.length > 0) {
     blockers.push('Stop your current live run before starting another one.')
+  }
+
+  if (input.plan.id === 'warm_standby' && recoverableStoppedRun) {
+    blockers.push('Resume the existing stopped Warm Standby run for this bundle instead of launching a new one.')
   }
 
   if (input.subscription && input.subscription.remainingCredits <= 0 && input.plan.includedCredits > 0) {
@@ -325,18 +339,25 @@ export class SubscriptionService {
       .select({
         id: runs.id,
         orderId: runs.orderId,
+        persistenceMode: runtimeInstances.persistenceMode,
+        preservedStateAvailable: runtimeInstances.preservedStateAvailable,
+        runtimeState: runtimeInstances.state,
         status: runs.status,
         usesRealWorkspace: runs.usesRealWorkspace,
         workspaceReleasedAt: runUsage.workspaceReleasedAt,
       })
       .from(runs)
       .leftJoin(runUsage, eq(runUsage.runId, runs.id))
+      .leftJoin(runtimeInstances, eq(runtimeInstances.runId, runs.id))
       .where(eq(runs.userId, userId))
     return buildLaunchPolicyCheck({
       order,
       plan,
       runRows: runRows.map((run) => ({
         ...run,
+        persistenceMode: run.persistenceMode ?? null,
+        preservedStateAvailable: run.preservedStateAvailable ?? null,
+        runtimeState: run.runtimeState ?? null,
         workspaceReleasedAt: run.workspaceReleasedAt?.toISOString() ?? null,
       })),
       subscription,

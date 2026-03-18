@@ -159,6 +159,14 @@ function resolveProviderActivityTimestamp(run: Pick<Run, 'startedAt' | 'updatedA
   return run.status === 'running' ? nowIso() : null
 }
 
+function isLiveRuntimeRun(run: Pick<Run, 'runtimeState' | 'status'>) {
+  if (run.runtimeState) {
+    return run.runtimeState === 'provisioning' || run.runtimeState === 'running'
+  }
+
+  return run.status === 'provisioning' || run.status === 'running'
+}
+
 function chooseEarlierTimestamp(current: string | null | undefined, next: string | null | undefined) {
   if (!current) {
     return next ?? null
@@ -1131,6 +1139,69 @@ export class RunService {
       occurredAt,
       orderId,
       touchedRunIds,
+    }
+  }
+
+  async wakeStoppedRunForOrder(orderId: string, occurredAt = nowIso()) {
+    const runs =
+      'listRunsForOrder' in this.repository && typeof this.repository.listRunsForOrder === 'function'
+        ? await this.repository.listRunsForOrder(orderId)
+        : []
+
+    if (runs.length === 0) {
+      return {
+        occurredAt,
+        orderId,
+        outcome: 'no_runs' as const,
+        runId: null,
+      }
+    }
+
+    const reconciledRuns = await Promise.all(runs.map((run) => this.syncRun(run, true)))
+    const liveRun = reconciledRuns.find((run) => isLiveRuntimeRun(run))
+
+    if (liveRun) {
+      await this.recordMeaningfulActivity(liveRun.id, occurredAt).catch(() => null)
+      return {
+        occurredAt,
+        orderId,
+        outcome: 'already_live' as const,
+        runId: liveRun.id,
+      }
+    }
+
+    const candidates: Run[] = []
+
+    for (const run of reconciledRuns) {
+      const runtimeRecord = await this.findRuntimeRecordSafe(run.id)
+      if (
+        runtimeRecord?.planId === 'warm_standby' &&
+        runtimeRecord.persistenceMode === 'recoverable' &&
+        runtimeRecord.preservedStateAvailable &&
+        (runtimeRecord.state === 'stopped' || runtimeRecord.state === 'archived')
+      ) {
+        candidates.push(run)
+      }
+    }
+
+    if (candidates.length !== 1) {
+      return {
+        occurredAt,
+        orderId,
+        outcome: candidates.length > 1 ? ('ambiguous' as const) : ('no_candidate' as const),
+        runId: null,
+      }
+    }
+
+    const candidate = candidates[0]
+    const resumed = await this.retryRun(candidate.userId, candidate.id)
+    await this.recordMeaningfulActivity(resumed.id, occurredAt).catch(() => null)
+
+    return {
+      occurredAt,
+      orderId,
+      outcome: 'resumed' as const,
+      runId: resumed.id,
     }
   }
 

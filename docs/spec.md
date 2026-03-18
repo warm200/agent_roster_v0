@@ -98,6 +98,10 @@ Current lifecycle shape:
 - run/bundle/dashboard badges now render lifecycle-aware labels like `Stopped`, `Archived`, and `Released` instead of only raw `completed`
 - launch checks now reconcile existing managed runs first, so stale manually deleted sandboxes do not continue blocking new launches
 - failed resume attempts now re-sync runtime state before returning the error so the UI falls back to the stopped/recoverable view
+- paired Telegram messages can now auto-wake exactly one stopped Warm Standby run for that order
+- Telegram auto-wake is conservative by design:
+  - if a live run already exists, we only record activity
+  - if multiple stopped recoverable Warm runs exist, we do not auto-pick one
 
 Current reconciliation model:
 

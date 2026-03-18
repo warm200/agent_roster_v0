@@ -228,6 +228,9 @@ test('telegram webhook route records runtime activity for paired inbound message
   let recorded:
     | { occurredAt?: string; orderId: string }
     | undefined
+  let wakeAttempted:
+    | { occurredAt?: string; orderId: string }
+    | undefined
 
   setTelegramServiceForTesting({
     async handleWebhook(): Promise<TelegramWebhookResult> {
@@ -245,6 +248,15 @@ test('telegram webhook route records runtime activity for paired inbound message
         occurredAt: occurredAt ?? 'now',
         orderId,
         touchedRunIds: ['run-1'],
+      }
+    },
+    async wakeStoppedRunForOrder(orderId: string, occurredAt?: string) {
+      wakeAttempted = { occurredAt, orderId }
+      return {
+        occurredAt: occurredAt ?? 'now',
+        orderId,
+        outcome: 'already_live' as const,
+        runId: 'run-1',
       }
     },
   } as RunService)
@@ -266,9 +278,11 @@ test('telegram webhook route records runtime activity for paired inbound message
   const payload = await response.json()
 
   assert.equal(response.status, 200)
-  assert.deepEqual(recorded, {
+  assert.equal(recorded, undefined)
+  assert.deepEqual(wakeAttempted, {
     occurredAt: undefined,
     orderId: 'order-test-1',
   })
   assert.equal(payload.outcome, 'runtime_activity')
+  assert.equal(payload.wake.outcome, 'already_live')
 })

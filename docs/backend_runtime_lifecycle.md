@@ -228,6 +228,7 @@ Current reconciliation sources:
 - manual stop
 - restart
 - maintenance batches
+- paired Telegram inbound messages for already-paired orders
 
 Current behavior:
 
@@ -244,6 +245,10 @@ Important implemented properties:
 - if provider status becomes unavailable but runtime state exists, capacity can still be released correctly
 - if provider reads fail with an already-stopped sandbox path, refresh/read now repairs stale `runtime_instances.state = running` rows into stopped or released lifecycle state
 - explicit stop requests are idempotent against already stopped Daytona sandboxes and should reconcile back to stopped state instead of bubbling `Sandbox is not started`
+- paired Telegram inbound traffic can now auto-resume exactly one stopped Warm Standby runtime for the order
+- auto-wake is intentionally conservative:
+  - if a live run already exists, backend only records meaningful activity
+  - if multiple stopped recoverable Warm candidates exist for the order, backend does not guess which one to wake
 
 ## Stop Behavior
 

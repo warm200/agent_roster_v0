@@ -146,6 +146,12 @@ Frontend positioning:
 - Public positioning: wake on message, auto-sleeps when idle, no self-hosting
 - Persistence framing: recoverable state
 - State after stop: should sleep/stop while preserving recoverable state for later wake or recovery
+- Current backend behavior:
+  - paired Telegram inbound messages can auto-resume a stopped Warm Standby runtime
+  - this is conservative, not fuzzy routing:
+    - if one live run already exists, backend only records activity
+    - if exactly one stopped recoverable Warm run exists for that bundle/order, backend resumes it
+    - if multiple stopped recoverable Warm candidates exist, backend does not guess
 
 ### Always On
 
@@ -211,6 +217,25 @@ Current blocker copy:
 - `Stop your current live run before starting another one.`
 
 This is now global per user, regardless of plan tier.
+
+### 4.4 Warm Standby Must Reuse Recoverable State
+
+Rule:
+
+- if a `warm_standby` user already has a stopped or archived recoverable run for the same bundle, launching a brand-new run is blocked
+
+Current blocker copy:
+
+- `Resume the existing stopped Warm Standby run for this bundle instead of launching a new one.`
+
+Effect:
+
+- Warm Standby is now enforced as a wake/recover product, not a “keep launching fresh history” product
+- this prevents users from creating a chain of abandoned recoverable runs for the same bundle
+- the intended path is:
+  - launch once
+  - later sleep/stop
+  - later resume/wake
 
 ### 4.5 Credits Remaining
 
@@ -406,10 +431,13 @@ Implemented now:
    - runtime access
    - agents per bundle
    - one live unreleased run at a time
+   - Warm Standby resume-instead-of-relaunch when recoverable state already exists for the same bundle
    - zero remaining credits
 4. inline upgrade UX on bundle detail
 5. reserve -> commit -> refund credit handling for `Run` and `Warm Standby`
 6. run-usage telemetry persistence separate from the billing ledger
+ 7. partial trigger-mode behavior:
+   - Warm Standby can now auto-wake from paired Telegram inbound traffic
 
 ### 8.3 What Is Not Yet Implemented
 
@@ -418,9 +446,10 @@ Not implemented yet:
 1. **credit pricing model**
    - there is no formula for how many credits a run costs
    - there is no formula for “one more agent costs X”
-2. **trigger mode behavior**
-   - `manual`, `auto_wake`, `always_active` exist as plan metadata
-   - they do not yet drive runtime orchestration behavior
+2. **full trigger mode behavior**
+   - `auto_wake` is now partially real for Warm Standby via paired Telegram inbound wake
+   - but trigger behavior is not complete across all channels or all runtime situations
+   - `always_active` still does not have a fully distinct operational path
 3. **always-on enforcement**
    - `alwaysOnBundles` is defined
    - real always-on lifecycle behavior is not fully implemented
@@ -442,9 +471,10 @@ If another AI is evaluating whether the pricing model is good, it should underst
 
 - free browsing and agent acquisition
 - strict launch gating by entitlement
-- clear bundle-size and concurrency constraints
+- clear bundle-size and live-run constraints
 - a separate runtime monetization layer
 - upgrade-in-context at the point of friction
+- Warm Standby now behaves more like a real wake/recover product instead of just a monthly price label
 
 ### What the system does not yet prove
 
@@ -452,7 +482,7 @@ If another AI is evaluating whether the pricing model is good, it should underst
 - whether included credits are priced correctly
 - whether `Run` should really be one-time instead of monthly
 - whether `Warm Standby` and `Always On` are differentiated enough operationally
-- whether active-bundle counting should include completed managed workspaces
+- whether the conservative one-live-run policy is too restrictive for real users
 - whether users will understand why buying agents is free but using them is gated
 
 ---
@@ -464,10 +494,10 @@ Another reasoning model should focus on questions like:
 1. Is the separation between **free agent ownership** and **paid runtime access** intuitive?
 2. Is a one-time `$5` `Run` plan with `15` credits coherent, or should it be a metered pack instead of a plan?
 3. Should `completed + managed workspace` count against concurrency and active bundles?
-4. Are `Warm Standby` and `Always On` distinct enough without stronger runtime behavior differences?
+4. Are `Warm Standby` and `Always On` distinct enough now that Warm can sleep and wake from Telegram, or do they still need a bigger operational gap?
 5. Should credits reset, roll over, or accumulate?
 6. Is `agents per bundle` the best control surface, or should pricing be based on active specialist count at runtime?
-7. Is `active bundles` the right abstraction, or should the product charge for warm/always-on workspace occupancy directly?
+7. Is recoverable-state reuse the right enforcement model for Warm Standby, or will users expect multiple recoverable runs per bundle?
 8. Does the current model create too much friction for multi-agent bundles?
 
 ---

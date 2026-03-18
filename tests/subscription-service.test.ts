@@ -177,3 +177,30 @@ test('launch policy blocks when any live run is still active', () => {
   assert.equal(policy.usage.activeBundles, 3)
   assert.equal(policy.usage.concurrentRuns, 3)
 })
+
+test('warm standby launch policy blocks when the same bundle already has a stopped recoverable run', () => {
+  const policy = buildLaunchPolicyCheck({
+    order: buildOrder(2, 'order-warm'),
+    plan: getSubscriptionPlan('warm_standby'),
+    runRows: [
+      {
+        id: 'run-stopped-1',
+        orderId: 'order-warm',
+        persistenceMode: 'recoverable',
+        preservedStateAvailable: true,
+        runtimeState: 'stopped',
+        status: 'completed',
+        usesRealWorkspace: true,
+        workspaceReleasedAt: null,
+      },
+    ],
+    subscription: buildSubscription('warm_standby', 10),
+  })
+
+  assert.equal(policy.allowed, false)
+  assert.ok(
+    policy.blockers.some((entry) =>
+      /resume the existing stopped warm standby run for this bundle/i.test(entry),
+    ),
+  )
+})
