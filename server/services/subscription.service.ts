@@ -1,12 +1,30 @@
 import type Stripe from 'stripe'
-import { eq, sql } from 'drizzle-orm'
+import { and, asc, eq, gt, lte, sql } from 'drizzle-orm'
 
-import { launchPolicyCheckSchema, subscriptionPlanSchema, userSubscriptionSchema } from '@/lib/schemas'
+import { getCreditTopUpExpiresAt, getCreditTopUpPack, listCreditTopUpPacks } from '@/lib/credit-topups'
+import {
+  launchPolicyCheckSchema,
+  subscriptionPlanSchema,
+  userSubscriptionSchema,
+} from '@/lib/schemas'
 import { getFreeSubscriptionPlan, getSubscriptionPlan, listSubscriptionPlans } from '@/lib/subscription-plans'
-import type { LaunchPolicyCheck, Order, SubscriptionPlan, UserSubscription } from '@/lib/types'
+import type {
+  CreditTopUpPack,
+  Order,
+  LaunchPolicyCheck,
+  SubscriptionPlan,
+  UserSubscription,
+} from '@/lib/types'
 
 import { createDb, type DbClient } from '../db'
-import { creditLedger, runUsage, runs, runtimeInstances, userSubscriptions } from '../db/schema'
+import {
+  creditLedger,
+  runUsage,
+  runs,
+  runtimeInstances,
+  subscriptionCreditTopUps,
+  userSubscriptions,
+} from '../db/schema'
 import { HttpError } from '../lib/http'
 import { getStripe } from '../lib/stripe'
 import { getPlanLedgerUnitType, planConsumesLaunchCredits, RUNTIME_PLAN_VERSION } from './runtime-policy'
@@ -15,6 +33,13 @@ type SubscriptionCheckoutSession = {
   sessionId: string
   sessionUrl: string
 }
+
+type TopUpAllocation = {
+  credits: number
+  topUpId: string
+}
+
+type MutationDb = Pick<DbClient, 'execute' | 'insert' | 'select' | 'update'>
 
 function getCheckoutBaseUrl(origin: string) {
   return (process.env.NEXTAUTH_URL || origin).replace(/\/$/, '')
@@ -52,11 +77,23 @@ function buildSessionPriceDescription(plan: SubscriptionPlan) {
   return `${plan.includedCredits} credits, manual only, ${plan.agentsPerBundle} agents per launched bundle.`
 }
 
+function buildTopUpPriceDescription(pack: CreditTopUpPack) {
+  return `${pack.credits} runtime credits added to the current balance. Credits expire ${pack.expiresInDays} days after purchase.`
+}
+
 function requireSubscriptionPlan(planId: string) {
   try {
     return getSubscriptionPlan(planId as SubscriptionPlan['id'])
   } catch {
     throw new HttpError(400, `Unknown subscription plan: ${planId}`)
+  }
+}
+
+function requireCreditTopUpPack(packId: string) {
+  try {
+    return getCreditTopUpPack(packId as CreditTopUpPack['id'])
+  } catch {
+    throw new HttpError(400, `Unknown credit top-up pack: ${packId}`)
   }
 }
 
@@ -71,6 +108,12 @@ function assertCompletedRuntimePlanSession(session: Stripe.Checkout.Session) {
 
   if (session.mode === 'subscription' && !['paid', 'no_payment_required'].includes(session.payment_status)) {
     throw new HttpError(409, 'Subscription checkout has not been paid yet.')
+  }
+}
+
+function assertCompletedTopUpSession(session: Stripe.Checkout.Session) {
+  if (session.status !== 'complete' || session.mode !== 'payment' || session.payment_status !== 'paid') {
+    throw new HttpError(409, 'Top-up checkout session is not paid yet.')
   }
 }
 
@@ -208,6 +251,10 @@ function getRefundIdempotencyKey(chargeKey: string) {
   return `${chargeKey}:refund:${RUNTIME_PLAN_VERSION}`
 }
 
+function getTopUpGrantIdempotencyKey(sessionId: string) {
+  return `topup:${sessionId}`
+}
+
 let dbClient: DbClient | null = null
 
 function getDb() {
@@ -227,11 +274,184 @@ function toLockedSubscriptionRow(row: Record<string, unknown> | undefined) {
   }
 }
 
+function parseTopUpAllocations(metadataJson: Record<string, unknown>) {
+  const rawAllocations = metadataJson.topUpAllocations
+
+  if (!Array.isArray(rawAllocations)) {
+    return [] as TopUpAllocation[]
+  }
+
+  return rawAllocations
+    .map((entry) => {
+      if (!entry || typeof entry !== 'object') {
+        return null
+      }
+
+      const allocation = entry as { credits?: unknown; topUpId?: unknown }
+      if (typeof allocation.topUpId !== 'string' || typeof allocation.credits !== 'number') {
+        return null
+      }
+
+      return {
+        credits: allocation.credits,
+        topUpId: allocation.topUpId,
+      } satisfies TopUpAllocation
+    })
+    .filter((entry): entry is TopUpAllocation => entry !== null)
+}
+
 export class SubscriptionService {
   constructor(private readonly db: DbClient = getDb()) {}
 
   listPlans(): SubscriptionPlan[] {
     return listSubscriptionPlans().map((plan) => subscriptionPlanSchema.parse(plan))
+  }
+
+  listTopUpPacks() {
+    return listCreditTopUpPacks()
+  }
+
+  private async expireStaleTopUpCreditsInDb(db: MutationDb, userId: string) {
+    const now = new Date()
+    const expiredRows = await db
+      .select()
+      .from(subscriptionCreditTopUps)
+      .where(
+        and(
+          eq(subscriptionCreditTopUps.userId, userId),
+          gt(subscriptionCreditTopUps.creditsRemaining, 0),
+          lte(subscriptionCreditTopUps.expiresAt, now),
+        ),
+      )
+      .orderBy(asc(subscriptionCreditTopUps.expiresAt), asc(subscriptionCreditTopUps.createdAt))
+
+    if (expiredRows.length === 0) {
+      return 0
+    }
+
+    const [subscriptionRecord] = await db
+      .select()
+      .from(userSubscriptions)
+      .where(eq(userSubscriptions.userId, userId))
+      .limit(1)
+
+    let nextBalance = Math.max(
+      0,
+      (subscriptionRecord?.remainingCredits ?? 0) -
+        expiredRows.reduce((total, row) => total + row.creditsRemaining, 0),
+    )
+
+    if (subscriptionRecord) {
+      await db
+        .update(userSubscriptions)
+        .set({
+          remainingCredits: nextBalance,
+          updatedAt: now,
+        })
+        .where(eq(userSubscriptions.id, subscriptionRecord.id))
+    }
+
+    for (const row of expiredRows) {
+      await db
+        .update(subscriptionCreditTopUps)
+        .set({
+          creditsRemaining: 0,
+          consumedAt: row.consumedAt ?? now,
+          updatedAt: now,
+        })
+        .where(eq(subscriptionCreditTopUps.id, row.id))
+
+      await db.insert(creditLedger).values({
+        id: crypto.randomUUID(),
+        userId,
+        subscriptionId: row.subscriptionId,
+        orderId: null,
+        runId: null,
+        eventType: 'expire',
+        unitType: 'launch_credit',
+        deltaCredits: -row.creditsRemaining,
+        resultingBalance: subscriptionRecord ? nextBalance : null,
+        status: 'committed',
+        reasonCode: 'top_up_expired',
+        idempotencyKey: `topup-expire:${row.id}`,
+        metadataJson: {
+          expiresAt: row.expiresAt.toISOString(),
+          packId: row.packId,
+          stripeCheckoutSessionId: row.stripeCheckoutSessionId,
+        },
+      })
+    }
+
+    return expiredRows.length
+  }
+
+  private async sumActiveTopUpCredits(db: MutationDb, userId: string) {
+    const [row] = await db
+      .select({
+        total: sql<number>`coalesce(sum(${subscriptionCreditTopUps.creditsRemaining}), 0)`,
+      })
+      .from(subscriptionCreditTopUps)
+      .where(
+        and(
+          eq(subscriptionCreditTopUps.userId, userId),
+          gt(subscriptionCreditTopUps.creditsRemaining, 0),
+          gt(subscriptionCreditTopUps.expiresAt, new Date()),
+        ),
+      )
+
+    return Number(row?.total ?? 0)
+  }
+
+  private async expireStaleTopUpCredits(userId: string) {
+    return this.db.transaction((tx) => this.expireStaleTopUpCreditsInDb(tx, userId))
+  }
+
+  private async allocateTopUpCredits(db: MutationDb, userId: string, credits: number) {
+    if (credits <= 0) {
+      return [] as TopUpAllocation[]
+    }
+
+    const rows = await db
+      .select()
+      .from(subscriptionCreditTopUps)
+      .where(
+        and(
+          eq(subscriptionCreditTopUps.userId, userId),
+          gt(subscriptionCreditTopUps.creditsRemaining, 0),
+          gt(subscriptionCreditTopUps.expiresAt, new Date()),
+        ),
+      )
+      .orderBy(asc(subscriptionCreditTopUps.expiresAt), asc(subscriptionCreditTopUps.createdAt))
+
+    const allocations: TopUpAllocation[] = []
+    let remainingToAllocate = credits
+    const now = new Date()
+
+    for (const row of rows) {
+      if (remainingToAllocate <= 0) {
+        break
+      }
+
+      const allocatedCredits = Math.min(row.creditsRemaining, remainingToAllocate)
+      const nextRemaining = row.creditsRemaining - allocatedCredits
+      allocations.push({
+        credits: allocatedCredits,
+        topUpId: row.id,
+      })
+
+      await db
+        .update(subscriptionCreditTopUps)
+        .set({
+          creditsRemaining: nextRemaining,
+          consumedAt: nextRemaining === 0 ? now : row.consumedAt,
+          updatedAt: now,
+        })
+        .where(eq(subscriptionCreditTopUps.id, row.id))
+
+      remainingToAllocate -= allocatedCredits
+    }
+
+    return allocations
   }
 
   async createCheckoutSession(input: {
@@ -297,7 +517,67 @@ export class SubscriptionService {
     }
   }
 
+  async createTopUpCheckoutSession(input: {
+    origin: string
+    returnPath: string
+    topUpPackId: string
+    userEmail?: string | null
+    userId: string
+  }): Promise<SubscriptionCheckoutSession> {
+    await this.expireStaleTopUpCredits(input.userId)
+
+    const subscription = await this.getCurrentSubscription(input.userId)
+
+    if (!subscription || !planConsumesLaunchCredits(subscription.planId)) {
+      throw new HttpError(409, 'Top-up credits are available only on Run and Warm Standby.')
+    }
+
+    const pack = requireCreditTopUpPack(input.topUpPackId)
+    const stripe = getStripeCheckoutClient()
+    const appUrl = getCheckoutBaseUrl(input.origin)
+    const returnPath = normalizeReturnPath(input.returnPath)
+    const separator = returnPath.includes('?') ? '&' : '?'
+    const session = await stripe.checkout.sessions.create({
+      cancel_url: `${appUrl}${returnPath}`,
+      customer_email: input.userEmail ?? undefined,
+      line_items: [
+        {
+          price_data: {
+            currency: 'usd',
+            product_data: {
+              description: buildTopUpPriceDescription(pack),
+              metadata: {
+                topUpPackId: pack.id,
+              },
+              name: `${pack.name} credit top-up`,
+            },
+            unit_amount: pack.priceCents,
+          },
+          quantity: 1,
+        },
+      ],
+      metadata: {
+        checkoutKind: 'runtime_top_up',
+        returnPath,
+        topUpPackId: pack.id,
+        userId: input.userId,
+      },
+      mode: 'payment',
+      success_url: `${appUrl}${returnPath}${separator}top_up_session_id={CHECKOUT_SESSION_ID}`,
+    })
+
+    if (!session.url) {
+      throw new HttpError(502, 'Stripe did not return a checkout URL.')
+    }
+
+    return {
+      sessionId: session.id,
+      sessionUrl: session.url,
+    }
+  }
+
   async getCurrentSubscription(userId: string) {
+    await this.expireStaleTopUpCredits(userId)
     const [record] = await this.db
       .select()
       .from(userSubscriptions)
@@ -314,6 +594,14 @@ export class SubscriptionService {
     const stripe = getStripeCheckoutClient()
     const session = await stripe.checkout.sessions.retrieve(input.sessionId)
 
+    if (session.metadata?.checkoutKind === 'runtime_top_up') {
+      return this.applyCompletedTopUpCheckoutSession({
+        session,
+        stripe,
+        userId: input.userId,
+      })
+    }
+
     return this.applyCompletedCheckoutSession({
       session,
       stripe,
@@ -325,6 +613,14 @@ export class SubscriptionService {
     session: Stripe.Checkout.Session
     userId: string
   }) {
+    if (input.session.metadata?.checkoutKind === 'runtime_top_up') {
+      return this.applyCompletedTopUpCheckoutSession({
+        session: input.session,
+        stripe: getStripeCheckoutClient(),
+        userId: input.userId,
+      })
+    }
+
     return this.applyCompletedCheckoutSession({
       session: input.session,
       stripe: getStripeCheckoutClient(),
@@ -333,6 +629,7 @@ export class SubscriptionService {
   }
 
   async getLaunchPolicy(userId: string, order: Order): Promise<LaunchPolicyCheck> {
+    await this.expireStaleTopUpCredits(userId)
     const subscription = await this.getCurrentSubscription(userId)
     const plan = subscription ? getSubscriptionPlan(subscription.planId) : getFreeSubscriptionPlan()
     const runRows = await this.db
@@ -380,6 +677,8 @@ export class SubscriptionService {
     const idempotencyKey = getReserveIdempotencyKey(chargeKey)
 
     return this.db.transaction(async (tx) => {
+      await this.expireStaleTopUpCreditsInDb(tx, input.userId)
+
       const existingRows = await tx
         .select()
         .from(creditLedger)
@@ -413,6 +712,7 @@ export class SubscriptionService {
       }
 
       const nextBalance = subscription.remainingCredits - 1
+      const topUpAllocations = await this.allocateTopUpCredits(tx, input.userId, 1)
 
       const [updatedSubscription] = await tx
         .update(userSubscriptions)
@@ -439,6 +739,7 @@ export class SubscriptionService {
         metadataJson: {
           planId: input.plan.id,
           planVersion: subscription.planVersion,
+          topUpAllocations,
         },
       })
 
@@ -571,6 +872,7 @@ export class SubscriptionService {
       }
 
       const nextBalance = subscription.remainingCredits + 1
+      const topUpAllocations = parseTopUpAllocations(reserve.metadataJson)
 
       await tx
         .update(userSubscriptions)
@@ -579,6 +881,28 @@ export class SubscriptionService {
           updatedAt: new Date(),
         })
         .where(eq(userSubscriptions.id, subscription.id))
+
+      for (const allocation of topUpAllocations) {
+        const [topUpRow] = await tx
+          .select()
+          .from(subscriptionCreditTopUps)
+          .where(eq(subscriptionCreditTopUps.id, allocation.topUpId))
+          .limit(1)
+
+        if (!topUpRow) {
+          continue
+        }
+
+        const restoredRemaining = topUpRow.creditsRemaining + allocation.credits
+        await tx
+          .update(subscriptionCreditTopUps)
+          .set({
+            creditsRemaining: restoredRemaining,
+            consumedAt: null,
+            updatedAt: new Date(),
+          })
+          .where(eq(subscriptionCreditTopUps.id, allocation.topUpId))
+      }
 
       await tx
         .update(creditLedger)
@@ -645,7 +969,8 @@ export class SubscriptionService {
 
     const now = new Date()
     const period = await getStripePeriodBounds(input.stripe, session)
-    const nextBalance = plan.includedCredits
+    const activeTopUpCredits = await this.sumActiveTopUpCredits(this.db, metadataUserId || input.userId)
+    const nextBalance = plan.includedCredits + activeTopUpCredits
     const previousBalance = existing?.remainingCredits ?? 0
     const subscriptionId = existing?.id ?? crypto.randomUUID()
     const persistedUserId = metadataUserId || input.userId
@@ -710,6 +1035,120 @@ export class SubscriptionService {
 
     return toUserSubscription(record)
   }
+
+  private async applyCompletedTopUpCheckoutSession(input: {
+    session: Stripe.Checkout.Session
+    stripe: Stripe
+    userId: string
+  }) {
+    const { session } = input
+
+    if (session.metadata?.checkoutKind !== 'runtime_top_up') {
+      throw new HttpError(400, 'Checkout session is not a runtime top-up purchase.')
+    }
+
+    assertCompletedTopUpSession(session)
+
+    const metadataUserId = session.metadata?.userId?.trim() || null
+
+    if (metadataUserId && metadataUserId !== input.userId) {
+      throw new HttpError(403, 'Checkout session belongs to another user.')
+    }
+
+    const topUpPackId = session.metadata?.topUpPackId?.trim()
+
+    if (!topUpPackId) {
+      throw new HttpError(400, 'Checkout session missing top-up pack reference.')
+    }
+
+    const pack = requireCreditTopUpPack(topUpPackId)
+    const persistedUserId = metadataUserId || input.userId
+
+    return this.db.transaction(async (tx) => {
+      await this.expireStaleTopUpCreditsInDb(tx, persistedUserId)
+
+      const existingTopUpRows = await tx
+        .select()
+        .from(subscriptionCreditTopUps)
+        .where(eq(subscriptionCreditTopUps.stripeCheckoutSessionId, session.id))
+        .limit(1)
+
+      if (existingTopUpRows[0]) {
+        const [existingSubscription] = await tx
+          .select()
+          .from(userSubscriptions)
+          .where(eq(userSubscriptions.userId, persistedUserId))
+          .limit(1)
+
+        if (!existingSubscription) {
+          throw new HttpError(409, 'An active runtime subscription is required before buying extra credits.')
+        }
+
+        return toUserSubscription(existingSubscription)
+      }
+
+      const [subscription] = await tx
+        .select()
+        .from(userSubscriptions)
+        .where(eq(userSubscriptions.userId, persistedUserId))
+        .limit(1)
+
+      if (!subscription || !planConsumesLaunchCredits(subscription.planId)) {
+        throw new HttpError(409, 'Top-up credits are available only on Run and Warm Standby.')
+      }
+
+      const nextBalance = subscription.remainingCredits + pack.credits
+      const now = new Date()
+      const expiresAt = getCreditTopUpExpiresAt(now)
+
+      const [updatedSubscription] = await tx
+        .update(userSubscriptions)
+        .set({
+          remainingCredits: nextBalance,
+          updatedAt: now,
+        })
+        .where(eq(userSubscriptions.id, subscription.id))
+        .returning()
+
+      await tx.insert(subscriptionCreditTopUps).values({
+        id: crypto.randomUUID(),
+        userId: persistedUserId,
+        subscriptionId: subscription.id,
+        packId: pack.id,
+        creditsTotal: pack.credits,
+        creditsRemaining: pack.credits,
+        priceCents: pack.priceCents,
+        currency: 'USD',
+        stripeCheckoutSessionId: session.id,
+        expiresAt,
+        consumedAt: null,
+        createdAt: now,
+        updatedAt: now,
+      })
+
+      await tx.insert(creditLedger).values({
+        id: crypto.randomUUID(),
+        userId: persistedUserId,
+        subscriptionId: subscription.id,
+        orderId: null,
+        runId: null,
+        eventType: 'grant',
+        unitType: getPlanLedgerUnitType(subscription.planId),
+        deltaCredits: pack.credits,
+        resultingBalance: nextBalance,
+        status: 'committed',
+        reasonCode: 'top_up_purchase',
+        idempotencyKey: getTopUpGrantIdempotencyKey(session.id),
+        metadataJson: {
+          expiresAt: expiresAt.toISOString(),
+          priceCents: pack.priceCents,
+          topUpPackId: pack.id,
+        },
+      })
+
+      return toUserSubscription(updatedSubscription)
+    })
+  }
 }
 
 let subscriptionServiceOverride: SubscriptionServiceLike | null = null
@@ -721,12 +1160,14 @@ export function getSubscriptionService() {
 export type SubscriptionServiceLike = Pick<
   SubscriptionService,
   | 'createCheckoutSession'
+  | 'createTopUpCheckoutSession'
   | 'commitReservedLaunchCredit'
   | 'refundReservedLaunchCredit'
   | 'getCurrentSubscription'
   | 'getLaunchPolicy'
   | 'handleStripeCheckoutCompletedSession'
   | 'listPlans'
+  | 'listTopUpPacks'
   | 'reserveLaunchCredit'
   | 'reconcileCheckoutSession'
 >

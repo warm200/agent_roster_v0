@@ -9,6 +9,7 @@ import {
   CART_STATUSES,
   CHANNEL_SCOPES,
   CHANNEL_TYPES,
+  CREDIT_TOP_UP_PACK_IDS,
   CREDIT_LEDGER_EVENT_TYPES,
   CREDIT_LEDGER_STATUSES,
   CREDIT_LEDGER_UNIT_TYPES,
@@ -45,6 +46,7 @@ export const logLevelSchema = z.enum(LOG_LEVELS)
 export const messageRoleSchema = z.enum(MESSAGE_ROLES)
 export const agentProviderKeyNameSchema = z.enum(AGENT_PROVIDER_KEY_NAMES)
 export const subscriptionPlanIdSchema = z.enum(SUBSCRIPTION_PLAN_IDS)
+export const creditTopUpPackIdSchema = z.enum(CREDIT_TOP_UP_PACK_IDS)
 export const subscriptionStatusSchema = z.enum(SUBSCRIPTION_STATUSES)
 export const billingIntervalSchema = z.enum(BILLING_INTERVALS)
 export const triggerModeSchema = z.enum(TRIGGER_MODES)
@@ -263,6 +265,16 @@ export const subscriptionPlanSchema = z.object({
   runtimeAccess: z.boolean(),
   planIncludes: z.array(z.string().min(1)),
   suitFor: z.string().min(1),
+})
+
+export const creditTopUpPackSchema = z.object({
+  id: creditTopUpPackIdSchema,
+  name: z.string().min(1),
+  credits: z.number().int().positive(),
+  priceCents: z.number().int().positive(),
+  priceLabel: z.string().min(1),
+  expiresInDays: z.number().int().positive(),
+  summary: z.string().min(1),
 })
 
 export const userSubscriptionSchema = z.object({

@@ -212,7 +212,7 @@ export async function handleStripeWebhookEvent(input: {
   const userId = session.metadata?.userId?.trim() || DEFAULT_REQUEST_USER_ID
   await ensureRequestUser(userId)
 
-  if (session.metadata?.checkoutKind === 'runtime_plan') {
+  if (session.metadata?.checkoutKind === 'runtime_plan' || session.metadata?.checkoutKind === 'runtime_top_up') {
     await getSubscriptionService().handleStripeCheckoutCompletedSession({
       session,
       userId,

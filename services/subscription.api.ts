@@ -39,8 +39,25 @@ export async function createSubscriptionCheckoutSession(input: {
   )
 }
 
+export async function createCreditTopUpCheckoutSession(input: {
+  email?: string | null
+  returnPath: string
+  topUpPackId: string
+}) {
+  return postJson<SubscriptionCheckoutSessionResponse, typeof input>(
+    '/api/me/subscription/top-up/checkout/session',
+    input,
+  )
+}
+
 export async function reconcileSubscriptionCheckoutSession(sessionId: string) {
   return postJson<ReconcileSubscriptionResponse>(
     `/api/me/subscription/checkout/session/${encodeURIComponent(sessionId)}`,
+  )
+}
+
+export async function reconcileCreditTopUpCheckoutSession(sessionId: string) {
+  return postJson<ReconcileSubscriptionResponse>(
+    `/api/me/subscription/top-up/checkout/session/${encodeURIComponent(sessionId)}`,
   )
 }

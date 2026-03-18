@@ -5,6 +5,8 @@ import { NextRequest } from 'next/server'
 
 import { POST as createSubscriptionCheckoutSession } from '@/app/api/me/subscription/checkout/session/route'
 import { POST as reconcileSubscriptionCheckoutSession } from '@/app/api/me/subscription/checkout/session/[sessionId]/route'
+import { POST as createTopUpCheckoutSession } from '@/app/api/me/subscription/top-up/checkout/session/route'
+import { POST as reconcileTopUpCheckoutSession } from '@/app/api/me/subscription/top-up/checkout/session/[sessionId]/route'
 import { GET as getLaunchPolicy } from '@/app/api/me/orders/[orderId]/launch-policy/route'
 import { GET as getCurrentSubscription } from '@/app/api/me/subscription/route'
 import { GET as getPricingPlans } from '@/app/api/pricing/plans/route'
@@ -13,7 +15,10 @@ import { HttpError } from '@/server/lib/http'
 import { setRequestUserIdForTesting } from '@/server/lib/request-user'
 import { setOrderServiceForTesting, type OrderService } from '@/server/services/order.service'
 import { setRunServiceForTesting } from '@/server/services/run.service'
-import { setSubscriptionServiceForTesting } from '@/server/services/subscription.service'
+import {
+  setSubscriptionServiceForTesting,
+  type SubscriptionServiceLike,
+} from '@/server/services/subscription.service'
 
 const order = {
   id: 'order-test-1',
@@ -60,6 +65,43 @@ const stubOrderService = {
   },
 } satisfies OrderService
 
+function createSubscriptionServiceStub(
+  overrides: Partial<SubscriptionServiceLike> = {},
+): SubscriptionServiceLike {
+  return {
+    async commitReservedLaunchCredit() {
+      return null
+    },
+    async createCheckoutSession() {
+      throw new Error('not implemented')
+    },
+    async createTopUpCheckoutSession() {
+      throw new Error('not implemented')
+    },
+    async refundReservedLaunchCredit() {
+      return null
+    },
+    async reserveLaunchCredit() {
+      return null
+    },
+    async getCurrentSubscription() {
+      return null
+    },
+    async getLaunchPolicy() {
+      throw new Error('not implemented')
+    },
+    async handleStripeCheckoutCompletedSession() {
+      throw new Error('not implemented')
+    },
+    listPlans: () => [getFreeSubscriptionPlan(), getSubscriptionPlan('run')],
+    listTopUpPacks: () => [],
+    async reconcileCheckoutSession() {
+      throw new Error('not implemented')
+    },
+    ...overrides,
+  }
+}
+
 afterEach(() => {
   setRequestUserIdForTesting(null)
   setOrderServiceForTesting(null)
@@ -79,33 +121,11 @@ test('pricing plans route returns the shared subscription plan catalog', async (
 
 test('me subscription route returns free plan when user has no active subscription row', async () => {
   setRequestUserIdForTesting(() => 'user-1')
-  setSubscriptionServiceForTesting({
-    async commitReservedLaunchCredit() {
-      return null
-    },
-    async createCheckoutSession() {
-      throw new Error('not implemented')
-    },
-    async refundReservedLaunchCredit() {
-      return null
-    },
-    async reserveLaunchCredit() {
-      return null
-    },
+  setSubscriptionServiceForTesting(createSubscriptionServiceStub({
     async getCurrentSubscription() {
       return null
     },
-    getLaunchPolicy: async () => {
-      throw new Error('not implemented')
-    },
-    async handleStripeCheckoutCompletedSession() {
-      throw new Error('not implemented')
-    },
-    listPlans: () => [getFreeSubscriptionPlan(), getSubscriptionPlan('run')],
-    async reconcileCheckoutSession() {
-      throw new Error('not implemented')
-    },
-  } as never)
+  }))
 
   const response = await getCurrentSubscription(new NextRequest('http://localhost/api/me/subscription'))
   const payload = await response.json()
@@ -125,22 +145,7 @@ test('launch policy route returns plan blockers for the selected order', async (
       return []
     },
   } as never)
-  setSubscriptionServiceForTesting({
-    async commitReservedLaunchCredit() {
-      return null
-    },
-    async createCheckoutSession() {
-      throw new Error('not implemented')
-    },
-    async refundReservedLaunchCredit() {
-      return null
-    },
-    async reserveLaunchCredit() {
-      return null
-    },
-    async getCurrentSubscription() {
-      return null
-    },
+  setSubscriptionServiceForTesting(createSubscriptionServiceStub({
     async getLaunchPolicy() {
       return {
         allowed: false,
@@ -154,14 +159,7 @@ test('launch policy route returns plan blockers for the selected order', async (
         },
       }
     },
-    async handleStripeCheckoutCompletedSession() {
-      throw new Error('not implemented')
-    },
-    listPlans: () => [getFreeSubscriptionPlan(), getSubscriptionPlan('run')],
-    async reconcileCheckoutSession() {
-      throw new Error('not implemented')
-    },
-  } as never)
+  }))
 
   const response = await getLaunchPolicy(
     new NextRequest('http://localhost/api/me/orders/order-test-1/launch-policy'),
@@ -190,10 +188,7 @@ test('subscription checkout session route forwards plan payload to service', asy
     | undefined
 
   setRequestUserIdForTesting(() => 'user-1')
-  setSubscriptionServiceForTesting({
-    async commitReservedLaunchCredit() {
-      return null
-    },
+  setSubscriptionServiceForTesting(createSubscriptionServiceStub({
     async createCheckoutSession(input) {
       received = input
       return {
@@ -201,26 +196,7 @@ test('subscription checkout session route forwards plan payload to service', asy
         sessionUrl: 'https://checkout.stripe.com/c/session/subscription-plan-1',
       }
     },
-    async refundReservedLaunchCredit() {
-      return null
-    },
-    async reserveLaunchCredit() {
-      return null
-    },
-    async getCurrentSubscription() {
-      return null
-    },
-    async getLaunchPolicy() {
-      throw new Error('not implemented')
-    },
-    async handleStripeCheckoutCompletedSession() {
-      throw new Error('not implemented')
-    },
-    listPlans: () => [getFreeSubscriptionPlan(), getSubscriptionPlan('run')],
-    async reconcileCheckoutSession() {
-      throw new Error('not implemented')
-    },
-  })
+  }))
 
   const response = await createSubscriptionCheckoutSession(
     new NextRequest('http://localhost/api/me/subscription/checkout/session', {
@@ -254,29 +230,7 @@ test('subscription checkout reconcile route returns the updated subscription', a
     | undefined
 
   setRequestUserIdForTesting(() => 'user-1')
-  setSubscriptionServiceForTesting({
-    async commitReservedLaunchCredit() {
-      return null
-    },
-    async createCheckoutSession() {
-      throw new Error('not implemented')
-    },
-    async refundReservedLaunchCredit() {
-      return null
-    },
-    async reserveLaunchCredit() {
-      return null
-    },
-    async getCurrentSubscription() {
-      return null
-    },
-    async getLaunchPolicy() {
-      throw new Error('not implemented')
-    },
-    async handleStripeCheckoutCompletedSession() {
-      throw new Error('not implemented')
-    },
-    listPlans: () => [getFreeSubscriptionPlan(), getSubscriptionPlan('run')],
+  setSubscriptionServiceForTesting(createSubscriptionServiceStub({
     async reconcileCheckoutSession(input) {
       received = input
 
@@ -301,7 +255,7 @@ test('subscription checkout reconcile route returns the updated subscription', a
         updatedAt: new Date().toISOString(),
       }
     },
-  })
+  }))
 
   const response = await reconcileSubscriptionCheckoutSession(
     new NextRequest('http://localhost/api/me/subscription/checkout/session/cs_sub_123', {
@@ -324,33 +278,12 @@ test('subscription checkout reconcile route returns the updated subscription', a
 
 test('subscription checkout session route preserves service errors', async () => {
   setRequestUserIdForTesting(() => 'user-1')
-  setSubscriptionServiceForTesting({
-    async commitReservedLaunchCredit() {
-      return null
-    },
+  setSubscriptionServiceForTesting(createSubscriptionServiceStub({
     async createCheckoutSession() {
       throw new HttpError(400, 'Free does not require checkout.')
     },
-    async refundReservedLaunchCredit() {
-      return null
-    },
-    async reserveLaunchCredit() {
-      return null
-    },
-    async getCurrentSubscription() {
-      return null
-    },
-    async getLaunchPolicy() {
-      throw new Error('not implemented')
-    },
-    async handleStripeCheckoutCompletedSession() {
-      throw new Error('not implemented')
-    },
     listPlans: () => [getFreeSubscriptionPlan()],
-    async reconcileCheckoutSession() {
-      throw new Error('not implemented')
-    },
-  })
+  }))
 
   const response = await createSubscriptionCheckoutSession(
     new NextRequest('http://localhost/api/me/subscription/checkout/session', {
@@ -365,4 +298,102 @@ test('subscription checkout session route preserves service errors', async () =>
 
   assert.equal(response.status, 400)
   assert.equal(payload.error, 'Free does not require checkout.')
+})
+
+test('top-up checkout session route forwards pack payload to service', async () => {
+  let received:
+    | {
+        origin: string
+        returnPath: string
+        topUpPackId: string
+        userEmail?: string | null
+        userId: string
+      }
+    | undefined
+
+  setRequestUserIdForTesting(() => 'user-1')
+  setSubscriptionServiceForTesting(createSubscriptionServiceStub({
+    async createTopUpCheckoutSession(input) {
+      received = input
+      return {
+        sessionId: 'cs_topup_1',
+        sessionUrl: 'https://checkout.stripe.com/c/session/top-up-1',
+      }
+    },
+  }))
+
+  const response = await createTopUpCheckoutSession(
+    new NextRequest('http://localhost/api/me/subscription/top-up/checkout/session', {
+      body: JSON.stringify({
+        email: 'buyer@example.com',
+        returnPath: '/app/bundles/order-1',
+        topUpPackId: 'builder_pack',
+      }),
+      method: 'POST',
+    }),
+  )
+  const payload = await response.json()
+
+  assert.equal(response.status, 201)
+  assert.deepEqual(received, {
+    origin: 'http://localhost',
+    returnPath: '/app/bundles/order-1',
+    topUpPackId: 'builder_pack',
+    userEmail: 'buyer@example.com',
+    userId: 'user-1',
+  })
+  assert.equal(payload.sessionId, 'cs_topup_1')
+})
+
+test('top-up checkout reconcile route returns the updated subscription', async () => {
+  let received:
+    | {
+        sessionId: string
+        userId: string
+      }
+    | undefined
+
+  setRequestUserIdForTesting(() => 'user-1')
+  setSubscriptionServiceForTesting(createSubscriptionServiceStub({
+    async reconcileCheckoutSession(input) {
+      received = input
+      return {
+        id: 'subscription-1',
+        userId: 'user-1',
+        planId: 'warm_standby',
+        planVersion: 'v1',
+        status: 'active',
+        billingInterval: 'month',
+        includedCredits: 10,
+        remainingCredits: 34,
+        priceCents: 1900,
+        currency: 'USD',
+        stripeCustomerId: 'cus_123',
+        stripePriceId: null,
+        stripeSubscriptionId: 'sub_123',
+        stripeCheckoutSessionId: 'cs_topup_123',
+        currentPeriodStart: new Date().toISOString(),
+        currentPeriodEnd: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }
+    },
+  }))
+
+  const response = await reconcileTopUpCheckoutSession(
+    new NextRequest('http://localhost/api/me/subscription/top-up/checkout/session/cs_topup_123', {
+      method: 'POST',
+    }),
+    {
+      params: Promise.resolve({ sessionId: 'cs_topup_123' }),
+    },
+  )
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.deepEqual(received, {
+    sessionId: 'cs_topup_123',
+    userId: 'user-1',
+  })
+  assert.equal(payload.subscription.remainingCredits, 34)
 })

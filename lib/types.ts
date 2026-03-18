@@ -8,6 +8,7 @@ export type RunStatus = 'provisioning' | 'running' | 'completed' | 'failed'
 export type AgentTimeFormat = 'auto' | '12' | '24'
 export type AgentProviderKeyName = 'anthropic' | 'google' | 'openai' | 'openrouter'
 export type SubscriptionPlanId = 'free' | 'run' | 'warm_standby' | 'always_on'
+export type CreditTopUpPackId = 'quick_refill' | 'builder_pack' | 'power_pack'
 export type SubscriptionStatus = 'active' | 'canceled' | 'expired' | 'past_due'
 export type BillingInterval = 'none' | 'one_time' | 'month'
 export type TriggerMode = 'none' | 'manual' | 'auto_wake' | 'always_active'
@@ -290,6 +291,16 @@ export interface UserSubscription {
   currentPeriodEnd: string | null
   createdAt: string
   updatedAt: string
+}
+
+export interface CreditTopUpPack {
+  id: CreditTopUpPackId
+  name: string
+  credits: number
+  priceCents: number
+  priceLabel: string
+  expiresInDays: number
+  summary: string
 }
 
 export interface CreditLedgerEntry {

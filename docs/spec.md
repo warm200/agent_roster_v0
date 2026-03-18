@@ -35,10 +35,12 @@ Use these docs by topic:
   - runtime pricing model
   - what plans mean publicly
   - what constraints are actually enforced today
+  - runtime credit top-up packs and 90-day expiry terms
 - [credit_consuming_logic.md](/Users/wallacewang/agent_projects/v0_version/docs/credit_consuming_logic.md)
   - reserve / commit / refund rules
   - launch credit vs wake credit logic
   - billing vs telemetry separation
+  - how expiring top-up credits are added and consumed
 - [TTL and Cleanup Boundary Conditions.md](/Users/wallacewang/agent_projects/v0_version/docs/TTL%20and%20Cleanup%20Boundary%20Conditions.md)
   - Run vs Warm Standby vs Always On lifecycle semantics
   - cleanup boundaries

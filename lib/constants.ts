@@ -14,6 +14,7 @@ export const LOG_LEVELS = ['info', 'warn', 'error', 'debug'] as const
 export const MESSAGE_ROLES = ['user', 'assistant'] as const
 export const AGENT_PROVIDER_KEY_NAMES = ['anthropic', 'google', 'openai', 'openrouter'] as const
 export const SUBSCRIPTION_PLAN_IDS = ['free', 'run', 'warm_standby', 'always_on'] as const
+export const CREDIT_TOP_UP_PACK_IDS = ['quick_refill', 'builder_pack', 'power_pack'] as const
 export const SUBSCRIPTION_STATUSES = ['active', 'canceled', 'expired', 'past_due'] as const
 export const BILLING_INTERVALS = ['none', 'one_time', 'month'] as const
 export const TRIGGER_MODES = ['none', 'manual', 'auto_wake', 'always_active'] as const

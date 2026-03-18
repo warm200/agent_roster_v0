@@ -17,6 +17,14 @@ read_when:
 
 这么做的原因很直接：你现在已经有 launch 前的余额 gate，但还没有自动扣减，也没有 credit 消耗公式；而且 `triggerMode` / `alwaysOnBundles` 还没完全变成真实运行时行为。
 
+补充：现在还支持一次性 top-up 包。
+
+* `Quick Refill`: `+10` credits = `$5.99`
+* `Builder Pack`: `+25` credits = `$12.99`
+* `Power Pack`: `+60` credits = `$24.99`
+* top-up credits expire `90 days` after purchase
+* top-up credits are consumed before the non-expiring subscription balance
+
 ---
 
 ## 2) Postgres schema

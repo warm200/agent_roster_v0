@@ -90,6 +90,31 @@ Runtime plan data is persisted in:
 
 - `user_subscriptions`
 - `credit_ledger`
+- `subscription_credit_top_ups`
+
+### 2.3 Runtime Credit Top-Ups
+
+Users on `Run` or `Warm Standby` can buy extra credits without changing plan.
+
+Current top-up packs:
+
+- `Quick Refill`: `+10` credits for `$5.99`
+- `Builder Pack`: `+25` credits for `$12.99`
+- `Power Pack`: `+60` credits for `$24.99`
+
+Current UX:
+
+1. user opens a purchased bundle
+2. next to `Launch Run`, user clicks `Top Up Credits`
+3. same-page modal shows pack choices and the expiry term
+4. Stripe checkout opens
+5. Stripe returns user to the same bundle detail page
+6. backend reconciles the top-up checkout session
+7. credits are added to the current subscription balance
+
+Current term shown in UI:
+
+- `Top-up credits are added to your current balance and expire 90 days after purchase.`
 
 ---
 
@@ -248,6 +273,8 @@ Current behavior:
 - `Run` and `Warm Standby` now reserve `1` credit before provider boot
 - if provider accepts the launch, the reserve is committed
 - if provider never accepts, the reserve is refunded
+- top-up credits are consumed ahead of non-expiring plan balance
+- expired top-up credits are swept on read / launch-policy check / reserve flows
 - `Always On` does not use the same hard launch-credit deduction path
 - runs are not stopped mid-session just because credits later become low
 

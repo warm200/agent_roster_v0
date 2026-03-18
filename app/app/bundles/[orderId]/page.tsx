@@ -12,6 +12,7 @@ import { Spinner } from '@/components/ui/spinner'
 import { RunStatusBadge } from '@/components/run-status-badge'
 import { RiskBadge } from '@/components/risk-badge'
 import { BundleRiskSummary } from '@/components/bundle-risk-summary'
+import { CreditTopUpDialog } from '@/components/credit-top-up-dialog'
 import { AgentSetupCard } from '@/components/agent-setup-card'
 import { PlanUpgradeDialog } from '@/components/plan-upgrade-dialog'
 import { TelegramSetupWizard } from '@/components/telegram-setup-wizard'
@@ -20,7 +21,10 @@ import type { AgentSetup, LaunchPolicyCheck, Order, Run } from '@/lib/types'
 import { formatDate, formatDateTime } from '@/lib/utils'
 import { createOrderRun, getOrder, getOrderDownloads, getOrderLaunchPolicy } from '@/services/orders.api'
 import { listRuns } from '@/services/runs.api'
-import { reconcileSubscriptionCheckoutSession } from '@/services/subscription.api'
+import {
+  reconcileCreditTopUpCheckoutSession,
+  reconcileSubscriptionCheckoutSession,
+} from '@/services/subscription.api'
 import { toast } from 'sonner'
 import {
   ChevronLeft,
@@ -65,8 +69,11 @@ export default function BundleDetailPage({ params }: PageProps) {
   const [telegramSetup, setTelegramSetup] = useState(false)
   const [isLaunching, setIsLaunching] = useState(false)
   const [isPlanDialogOpen, setIsPlanDialogOpen] = useState(false)
+  const [isTopUpDialogOpen, setIsTopUpDialogOpen] = useState(false)
   const [isReconcilingPlan, setIsReconcilingPlan] = useState(false)
+  const [isReconcilingTopUp, setIsReconcilingTopUp] = useState(false)
   const subscriptionSessionId = searchParams.get('subscription_session_id')
+  const topUpSessionId = searchParams.get('top_up_session_id')
 
   const handleChannelConfigChange = useCallback((channelConfig: NonNullable<Order['channelConfig']>) => {
     setOrder((currentOrder) => {
@@ -201,6 +208,49 @@ export default function BundleDetailPage({ params }: PageProps) {
     }
   }, [isReconcilingPlan, orderId, router, subscriptionSessionId])
 
+  useEffect(() => {
+    if (!topUpSessionId || isReconcilingTopUp) {
+      return
+    }
+
+    const sessionId = topUpSessionId
+    let isMounted = true
+
+    async function reconcileTopUpPurchase() {
+      setIsReconcilingTopUp(true)
+
+      try {
+        await reconcileCreditTopUpCheckoutSession(sessionId)
+        const nextLaunchPolicy = await getOrderLaunchPolicy(orderId)
+
+        if (!isMounted) {
+          return
+        }
+
+        setLaunchPolicy(nextLaunchPolicy)
+        window.dispatchEvent(new CustomEvent('subscription-updated'))
+        toast.success('Credits added. They expire 90 days after purchase.')
+        router.replace(`/app/bundles/${orderId}`)
+      } catch (error) {
+        if (!isMounted) {
+          return
+        }
+
+        toast.error(error instanceof Error ? error.message : 'Unable to confirm your credit top-up')
+      } finally {
+        if (isMounted) {
+          setIsReconcilingTopUp(false)
+        }
+      }
+    }
+
+    void reconcileTopUpPurchase()
+
+    return () => {
+      isMounted = false
+    }
+  }, [isReconcilingTopUp, orderId, router, topUpSessionId])
+
   if (isLoading) {
     return <BundleDetailSkeleton />
   }
@@ -239,9 +289,13 @@ export default function BundleDetailPage({ params }: PageProps) {
   const effectiveDefaultAgentSlug = order.agentSetup?.defaultAgentSlug ?? order.items[0]?.agent.slug ?? null
   const hasPlanBlockers = Boolean(launchPolicy && launchPolicy.blockers.length > 0)
   const currentCredits = launchPolicy?.subscription?.remainingCredits ?? launchPolicy?.plan.includedCredits ?? 0
+  const canTopUpCredits = Boolean(
+    launchPolicy?.subscription &&
+      (launchPolicy.plan.id === 'run' || launchPolicy.plan.id === 'warm_standby'),
+  )
 
   const handleLaunchRun = async () => {
-    if (!canLaunchRun || isLaunching || isReconcilingPlan) return
+    if (!canLaunchRun || isLaunching || isReconcilingPlan || isReconcilingTopUp) return
 
     setIsLaunching(true)
 
@@ -288,28 +342,52 @@ export default function BundleDetailPage({ params }: PageProps) {
           </div>
         </div>
 
-        <Button
-          size="lg"
-          disabled={!canLaunchRun || isLaunching || isReconcilingPlan}
-          onClick={handleLaunchRun}
-        >
-          {isReconcilingPlan ? (
-            <>
-              <Spinner className="w-4 h-4 mr-2" />
-              Updating plan...
-            </>
-          ) : isLaunching ? (
-            <>
-              <Spinner className="w-4 h-4 mr-2" />
-              Launching...
-            </>
-          ) : (
-            <>
-              <Play className="w-4 h-4 mr-2" />
-              Launch Run
-            </>
-          )}
-        </Button>
+        <div className="flex flex-col gap-3 sm:flex-row">
+          {canTopUpCredits ? (
+            <Button
+              disabled={isReconcilingPlan || isReconcilingTopUp}
+              onClick={() => setIsTopUpDialogOpen(true)}
+              size="lg"
+              variant="outline"
+            >
+              {isReconcilingTopUp ? (
+                <>
+                  <Spinner className="w-4 h-4 mr-2" />
+                  Updating credits...
+                </>
+              ) : (
+                'Top Up Credits'
+              )}
+            </Button>
+          ) : null}
+          <Button
+            size="lg"
+            disabled={!canLaunchRun || isLaunching || isReconcilingPlan || isReconcilingTopUp}
+            onClick={handleLaunchRun}
+          >
+            {isReconcilingPlan ? (
+              <>
+                <Spinner className="w-4 h-4 mr-2" />
+                Updating plan...
+              </>
+            ) : isReconcilingTopUp ? (
+              <>
+                <Spinner className="w-4 h-4 mr-2" />
+                Updating credits...
+              </>
+            ) : isLaunching ? (
+              <>
+                <Spinner className="w-4 h-4 mr-2" />
+                Launching...
+              </>
+            ) : (
+              <>
+                <Play className="w-4 h-4 mr-2" />
+                Launch Run
+              </>
+            )}
+          </Button>
+        </div>
       </div>
 
       {/* Run Requirements Warning */}
@@ -365,14 +443,26 @@ export default function BundleDetailPage({ params }: PageProps) {
                 Runtime mode {formatPlanTriggerMode(launchPolicy.plan.triggerMode)}
               </p>
             </div>
-            <Button
-              disabled={isReconcilingPlan}
-              onClick={() => setIsPlanDialogOpen(true)}
-              size="sm"
-              variant="outline"
-            >
-              {launchPolicy.allowed ? 'View Plans' : 'Upgrade Plan'}
-            </Button>
+            <div className="flex gap-2">
+              {canTopUpCredits ? (
+                <Button
+                  disabled={isReconcilingTopUp}
+                  onClick={() => setIsTopUpDialogOpen(true)}
+                  size="sm"
+                  variant="outline"
+                >
+                  Top Up
+                </Button>
+              ) : null}
+              <Button
+                disabled={isReconcilingPlan}
+                onClick={() => setIsPlanDialogOpen(true)}
+                size="sm"
+                variant="outline"
+              >
+                {launchPolicy.allowed ? 'View Plans' : 'Upgrade Plan'}
+              </Button>
+            </div>
           </CardContent>
         </Card>
       ) : null}
@@ -566,6 +656,15 @@ export default function BundleDetailPage({ params }: PageProps) {
           currentPlanId={launchPolicy.plan.id}
           onOpenChange={setIsPlanDialogOpen}
           open={isPlanDialogOpen}
+          returnPath={`/app/bundles/${orderId}`}
+        />
+      ) : null}
+      {launchPolicy ? (
+        <CreditTopUpDialog
+          currentCredits={currentCredits}
+          currentPlanId={launchPolicy.plan.id}
+          onOpenChange={setIsTopUpDialogOpen}
+          open={isTopUpDialogOpen}
           returnPath={`/app/bundles/${orderId}`}
         />
       ) : null}

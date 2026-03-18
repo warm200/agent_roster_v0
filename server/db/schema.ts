@@ -27,6 +27,11 @@ export const subscriptionPlanIdEnum = pgEnum('subscription_plan_id', [
   'warm_standby',
   'always_on',
 ])
+export const creditTopUpPackIdEnum = pgEnum('credit_top_up_pack_id', [
+  'quick_refill',
+  'builder_pack',
+  'power_pack',
+])
 export const subscriptionStatusEnum = pgEnum('subscription_status', ['active', 'canceled', 'expired', 'past_due'])
 export const billingIntervalEnum = pgEnum('billing_interval', ['none', 'one_time', 'month'])
 export const runtimeModeEnum = pgEnum('runtime_mode', [
@@ -291,6 +296,34 @@ export const creditLedger = pgTable('credit_ledger', {
   }),
 )
 
+export const subscriptionCreditTopUps = pgTable(
+  'subscription_credit_top_ups',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    subscriptionId: text('subscription_id').references(() => userSubscriptions.id, {
+      onDelete: 'set null',
+    }),
+    packId: creditTopUpPackIdEnum('pack_id').notNull(),
+    creditsTotal: integer('credits_total').notNull(),
+    creditsRemaining: integer('credits_remaining').notNull(),
+    priceCents: integer('price_cents').notNull(),
+    currency: text('currency').notNull(),
+    stripeCheckoutSessionId: text('stripe_checkout_session_id').notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    consumedAt: timestamp('consumed_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    checkoutSessionIdx: uniqueIndex('subscription_credit_top_ups_checkout_session_idx').on(
+      table.stripeCheckoutSessionId,
+    ),
+  }),
+)
+
 export const runUsage = pgTable(
   'run_usage',
   {
@@ -499,6 +532,8 @@ export type DbUserSubscription = InferSelectModel<typeof userSubscriptions>
 export type NewDbUserSubscription = InferInsertModel<typeof userSubscriptions>
 export type DbCreditLedgerEntry = InferSelectModel<typeof creditLedger>
 export type NewDbCreditLedgerEntry = InferInsertModel<typeof creditLedger>
+export type DbSubscriptionCreditTopUp = InferSelectModel<typeof subscriptionCreditTopUps>
+export type NewDbSubscriptionCreditTopUp = InferInsertModel<typeof subscriptionCreditTopUps>
 export type DbRuntimeInstance = InferSelectModel<typeof runtimeInstances>
 export type NewDbRuntimeInstance = InferInsertModel<typeof runtimeInstances>
 export type DbRuntimeInterval = InferSelectModel<typeof runtimeIntervals>
