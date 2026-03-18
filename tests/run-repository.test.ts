@@ -233,3 +233,49 @@ test('run repository falls back to legacy run_usage update when activity column 
   assert.equal(usage?.statusSnapshot, 'failed')
   assert.equal(usage?.lastMeaningfulActivityAt, null)
 })
+
+test('run repository preserves transient runtime lifecycle fields on run updates', async () => {
+  const fakeDb = {
+    update() {
+      return {
+        set() {
+          return {
+            where() {
+              return {
+                async returning() {
+                  return [
+                    {
+                      ...baseRun,
+                      completedAt: new Date('2026-03-17T02:00:00.000Z'),
+                      createdAt: new Date(baseRun.createdAt),
+                      startedAt: new Date('2026-03-17T01:05:00.000Z'),
+                      status: 'completed',
+                      updatedAt: new Date('2026-03-17T02:00:00.000Z'),
+                    },
+                  ]
+                },
+              }
+            },
+          }
+        },
+      }
+    },
+  }
+
+  setRunRepositoryDbForTesting(fakeDb as never)
+
+  const updated = await new RunRepository().updateRun(baseRun.id, {
+    completedAt: '2026-03-17T02:00:00.000Z',
+    persistenceMode: 'recoverable',
+    preservedStateAvailable: true,
+    recoverableUntilAt: '2026-03-17T05:00:00.000Z',
+    runtimeState: 'stopped',
+    status: 'completed',
+  })
+
+  assert.equal(updated?.status, 'completed')
+  assert.equal(updated?.runtimeState, 'stopped')
+  assert.equal(updated?.persistenceMode, 'recoverable')
+  assert.equal(updated?.preservedStateAvailable, true)
+  assert.equal(updated?.recoverableUntilAt, '2026-03-17T05:00:00.000Z')
+})

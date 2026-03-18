@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Spinner } from '@/components/ui/spinner'
+import { RunStatusBadge } from '@/components/run-status-badge'
 import { RiskBadge } from '@/components/risk-badge'
 import { BundleRiskSummary } from '@/components/bundle-risk-summary'
 import { AgentSetupCard } from '@/components/agent-setup-card'
@@ -33,6 +34,19 @@ import {
 
 interface PageProps {
   params: Promise<{ orderId: string }>
+}
+
+function formatPlanTriggerMode(triggerMode: LaunchPolicyCheck['plan']['triggerMode']) {
+  switch (triggerMode) {
+    case 'manual':
+      return 'Manual only'
+    case 'auto_wake':
+      return 'Wake on Telegram'
+    case 'always_active':
+      return 'Persistent workspace'
+    default:
+      return 'No runtime'
+  }
 }
 
 export default function BundleDetailPage({ params }: PageProps) {
@@ -348,7 +362,7 @@ export default function BundleDetailPage({ params }: PageProps) {
                 {' · '}
                 Agents per bundle {launchPolicy.plan.agentsPerBundle}
                 {' · '}
-                Concurrent runs {launchPolicy.plan.concurrentRuns}
+                Runtime mode {formatPlanTriggerMode(launchPolicy.plan.triggerMode)}
               </p>
             </div>
             <Button
@@ -496,7 +510,7 @@ export default function BundleDetailPage({ params }: PageProps) {
                       <div>
                         <div className="flex items-center gap-3 mb-1">
                           <h4 className="font-medium">Run {run.id.slice(-4)}</h4>
-                          <RunStatusBadge status={run.status} />
+                          <RunStatusBadge status={run.status} runtimeState={run.runtimeState} />
                         </div>
                         <p className="text-sm text-muted-foreground">
                           {formatDateTime(run.createdAt)}
@@ -579,22 +593,5 @@ function BundleDetailSkeleton() {
         <Skeleton className="h-32 w-full" />
       </div>
     </div>
-  )
-}
-
-function RunStatusBadge({ status }: { status: string }) {
-  const variants: Record<string, { className: string; label: string }> = {
-    provisioning: { className: 'bg-blue-500/15 text-blue-400 border-blue-500/30', label: 'Provisioning' },
-    running: { className: 'bg-amber-500/15 text-amber-400 border-amber-500/30', label: 'Running' },
-    completed: { className: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30', label: 'Completed' },
-    failed: { className: 'bg-red-500/15 text-red-400 border-red-500/30', label: 'Failed' },
-  }
-
-  const variant = variants[status] || variants.failed
-
-  return (
-    <span className={`inline-flex items-center px-2 py-1 text-xs font-medium border rounded-full ${variant.className}`}>
-      {variant.label}
-    </span>
   )
 }

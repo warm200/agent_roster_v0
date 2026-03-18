@@ -205,7 +205,7 @@ export default function DashboardPage() {
                         {formatDate(run.createdAt)}
                       </p>
                     </div>
-                    <RunStatusBadge status={run.status} />
+                    <RunStatusBadge status={run.status} runtimeState={run.runtimeState} />
                   </Link>
                 ))}
               </div>

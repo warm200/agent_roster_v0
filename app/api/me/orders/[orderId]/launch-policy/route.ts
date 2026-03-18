@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { HttpError } from '@/server/lib/http'
 import { getRequestUserId } from '@/server/lib/request-user'
 import { getOrderService } from '@/server/services/order.service'
+import { getRunService } from '@/server/services/run.service'
 import { getSubscriptionService } from '@/server/services/subscription.service'
 
 export async function GET(
@@ -12,6 +13,7 @@ export async function GET(
   try {
     const { orderId } = await params
     const userId = await getRequestUserId(request)
+    await getRunService().reconcileRunsForUser(userId)
     const order = await getOrderService().getOrderByIdForUser({ orderId, userId })
     const policy = await getSubscriptionService().getLaunchPolicy(userId, order)
 

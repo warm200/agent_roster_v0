@@ -95,6 +95,9 @@ Current lifecycle shape:
 - `Warm Standby` = recoverable wakeable state
 - `Always On` = persistent live workspace intent
 - recoverable Warm Standby runs can now be resumed from stopped / archived state without creating a new run id
+- run/bundle/dashboard badges now render lifecycle-aware labels like `Stopped`, `Archived`, and `Released` instead of only raw `completed`
+- launch checks now reconcile existing managed runs first, so stale manually deleted sandboxes do not continue blocking new launches
+- failed resume attempts now re-sync runtime state before returning the error so the UI falls back to the stopped/recoverable view
 
 Current reconciliation model:
 

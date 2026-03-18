@@ -41,6 +41,27 @@ function toPublicRun(run: typeof runs.$inferSelect): Run {
   })
 }
 
+function mergeTransientRunFields(base: Run, input?: Partial<Run> | null): Run {
+  if (!input) {
+    return base
+  }
+
+  return runSchema.parse({
+    ...base,
+    runtimeState: input.runtimeState ?? base.runtimeState,
+    persistenceMode:
+      input.persistenceMode !== undefined ? input.persistenceMode : (base.persistenceMode ?? null),
+    preservedStateAvailable:
+      input.preservedStateAvailable !== undefined
+        ? input.preservedStateAvailable
+        : (base.preservedStateAvailable ?? false),
+    recoverableUntilAt:
+      input.recoverableUntilAt !== undefined
+        ? input.recoverableUntilAt
+        : (base.recoverableUntilAt ?? null),
+  })
+}
+
 function toJsonArtifacts(run: Pick<Run, 'resultArtifacts'>) {
   return run.resultArtifacts.map((artifact) => ({
     ...artifact,
@@ -369,7 +390,7 @@ export class RunRepository {
   async createRun(run: Run) {
     const db = getDb()
     const [created] = await db.insert(runs).values(toInsertValues(run)).returning()
-    return toPublicRun(created)
+    return mergeTransientRunFields(toPublicRun(created), run)
   }
 
   async createProvisioningRun(run: Run, usage: RunUsage) {
@@ -379,7 +400,7 @@ export class RunRepository {
         const [createdRun] = await tx.insert(runs).values(toInsertValues(run)).returning()
         const [createdUsage] = await tx.insert(runUsage).values(toRunUsageInsertValues(usage)).returning()
         return {
-          run: toPublicRun(createdRun),
+          run: mergeTransientRunFields(toPublicRun(createdRun), run),
           usage: toPublicRunUsage(createdUsage),
         }
       })
@@ -398,7 +419,7 @@ export class RunRepository {
           throw new Error('Failed to create legacy run_usage row.')
         }
         return {
-          run: toPublicRun(createdRun),
+          run: mergeTransientRunFields(toPublicRun(createdRun), run),
           usage: toPublicLegacyRunUsage(createdUsage),
         }
       })
@@ -426,7 +447,7 @@ export class RunRepository {
       .where(eq(runs.id, runId))
       .returning()
 
-    return updated ? toPublicRun(updated) : null
+    return updated ? mergeTransientRunFields(toPublicRun(updated), input) : null
   }
 
   async listRunsForUser(userId: string) {

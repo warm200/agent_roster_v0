@@ -236,6 +236,110 @@ test('run service refreshes telegram pairing state before launch checks', async 
   ])
 })
 
+test('run service reconciles existing runs before launch policy checks', async () => {
+  const calls: string[] = []
+  const createdRun = buildRun()
+
+  const service = new RunService({
+    async listRunsForUser() {
+      calls.push('repository.listRunsForUser')
+      return [
+        {
+          ...createdRun,
+          id: 'run-existing-1',
+          status: 'running',
+        },
+      ]
+    },
+    async createRun(run: Run) {
+      return run
+    },
+    async updateRun(_runId: string, input: Partial<Run>) {
+      return {
+        ...createdRun,
+        ...input,
+      }
+    },
+  } as never)
+
+  setRunServiceDepsForTesting({
+    getOrderByIdForUser: async () => {
+      calls.push('loadOrder')
+      return order
+    },
+    getSubscriptionService: () =>
+      ({
+        commitReservedLaunchCredit: async () => {
+          calls.push('subscription.commitReservedLaunchCredit')
+        },
+        getLaunchPolicy: async () => {
+          calls.push('subscription.getLaunchPolicy')
+          return {
+            allowed: true,
+            blockers: [],
+            plan: getSubscriptionPlan('warm_standby'),
+            subscription: null,
+            usage: {
+              activeBundles: 0,
+              activeRunIds: [],
+              concurrentRuns: 0,
+            },
+          }
+        },
+        refundReservedLaunchCredit: async () => {
+          calls.push('subscription.refundReservedLaunchCredit')
+        },
+        reserveLaunchCredit: async () => {
+          calls.push('subscription.reserveLaunchCredit')
+          return null
+        },
+      } as never),
+    getOrderProviderApiKeysForUser: async () => {
+      calls.push('loadProviderKeys')
+      return {}
+    },
+    getRunProvider: () => ({
+      name: 'test',
+      createRun: async (_order, runId) => {
+        calls.push('provider.createRun')
+        return {
+          ...createdRun,
+          id: runId ?? createdRun.id,
+        }
+      },
+      getLogs: async () => [],
+      getResult: async () => null,
+      getRuntimeInstance: async (runId: string) => {
+        calls.push(`provider.getRuntimeInstance:${runId}`)
+        return null
+      },
+      getStatus: async (runId: string) => {
+        calls.push(`provider.getStatus:${runId}`)
+        return null
+      },
+      stopRun: async () => null,
+    }),
+    getTelegramService: () =>
+      ({
+        getChannelConfig: async () => {
+          calls.push('telegram.getChannelConfig')
+          return order.channelConfig!
+        },
+      } as unknown as ReturnType<typeof getTelegramService>),
+  })
+
+  await service.createRun('user-test-1', 'order-test-1')
+
+  assert.deepEqual(calls.slice(0, 6), [
+    'telegram.getChannelConfig',
+    'loadOrder',
+    'repository.listRunsForUser',
+    'provider.getRuntimeInstance:run-existing-1',
+    'provider.getStatus:run-existing-1',
+    'subscription.getLaunchPolicy',
+  ])
+})
+
 test('run service blocks launch when subscription policy rejects the order', async () => {
   const calls: string[] = []
   const service = new RunService({
@@ -353,8 +457,8 @@ test('run service refunds reserved credit when provider never accepts the launch
             planVersion: 'v1',
             status: 'active',
             billingInterval: 'one_time',
-            includedCredits: 30,
-            remainingCredits: 30,
+            includedCredits: 15,
+            remainingCredits: 15,
             priceCents: 500,
             currency: 'USD',
             stripeCustomerId: null,
@@ -526,8 +630,8 @@ test('run service refunds reserved credit when managed restart throws', async ()
               planVersion: 'v1',
               status: 'active',
               billingInterval: 'month',
-              includedCredits: 50,
-              remainingCredits: 49,
+              includedCredits: 10,
+              remainingCredits: 9,
               priceCents: 1900,
               currency: 'USD',
               stripeCustomerId: null,
@@ -589,5 +693,170 @@ test('run service refunds reserved credit when managed restart throws', async ()
     'subscription.reserveLaunchCredit',
     'provider.restartRun',
     'subscription.refundReservedLaunchCredit',
+    'repository.updateRun',
   ])
+})
+
+test('run service re-syncs stopped runtime state when managed resume throws', async () => {
+  const calls: string[] = []
+  const failedRun = buildFailedRun()
+  const service = new RunService(
+    {
+      async findRunForUser() {
+        return failedRun
+      },
+      async updateRun(_runId: string, input: Partial<Run>) {
+        calls.push('repository.updateRun')
+        return {
+          ...failedRun,
+          ...input,
+        }
+      },
+      async updateRunUsage() {
+        calls.push('repository.updateRunUsage')
+        return null
+      },
+    } as never,
+    {
+      async findRuntimeInstanceByRunId() {
+        return {
+          id: 'runtime-1',
+          runId: failedRun.id,
+          userId: failedRun.userId,
+          orderId: failedRun.orderId,
+          providerName: 'test',
+          providerInstanceRef: failedRun.id,
+          planId: 'warm_standby',
+          runtimeMode: 'wakeable_recoverable',
+          persistenceMode: 'recoverable',
+          state: 'stopped',
+          stopReason: 'idle_timeout',
+          preservedStateAvailable: true,
+          startedAt: failedRun.startedAt,
+          stoppedAt: failedRun.completedAt,
+          archivedAt: null,
+          deletedAt: null,
+          recoverableUntilAt: null,
+          workspaceReleasedAt: null,
+          lastReconciledAt: failedRun.updatedAt,
+          metadataJson: {},
+          createdAt: failedRun.createdAt,
+          updatedAt: failedRun.updatedAt,
+        }
+      },
+      async updateRuntimeInstance(_runId: string, input: Record<string, unknown>) {
+        calls.push('runtime.updateRuntimeInstance')
+        return {
+          id: 'runtime-1',
+          runId: failedRun.id,
+          userId: failedRun.userId,
+          orderId: failedRun.orderId,
+          providerName: 'test',
+          providerInstanceRef: failedRun.id,
+          planId: 'warm_standby',
+          runtimeMode: 'wakeable_recoverable',
+          persistenceMode: 'recoverable',
+          state: 'stopped',
+          stopReason: 'idle_timeout',
+          preservedStateAvailable: true,
+          startedAt: failedRun.startedAt,
+          stoppedAt: failedRun.completedAt,
+          archivedAt: null,
+          deletedAt: null,
+          recoverableUntilAt: null,
+          workspaceReleasedAt: null,
+          lastReconciledAt: failedRun.updatedAt,
+          metadataJson: {},
+          createdAt: failedRun.createdAt,
+          updatedAt: failedRun.updatedAt,
+          ...input,
+        } as never
+      },
+      async findOpenRuntimeInterval() {
+        return null
+      },
+      async closeRuntimeInterval() {
+        return null
+      },
+    } as never,
+  )
+
+  setRunServiceDepsForTesting({
+    getOrderByIdForUser: async () => {
+      calls.push('loadOrder')
+      return order
+    },
+    getSubscriptionService: () =>
+      ({
+        commitReservedLaunchCredit: async () => null,
+        getLaunchPolicy: async () => {
+          calls.push('subscription.getLaunchPolicy')
+          return {
+            allowed: true,
+            blockers: [],
+            plan: getSubscriptionPlan('warm_standby'),
+            subscription: null,
+            usage: {
+              activeBundles: 0,
+              activeRunIds: [],
+              concurrentRuns: 0,
+            },
+          }
+        },
+        refundReservedLaunchCredit: async () => {
+          calls.push('subscription.refundReservedLaunchCredit')
+          return null
+        },
+        reserveLaunchCredit: async () => {
+          calls.push('subscription.reserveLaunchCredit')
+          return null
+        },
+      } as never),
+    getOrderProviderApiKeysForUser: async () => {
+      calls.push('loadProviderKeys')
+      return {}
+    },
+    getRunProvider: () => ({
+      name: 'test',
+      createRun: async () => buildRun(),
+      getLogs: async () => [],
+      getResult: async () => null,
+      getRuntimeInstance: async () => ({
+        archivedAt: null,
+        deletedAt: null,
+        lastReconciledAt: new Date().toISOString(),
+        metadataJson: {},
+        persistenceMode: 'recoverable',
+        planId: 'warm_standby',
+        preservedStateAvailable: true,
+        providerInstanceRef: failedRun.id,
+        providerName: 'test',
+        recoverableUntilAt: null,
+        runId: failedRun.id,
+        runtimeMode: 'wakeable_recoverable',
+        startedAt: failedRun.startedAt,
+        state: 'stopped',
+        stoppedAt: failedRun.completedAt,
+        stopReason: 'idle_timeout',
+        workspaceReleasedAt: null,
+      }),
+      getStatus: async () => null,
+      restartRun: async () => {
+        calls.push('provider.restartRun')
+        throw new Error('provider restart exploded')
+      },
+      stopRun: async () => null,
+    }),
+    getTelegramService: () =>
+      ({
+        getChannelConfig: async () => order.channelConfig!,
+      } as unknown as ReturnType<typeof getTelegramService>),
+  })
+
+  await assert.rejects(
+    () => service.retryRun('user-test-1', failedRun.id),
+    /provider restart exploded/,
+  )
+
+  assert.equal(calls.includes('repository.updateRun'), true)
 })

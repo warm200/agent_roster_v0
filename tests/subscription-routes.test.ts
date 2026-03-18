@@ -12,6 +12,7 @@ import { getFreeSubscriptionPlan, getSubscriptionPlan } from '@/lib/subscription
 import { HttpError } from '@/server/lib/http'
 import { setRequestUserIdForTesting } from '@/server/lib/request-user'
 import { setOrderServiceForTesting, type OrderService } from '@/server/services/order.service'
+import { setRunServiceForTesting } from '@/server/services/run.service'
 import { setSubscriptionServiceForTesting } from '@/server/services/subscription.service'
 
 const order = {
@@ -62,6 +63,7 @@ const stubOrderService = {
 afterEach(() => {
   setRequestUserIdForTesting(null)
   setOrderServiceForTesting(null)
+  setRunServiceForTesting(null)
   setSubscriptionServiceForTesting(null)
 })
 
@@ -114,8 +116,15 @@ test('me subscription route returns free plan when user has no active subscripti
 })
 
 test('launch policy route returns plan blockers for the selected order', async () => {
+  const calls: string[] = []
   setRequestUserIdForTesting(() => 'user-1')
   setOrderServiceForTesting(stubOrderService)
+  setRunServiceForTesting({
+    async reconcileRunsForUser(userId: string) {
+      calls.push(`run.reconcile:${userId}`)
+      return []
+    },
+  } as never)
   setSubscriptionServiceForTesting({
     async commitReservedLaunchCredit() {
       return null
@@ -166,6 +175,7 @@ test('launch policy route returns plan blockers for the selected order', async (
   assert.equal(payload.allowed, false)
   assert.match(payload.blockers[0] ?? '', /at most 3 agents/i)
   assert.equal(payload.plan.id, 'run')
+  assert.deepEqual(calls, ['run.reconcile:user-1'])
 })
 
 test('subscription checkout session route forwards plan payload to service', async () => {
@@ -277,8 +287,8 @@ test('subscription checkout reconcile route returns the updated subscription', a
         planVersion: 'v1',
         status: 'active',
         billingInterval: 'one_time',
-        includedCredits: 30,
-        remainingCredits: 30,
+        includedCredits: 15,
+        remainingCredits: 15,
         priceCents: 500,
         currency: 'USD',
         stripeCustomerId: 'cus_123',
@@ -309,7 +319,7 @@ test('subscription checkout reconcile route returns the updated subscription', a
     userId: 'user-1',
   })
   assert.equal(payload.subscription.planId, 'run')
-  assert.equal(payload.subscription.remainingCredits, 30)
+  assert.equal(payload.subscription.remainingCredits, 15)
 })
 
 test('subscription checkout session route preserves service errors', async () => {

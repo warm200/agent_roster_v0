@@ -37,24 +37,9 @@ function canStopRun(run: RunSummary) {
     return false
   }
   if (!run.runtimeState) {
-    return true
+    return run.status === 'provisioning' || run.status === 'running'
   }
   return run.runtimeState === 'provisioning' || run.runtimeState === 'running'
-}
-
-function getRuntimeLifecycleLabel(run: RunSummary) {
-  switch (run.runtimeState) {
-    case 'stopped':
-      return 'Sleeping'
-    case 'archived':
-      return 'Archived'
-    case 'deleted':
-      return 'Released'
-    case 'running':
-      return 'Live'
-    default:
-      return null
-  }
 }
 
 export default function RunsPage() {
@@ -189,6 +174,10 @@ export default function RunsPage() {
         const payload = await listRuns()
         setRuns(payload.runs)
       }
+      if (action === 'retry') {
+        const payload = await listRuns()
+        setRuns(payload.runs)
+      }
 
       toast.error(
         message,
@@ -285,8 +274,6 @@ export default function RunsPage() {
                 const [primaryAgent, ...restAgents] = run.agents
                 const canResume = canResumeRun(run)
                 const canStop = canStopRun(run)
-                const runtimeLifecycleLabel = getRuntimeLifecycleLabel(run)
-
                 return (
                   <div
                     key={run.id}
@@ -303,7 +290,6 @@ export default function RunsPage() {
                           </Badge>
                         )}
                         <span className="font-mono text-xs text-muted-foreground">{run.id}</span>
-                        {runtimeLifecycleLabel ? <Badge variant="secondary">{runtimeLifecycleLabel}</Badge> : null}
                       </div>
                       <p className="text-sm text-muted-foreground">
                         Bundle {run.orderId} • Created {formatDateTime(run.createdAt)}
@@ -368,7 +354,7 @@ export default function RunsPage() {
                         <div>{run.artifactsCount} artifact{run.artifactsCount === 1 ? '' : 's'}</div>
                         <div>{run.agents.length} agent{run.agents.length === 1 ? '' : 's'} in bundle</div>
                       </div>
-                      <RunStatusBadge status={run.status} />
+                      <RunStatusBadge status={run.status} runtimeState={run.runtimeState} />
                       </div>
                     </div>
                   </div>
