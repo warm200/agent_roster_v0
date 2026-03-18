@@ -208,6 +208,82 @@ test('run service preserves recoverable runtime state after stop', async () => {
   setRunServiceDepsForTesting(null)
 })
 
+test('run service honors already stopped recoverable sandboxes when provider stop readback throws', async () => {
+  const runtimeUpdates: Array<Partial<RuntimeInstance>> = []
+
+  const service = new RunService(
+    {
+      async findRunForUser() {
+        return baseRun
+      },
+      async updateRun(_runId: string, nextRun: Partial<Run>) {
+        return { ...baseRun, ...nextRun }
+      },
+      async updateRunUsage() {
+        return null
+      },
+    } as never,
+    {
+      async findRuntimeInstanceByRunId() {
+        return {
+          ...baseRuntimeRecord,
+          persistenceMode: 'recoverable',
+          planId: 'warm_standby',
+          runtimeMode: 'wakeable_recoverable',
+          preservedStateAvailable: true,
+        }
+      },
+      async updateRuntimeInstance(_runId: string, input: Partial<RuntimeInstance>) {
+        runtimeUpdates.push(input)
+        return {
+          ...baseRuntimeRecord,
+          persistenceMode: 'recoverable',
+          planId: 'warm_standby',
+          runtimeMode: 'wakeable_recoverable',
+          preservedStateAvailable: true,
+          ...input,
+        }
+      },
+      async closeRuntimeInterval() {
+        return null
+      },
+    } as never,
+  )
+
+  setRunServiceDepsForTesting({
+    getRunProvider: () => ({
+      name: 'daytona',
+      async createRun() {
+        return baseRun
+      },
+      async getLogs() {
+        return []
+      },
+      async getResult() {
+        return null
+      },
+      async getStatus() {
+        return baseRun
+      },
+      async stopRun() {
+        return null
+      },
+      async stopRuntimeInstance() {
+        throw new Error('Sandbox is not started')
+      },
+    }),
+  })
+
+  const stopped = await service.stopRun('user-test-1', 'run-test-1')
+
+  assert.equal(stopped.status, 'completed')
+  assert.equal(stopped.runtimeState, 'stopped')
+  assert.equal(stopped.preservedStateAvailable, true)
+  assert.equal(runtimeUpdates.some((update) => update.state === 'stopped'), true)
+
+  setRunServiceDepsForTesting(null)
+})
+
 test('run service marks runtime deleted when stop succeeds logically but provider sandbox is already gone', async () => {
   const runtimeUpdates: Array<Partial<RuntimeInstance>> = []
   const closedIntervals: Array<{ runtimeInstanceId: string; reason: string | null }> = []
@@ -799,6 +875,167 @@ test('run service releases capacity from runtime state when provider status is u
 
   assert.equal(run.status, 'completed')
   assert.equal(usagePatches.some((patch) => patch.workspaceReleasedAt != null), true)
+
+  setRunServiceDepsForTesting(null)
+})
+
+test('run service keeps persisted stopped runtime state when provider read throws', async () => {
+  const persistedRuns: Run[] = []
+
+  const service = new RunService(
+    {
+      async findRunForUser() {
+        return {
+          ...baseRun,
+          resultSummary: 'Managed runtime is provisioning. Status will update automatically.',
+          status: 'completed',
+        }
+      },
+      async updateRun(_runId: string, nextRun: Partial<Run>) {
+        const persisted = { ...baseRun, ...nextRun }
+        persistedRuns.push(persisted)
+        return persisted
+      },
+      async updateRunUsage() {
+        return null
+      },
+    } as never,
+    {
+      async findRuntimeInstanceByRunId() {
+        return {
+          ...baseRuntimeRecord,
+          persistenceMode: 'recoverable',
+          planId: 'warm_standby',
+          runtimeMode: 'wakeable_recoverable',
+          state: 'stopped',
+          stoppedAt: new Date().toISOString(),
+          preservedStateAvailable: true,
+        }
+      },
+    } as never,
+  )
+
+  setRunServiceDepsForTesting({
+    getRunProvider: () => ({
+      name: 'daytona',
+      async createRun() {
+        return baseRun
+      },
+      async getLogs() {
+        return []
+      },
+      async getResult() {
+        return null
+      },
+      async getRuntimeInstance() {
+        throw new Error('provider read failed')
+      },
+      async getStatus() {
+        throw new Error('provider read failed')
+      },
+      async stopRun() {
+        return null
+      },
+    }),
+  })
+
+  const run = await service.getRun('user-test-1', 'run-test-1')
+
+  assert.equal(run.status, 'completed')
+  assert.equal(run.runtimeState, 'stopped')
+  assert.equal(run.preservedStateAvailable, true)
+  assert.equal(persistedRuns.at(-1)?.runtimeState, 'stopped')
+
+  setRunServiceDepsForTesting(null)
+})
+
+test('run service repairs stale running runtime state when provider read reports stopped sandbox access', async () => {
+  const persistedRuns: Run[] = []
+  const runtimeUpdates: Array<Partial<RuntimeInstance>> = []
+  const usagePatches: Array<Record<string, unknown>> = []
+  const closedIntervals: Array<{ runtimeInstanceId: string; reason: string | null }> = []
+
+  const service = new RunService(
+    {
+      async findRunForUser() {
+        return {
+          ...baseRun,
+          resultSummary: 'Managed runtime is ready for bundle order-test-1. Open Control UI to continue.',
+          status: 'running',
+        }
+      },
+      async updateRun(_runId: string, nextRun: Partial<Run>) {
+        const persisted = { ...baseRun, ...nextRun }
+        persistedRuns.push(persisted)
+        return persisted
+      },
+      async updateRunUsage(_runId: string, patch: Record<string, unknown>) {
+        usagePatches.push(patch)
+        return null
+      },
+    } as never,
+    {
+      async findRuntimeInstanceByRunId() {
+        return {
+          ...baseRuntimeRecord,
+          persistenceMode: 'recoverable',
+          planId: 'warm_standby',
+          runtimeMode: 'wakeable_recoverable',
+          state: 'running',
+          preservedStateAvailable: true,
+        }
+      },
+      async updateRuntimeInstance(_runId: string, input: Partial<RuntimeInstance>) {
+        runtimeUpdates.push(input)
+        return {
+          ...baseRuntimeRecord,
+          persistenceMode: 'recoverable',
+          planId: 'warm_standby',
+          runtimeMode: 'wakeable_recoverable',
+          preservedStateAvailable: true,
+          ...input,
+        }
+      },
+      async closeRuntimeInterval(runtimeInstanceId: string, _endedAt: string, closeReason: string | null) {
+        closedIntervals.push({ runtimeInstanceId, reason: closeReason })
+        return null
+      },
+    } as never,
+  )
+
+  setRunServiceDepsForTesting({
+    getRunProvider: () => ({
+      name: 'daytona',
+      async createRun() {
+        return baseRun
+      },
+      async getLogs() {
+        return []
+      },
+      async getResult() {
+        return null
+      },
+      async getRuntimeInstance() {
+        throw new Error('Sandbox is not started')
+      },
+      async getStatus() {
+        throw new Error('Sandbox is not started')
+      },
+      async stopRun() {
+        return null
+      },
+    }),
+  })
+
+  const run = await service.getRun('user-test-1', 'run-test-1')
+
+  assert.equal(run.status, 'completed')
+  assert.equal(run.runtimeState, 'stopped')
+  assert.equal(run.preservedStateAvailable, true)
+  assert.equal(runtimeUpdates.at(-1)?.state, 'stopped')
+  assert.equal(usagePatches.some((patch) => patch.workspaceReleasedAt != null), true)
+  assert.deepEqual(closedIntervals, [{ runtimeInstanceId: baseRuntimeRecord.id, reason: 'manual_stop' }])
+  assert.equal(persistedRuns.at(-1)?.runtimeState, 'stopped')
 
   setRunServiceDepsForTesting(null)
 })

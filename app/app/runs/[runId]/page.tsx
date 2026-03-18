@@ -14,6 +14,7 @@ import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Spinner } from '@/components/ui/spinner'
 import { useRunStatus } from '@/hooks/use-run-status'
+import { getRunStatusDisplay } from '@/lib/run-status-display'
 import { formatDateTime } from '@/lib/utils'
 import { createRunControlUiLink, updateRun } from '@/services/runs.api'
 import { toast } from 'sonner'
@@ -21,21 +22,6 @@ import { AlertTriangle, ArrowLeft, CheckCircle2, ExternalLink, Globe, Package, R
 
 interface RunDetailPageProps {
   params: Promise<{ runId: string }>
-}
-
-function getRuntimeLifecycleLabel(run: NonNullable<ReturnType<typeof useRunStatus>['run']>) {
-  switch (run.runtimeState) {
-    case 'stopped':
-      return 'Sleeping'
-    case 'archived':
-      return 'Archived'
-    case 'deleted':
-      return 'Released'
-    case 'running':
-      return 'Live'
-    default:
-      return null
-  }
 }
 
 function canResumeRun(run: NonNullable<ReturnType<typeof useRunStatus>['run']>) {
@@ -50,7 +36,7 @@ function canStopRun(run: NonNullable<ReturnType<typeof useRunStatus>['run']>) {
     return false
   }
   if (!run.runtimeState) {
-    return true
+    return run.status === 'provisioning' || run.status === 'running'
   }
   return run.runtimeState === 'provisioning' || run.runtimeState === 'running'
 }
@@ -97,7 +83,6 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
   const canResume = canResumeRun(run)
   const canOpenControlUi = run.runtimeState ? run.runtimeState === 'running' : run.status === 'running'
   const canStop = canStopRun(run)
-  const runtimeLifecycleLabel = getRuntimeLifecycleLabel(run)
   const timeline = buildTimeline(run)
 
   const handleStop = async () => {
@@ -130,10 +115,11 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
     if (isRefreshing) return
     setIsRefreshing(true)
     try {
-      await refetch()
-      toast.success('Status updated from sandbox')
-    } catch {
-      toast.error('Failed to refresh status')
+      const payload = await refetch()
+      setRun(payload)
+      toast.success(`Status updated: ${getRunStatusDisplay(payload.status, payload.runtimeState).label}`)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to refresh status')
     } finally {
       setIsRefreshing(false)
     }
@@ -156,6 +142,7 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
         toast.success(canResume ? 'Runtime resume requested' : 'Sandbox restart requested')
       }
     } catch (error) {
+      await refetch()
       toast.error(error instanceof Error ? error.message : 'Network error while restarting run')
     } finally {
       setIsRetrying(false)
@@ -209,8 +196,7 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
           </div>
           <div className="mb-1 flex flex-wrap items-center gap-2">
             <span className="text-sm text-muted-foreground">Runtime status</span>
-            <RunStatusBadge status={run.status} />
-            {runtimeLifecycleLabel ? <Badge variant="secondary">{runtimeLifecycleLabel}</Badge> : null}
+            <RunStatusBadge status={run.status} runtimeState={run.runtimeState} />
           </div>
           <p className="text-muted-foreground">
             Bundle {run.order.id} · {run.agents.length} agent{run.agents.length === 1 ? '' : 's'} · created {formatDateTime(run.createdAt)}
@@ -490,6 +476,7 @@ function TimelineRow({
 }
 
 function buildTimeline(run: NonNullable<ReturnType<typeof useRunStatus>['run']>) {
+  const terminalStatusLabel = getRunStatusDisplay(run.status, run.runtimeState).label
   const startedTone: 'active' | 'complete' | 'pending' | 'failed' = run.startedAt
     ? 'complete'
     : run.status === 'failed'
@@ -524,7 +511,7 @@ function buildTimeline(run: NonNullable<ReturnType<typeof useRunStatus>['run']>)
       value: formatDateTime(run.updatedAt),
     },
     {
-      label: 'Completed',
+      label: terminalStatusLabel,
       tone: completedTone,
       value: run.completedAt
         ? formatDateTime(run.completedAt)

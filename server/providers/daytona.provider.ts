@@ -17,7 +17,7 @@ import type {
 } from '@/lib/types'
 import { getSubscriptionPlan } from '@/lib/subscription-plans'
 
-import { HttpError, logServerError } from '../lib/http'
+import { extractErrorMessage, HttpError, logServerError } from '../lib/http'
 import { loadRuntimeAssetsFromSnapshot } from '../services/local-agent-files'
 import { getRecoverableUntilAt, type RuntimeLifecyclePolicy } from '../services/runtime-policy'
 import { buildOpenClawTelegramChannelConfig } from '../services/telegram.service'
@@ -338,6 +338,28 @@ function mapSandboxStateToRuntimeState(state?: string): RuntimeInstanceState {
   }
 }
 
+function isTerminalSandboxState(state?: string) {
+  return (
+    state === SandboxState.STOPPED ||
+    state === SandboxState.STOPPING ||
+    state === SandboxState.ARCHIVED ||
+    state === SandboxState.ARCHIVING ||
+    state === SandboxState.DESTROYED ||
+    state === SandboxState.DESTROYING
+  )
+}
+
+function normalizeTerminalSandboxReadError(
+  sandbox: Pick<DaytonaSandboxLike, 'state'>,
+  error: unknown,
+) {
+  if (isTerminalSandboxState(sandbox.state) && !isNotFoundError(error)) {
+    return new Error('Sandbox is stopped')
+  }
+
+  return error
+}
+
 function mapRunStatusToRuntimeState(status: RunStatus): RuntimeInstanceState {
   switch (status) {
     case 'completed':
@@ -561,7 +583,6 @@ trap 'fail_run "Managed runtime bootstrap failed."' ERR
 
 ORDER_ID=$(node -e "const fs=require('fs'); const payload=JSON.parse(fs.readFileSync(process.argv[1],'utf8')); process.stdout.write(payload.orderId);" "$ROOT/manifest.json")
 STARTED_AT=$(now_iso)
-
 append_log info bootstrap "Provisioning managed runtime for order $ORDER_ID."
 mkdir -p "$ROOT" "$OPENCLAW_DIR" "$WORKSPACE_DIR"
 if [ -d "$WORKSPACE_STAGE" ] && [ -z "$(find "$WORKSPACE_DIR" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]; then
@@ -1192,30 +1213,34 @@ export class DaytonaRunProvider implements RunProvider {
       return null
     }
 
-    const manifest = await downloadJsonFile<DaytonaRunManifest>(sandbox, MANIFEST_PATH)
-    if (!manifest) {
-      return null
-    }
+    try {
+      const manifest = await downloadJsonFile<DaytonaRunManifest>(sandbox, MANIFEST_PATH)
+      if (!manifest) {
+        return null
+      }
 
-    const fileStatus = await downloadJsonFile<DaytonaStatusFile>(sandbox, STATUS_PATH)
-    const status = await refreshGatewayStatus(
-      sandbox,
-      reconcileSandboxStatus(
+      const fileStatus = await downloadJsonFile<DaytonaStatusFile>(sandbox, STATUS_PATH)
+      const status = await refreshGatewayStatus(
         sandbox,
-        fileStatus ??
-          ({
-            completedAt: null,
-            resultSummary: null,
-            startedAt:
-              sandbox.state === SandboxState.STARTED ? sandbox.createdAt ?? manifest.createdAt : null,
-            status: mapSandboxStateToStatus(sandbox.state),
-            updatedAt: sandbox.createdAt ?? manifest.createdAt,
-          } satisfies DaytonaStatusFile),
-      ),
-      manifest,
-    )
+        reconcileSandboxStatus(
+          sandbox,
+          fileStatus ??
+            ({
+              completedAt: null,
+              resultSummary: null,
+              startedAt:
+                sandbox.state === SandboxState.STARTED ? sandbox.createdAt ?? manifest.createdAt : null,
+              status: mapSandboxStateToStatus(sandbox.state),
+              updatedAt: sandbox.createdAt ?? manifest.createdAt,
+            } satisfies DaytonaStatusFile),
+        ),
+        manifest,
+      )
 
-    return buildRuntimeInstanceFromManifest(manifest, status, sandbox)
+      return buildRuntimeInstanceFromManifest(manifest, status, sandbox)
+    } catch (error) {
+      throw normalizeTerminalSandboxReadError(sandbox, error)
+    }
   }
 
   async stopRuntimeInstance(
@@ -1469,31 +1494,35 @@ export class DaytonaRunProvider implements RunProvider {
       return null
     }
 
-    const manifest = await downloadJsonFile<DaytonaRunManifest>(sandbox, MANIFEST_PATH)
+    try {
+      const manifest = await downloadJsonFile<DaytonaRunManifest>(sandbox, MANIFEST_PATH)
 
-    if (!manifest) {
-      return null
-    }
+      if (!manifest) {
+        return null
+      }
 
-    const fileStatus = await downloadJsonFile<DaytonaStatusFile>(sandbox, STATUS_PATH)
-    const status = await refreshGatewayStatus(
-      sandbox,
-      reconcileSandboxStatus(
+      const fileStatus = await downloadJsonFile<DaytonaStatusFile>(sandbox, STATUS_PATH)
+      const status = await refreshGatewayStatus(
         sandbox,
-        fileStatus ??
-          ({
-            completedAt: null,
-            resultSummary: null,
-            startedAt:
-              sandbox.state === SandboxState.STARTED ? sandbox.createdAt ?? manifest.createdAt : null,
-            status: mapSandboxStateToStatus(sandbox.state),
-            updatedAt: sandbox.createdAt ?? manifest.createdAt,
-          } satisfies DaytonaStatusFile),
-      ),
-      manifest,
-    )
+        reconcileSandboxStatus(
+          sandbox,
+          fileStatus ??
+            ({
+              completedAt: null,
+              resultSummary: null,
+              startedAt:
+                sandbox.state === SandboxState.STARTED ? sandbox.createdAt ?? manifest.createdAt : null,
+              status: mapSandboxStateToStatus(sandbox.state),
+              updatedAt: sandbox.createdAt ?? manifest.createdAt,
+            } satisfies DaytonaStatusFile),
+        ),
+        manifest,
+      )
 
-    return buildRunFromManifest(manifest, status, sandbox)
+      return buildRunFromManifest(manifest, status, sandbox)
+    } catch (error) {
+      throw normalizeTerminalSandboxReadError(sandbox, error)
+    }
   }
 
   async getLogs(runId: string): Promise<RunLog[]> {
@@ -1697,15 +1726,6 @@ export class DaytonaRunProvider implements RunProvider {
       }
     }
 
-    const cancelledAt = nowIso()
-    const cancelledStatus: DaytonaStatusFile = {
-      completedAt: cancelledAt,
-      resultSummary: 'Run stopped by operator request.',
-      startedAt: cancelledAt,
-      status: 'failed',
-      updatedAt: cancelledAt,
-    }
-
     let manifest: DaytonaRunManifest | null = null
     try {
       manifest = await downloadJsonFile<DaytonaRunManifest>(sandbox, MANIFEST_PATH)
@@ -1715,6 +1735,46 @@ export class DaytonaRunProvider implements RunProvider {
         sandboxId: sandbox.id,
         sandboxState: sandbox.state,
       })
+    }
+
+    if (isTerminalSandboxState(sandbox.state)) {
+      if (manifest) {
+        const fileStatus = await downloadJsonFile<DaytonaStatusFile>(sandbox, STATUS_PATH)
+        const status = reconcileSandboxStatus(
+          sandbox,
+          fileStatus ??
+            ({
+              completedAt: nowIso(),
+              resultSummary: 'Managed runtime is no longer available.',
+              startedAt: sandbox.createdAt ?? manifest.createdAt,
+              status: mapSandboxStateToStatus(sandbox.state),
+              updatedAt: nowIso(),
+            } satisfies DaytonaStatusFile),
+        )
+        return buildRunFromManifest(manifest, status, sandbox)
+      }
+
+      if (fallbackRun) {
+        const stoppedAt = nowIso()
+        return {
+          ...fallbackRun,
+          completedAt: fallbackRun.completedAt ?? stoppedAt,
+          resultSummary: fallbackRun.resultSummary ?? 'Managed runtime is no longer available.',
+          status: 'failed',
+          updatedAt: stoppedAt,
+        }
+      }
+
+      return null
+    }
+
+    const cancelledAt = nowIso()
+    const cancelledStatus: DaytonaStatusFile = {
+      completedAt: cancelledAt,
+      resultSummary: 'Run stopped by operator request.',
+      startedAt: cancelledAt,
+      status: 'failed',
+      updatedAt: cancelledAt,
     }
 
     if (manifest) {
@@ -1746,10 +1806,9 @@ export class DaytonaRunProvider implements RunProvider {
         sandboxId: sandbox.id,
         sandboxState: sandbox.state,
       })
-      const candidate = error as { message?: string; status?: number; statusCode?: number }
       throw new HttpError(
         502,
-        candidate?.message?.trim() || 'Managed runtime sandbox shutdown failed.',
+        extractErrorMessage(error, 'Managed runtime sandbox shutdown failed.'),
       )
     }
 

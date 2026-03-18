@@ -75,7 +75,12 @@ function isStoppedSandboxReadError(error: unknown) {
   const message = error instanceof Error ? error.message.toLowerCase() : ''
   return (
     message.includes('sandbox is not started') ||
+    message.includes('sandbox already stopped') ||
+    message.includes('sandbox has already stopped') ||
+    message.includes('sandbox has stopped') ||
+    message.includes('sandbox is not running') ||
     message.includes('toolbox unavailable after sandbox stop') ||
+    message.includes('toolbox is not available') ||
     message.includes('sandbox is stopped') ||
     message.includes('sandbox is stopping')
   )
@@ -97,8 +102,51 @@ function buildStoppedRun(run: Run): Run {
   }
 }
 
+function buildStoppedRuntimePatch(runtime: RuntimeInstance, stoppedAt = nowIso()): Partial<RuntimeInstance> {
+  if (runtime.persistenceMode === 'ephemeral') {
+    return buildMissingProviderRuntimePatch(runtime, runtime.stopReason ?? 'manual_stop', stoppedAt)
+  }
+
+  return {
+    lastReconciledAt: stoppedAt,
+    preservedStateAvailable: true,
+    state: 'stopped',
+    stoppedAt: runtime.stoppedAt ?? stoppedAt,
+    workspaceReleasedAt: null,
+  }
+}
+
 function nowIso() {
   return new Date().toISOString()
+}
+
+function buildTerminalRuntimeFromRecord(
+  runtime: RuntimeInstance,
+  reason: RunTerminationReason,
+  timestamp = nowIso(),
+): RuntimeProviderInstance {
+  const recoverable = runtime.persistenceMode === 'recoverable' || runtime.persistenceMode === 'live'
+  const state: RuntimeProviderInstance['state'] = recoverable ? 'stopped' : 'deleted'
+
+  return {
+    archivedAt: runtime.archivedAt,
+    deletedAt: state === 'deleted' ? runtime.deletedAt ?? timestamp : null,
+    lastReconciledAt: timestamp,
+    metadataJson: runtime.metadataJson,
+    persistenceMode: runtime.persistenceMode,
+    planId: runtime.planId,
+    preservedStateAvailable: recoverable,
+    providerInstanceRef: runtime.providerInstanceRef,
+    providerName: runtime.providerName,
+    recoverableUntilAt: recoverable ? runtime.recoverableUntilAt : null,
+    runId: runtime.runId,
+    runtimeMode: runtime.runtimeMode,
+    startedAt: runtime.startedAt,
+    state,
+    stoppedAt: runtime.stoppedAt ?? runtime.archivedAt ?? runtime.deletedAt ?? timestamp,
+    stopReason: reason,
+    workspaceReleasedAt: recoverable ? null : (runtime.workspaceReleasedAt ?? timestamp),
+  }
 }
 
 function resolveProviderActivityTimestamp(run: Pick<Run, 'startedAt' | 'updatedAt' | 'status'>) {
@@ -496,6 +544,7 @@ export class RunService {
     await runServiceDeps.getTelegramService().getChannelConfig({ orderId, userId })
     const order = await runServiceDeps.getOrderByIdForUser({ orderId, userId })
     const subscriptionService = runServiceDeps.getSubscriptionService()
+    await this.reconcileRunsForUser(userId)
     const launchPolicy = await subscriptionService.getLaunchPolicy(userId, order)
 
     if (!launchPolicy.allowed) {
@@ -716,6 +765,14 @@ export class RunService {
     return Promise.all(runs.map((run) => this.syncRun(run, false)))
   }
 
+  async reconcileRunsForUser(userId: string) {
+    const runs =
+      'listRunsForUser' in this.repository && typeof this.repository.listRunsForUser === 'function'
+        ? await this.repository.listRunsForUser(userId)
+        : []
+    return Promise.all(runs.map((run) => this.syncRun(run, true)))
+  }
+
   /** Load run and sync latest status from provider (e.g. Daytona); persists merged run to repo. */
   async getRun(userId: string, runId: string) {
     const run = await this.requireRun(userId, runId)
@@ -781,9 +838,19 @@ export class RunService {
     const run = await this.requireRun(userId, runId)
     const runtimeRecord = await this.findRuntimeRecordSafe(run.id)
     const provider = runServiceDeps.getRunProvider()
-    const runtime = provider.stopRuntimeInstance
-      ? await provider.stopRuntimeInstance(run.id, reason, run)
-      : null
+    let runtime: RuntimeProviderInstance | null = null
+
+    if (provider.stopRuntimeInstance) {
+      try {
+        runtime = await provider.stopRuntimeInstance(run.id, reason, run)
+      } catch (error) {
+        if (runtimeRecord && isStoppedSandboxReadError(error)) {
+          runtime = buildTerminalRuntimeFromRecord(runtimeRecord, reason)
+        } else {
+          throw error
+        }
+      }
+    }
 
     if (runtime) {
       const existingRuntime = await this.findRuntimeRecordSafe(run.id)
@@ -960,6 +1027,11 @@ export class RunService {
           runId: run.id,
           userId,
         })
+        try {
+          await this.syncRun(run, true)
+        } catch {
+          // keep original restart error
+        }
         throw error
       }
 
@@ -971,6 +1043,11 @@ export class RunService {
           runId: run.id,
           userId,
         })
+        try {
+          await this.syncRun(run, true)
+        } catch {
+          // keep original restart rejection
+        }
         throw new HttpError(409, 'Managed runtime sandbox could not be restarted.')
       }
 
@@ -1116,13 +1193,34 @@ export class RunService {
       providerRun = await provider.getStatus(run.id)
     } catch (error) {
       if (isStoppedSandboxReadError(error)) {
-        const stoppedRun = buildStoppedRun(run)
+        const stoppedAt = nowIso()
+        const repairedRuntime = runtimeRecord
+          ? await this.updateRuntimeRecordSafe(run.id, buildStoppedRuntimePatch(runtimeRecord, stoppedAt))
+          : null
+        if (runtimeRecord?.id) {
+          await this.closeRuntimeIntervalSafe(runtimeRecord.id, stoppedAt, runtimeRecord.stopReason ?? 'manual_stop')
+        }
+        const stoppedRun = repairedRuntime
+          ? applyRuntimeStateToRun(run, repairedRuntime)
+          : buildStoppedRun(run)
         if (!persist) {
           return sanitizeRun(stoppedRun)
         }
 
         const persistedRun = (await this.repository.updateRun(run.id, stoppedRun)) ?? stoppedRun
-        await this.repository.updateRunUsage?.(run.id, buildReleasedUsagePatch(persistedRun, 'provider_unhealthy'))
+        await this.repository.updateRunUsage?.(
+          run.id,
+          buildReleasedUsagePatch(persistedRun, repairedRuntime?.stopReason ?? 'manual_stop'),
+        )
+        return sanitizeRun(persistedRun)
+      }
+
+      if (runtimeRecord) {
+        const reconciledRun = applyRuntimeStateToRun(run, runtimeRecord)
+        if (!persist) {
+          return sanitizeRun(reconciledRun)
+        }
+        const persistedRun = (await this.repository.updateRun(run.id, reconciledRun)) ?? reconciledRun
         return sanitizeRun(persistedRun)
       }
 

@@ -21,8 +21,11 @@ export function useRunStatus(runId: string, intervalMs = 5000) {
       const nextRun = await getRun(runId)
       setRun(nextRun)
       setLoadError(null)
+      return nextRun
     } catch (error) {
-      setLoadError(error instanceof Error ? error.message : 'Unable to load run')
+      const message = error instanceof Error ? error.message : 'Unable to load run'
+      setLoadError(message)
+      throw error instanceof Error ? error : new Error(message)
     }
   }, [runId])
 

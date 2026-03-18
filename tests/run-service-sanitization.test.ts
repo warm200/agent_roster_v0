@@ -165,3 +165,39 @@ test('run service marks run failed when provider says sandbox is not started any
   assert.equal(nextRun.status, 'failed')
   assert.equal(nextRun.resultSummary, 'Managed runtime is no longer available.')
 })
+
+test('run service marks run failed when provider says sandbox is not running anymore', async () => {
+  const service = new RunService({
+    async findRunForUser() {
+      return run
+    },
+    async updateRun(_runId: string, nextRun: Run) {
+      return nextRun
+    },
+  } as never)
+
+  setRunServiceDepsForTesting({
+    getRunProvider: () => ({
+      name: 'daytona',
+      async createRun() {
+        return run
+      },
+      async getLogs() {
+        return []
+      },
+      async getResult() {
+        return null
+      },
+      async getStatus() {
+        throw new Error('Sandbox is not running')
+      },
+      async stopRun() {
+        return null
+      },
+    }),
+  })
+
+  const nextRun = await service.getRun('user-test-1', 'run-test-1')
+  assert.equal(nextRun.status, 'failed')
+  assert.equal(nextRun.resultSummary, 'Managed runtime is no longer available.')
+})

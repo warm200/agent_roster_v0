@@ -1042,6 +1042,192 @@ test('daytona run provider marks externally stopped sandboxes as failed on refre
   assert.match(status.resultSummary ?? '', /no longer available/i)
 })
 
+test('daytona run provider treats already stopped sandboxes as a no-op stop', async () => {
+  const runId = 'run-already-stopped'
+  const createdAt = new Date().toISOString()
+  let stopCalls = 0
+  const sandbox = {
+    createdAt,
+    files: {
+      '/tmp/agent-roster/manifest.json': JSON.stringify({
+        agentTitles: ['Inbox Triage Agent'],
+        channelConfigId: 'channel-test-1',
+        combinedRiskLevel: 'low',
+        createdAt,
+        networkEnabled: true,
+        orderId: 'order-test-1',
+        persistenceMode: 'recoverable',
+        planId: 'warm_standby',
+        providerInstanceRef: runId,
+        recipientExternalId: '77',
+        runId,
+        runtimeMode: 'wakeable_recoverable',
+        userId: 'user-test-1',
+        usesTools: true,
+      }),
+      '/tmp/agent-roster/status.json': JSON.stringify({
+        completedAt: createdAt,
+        resultSummary: 'Managed runtime is sleeping and can be resumed later.',
+        startedAt: createdAt,
+        status: 'completed',
+        updatedAt: createdAt,
+      }),
+    } as Record<string, string>,
+  }
+
+  const provider = new DaytonaRunProvider({
+    apiKey: 'daytona-test',
+    clientFactory: () => ({
+      async create() {
+        throw new Error('not used')
+      },
+      async get(id) {
+        assert.equal(id, runId)
+        return {
+          createdAt: sandbox.createdAt,
+          fs: {
+            async downloadFile(filePath: string) {
+              const value = sandbox.files[filePath]
+              if (value === undefined) {
+                const error = new Error(`404 ${filePath}`)
+                ;(error as Error & { status: number }).status = 404
+                throw error
+              }
+
+              return Buffer.from(value, 'utf8')
+            },
+            async uploadFile() {
+              throw new Error('should not write stop state for already stopped sandbox')
+            },
+          },
+          id,
+          process: {
+            async executeCommand() {
+              return {
+                exitCode: 0,
+                result: '',
+              }
+            },
+          },
+          state: SandboxState.STOPPED,
+          stop: async () => {
+            stopCalls += 1
+            throw new Error('Sandbox is not started')
+          },
+        }
+      },
+    }),
+  })
+
+  const stopped = await provider.stopRun(runId)
+
+  assert.ok(stopped)
+  assert.equal(stopped.status, 'failed')
+  assert.equal(stopCalls, 0)
+})
+
+test('daytona run provider normalizes stopped sandbox read failures after stop', async () => {
+  const runId = 'run-stop-readback-stopped'
+  const createdAt = new Date().toISOString()
+  let sandboxState: SandboxState = SandboxState.STARTED
+
+  const provider = new DaytonaRunProvider({
+    apiKey: 'daytona-test',
+    clientFactory: () => ({
+      async create() {
+        throw new Error('not used')
+      },
+      async get(id) {
+        assert.equal(id, runId)
+        return {
+          createdAt,
+          fs: {
+            async downloadFile(filePath: string) {
+              if (sandboxState === SandboxState.STOPPED) {
+                const error = new Error('[object Object]')
+                ;(error as Error & { status: number }).status = 400
+                throw error
+              }
+
+              if (filePath === '/tmp/agent-roster/manifest.json') {
+                return Buffer.from(
+                  JSON.stringify({
+                    agentTitles: ['Inbox Triage Agent'],
+                    channelConfigId: 'channel-test-1',
+                    combinedRiskLevel: 'low',
+                    createdAt,
+                    networkEnabled: true,
+                    orderId: 'order-test-1',
+                    persistenceMode: 'recoverable',
+                    planId: 'warm_standby',
+                    providerInstanceRef: runId,
+                    recipientExternalId: '77',
+                    runId,
+                    runtimeMode: 'wakeable_recoverable',
+                    userId: 'user-test-1',
+                    usesTools: true,
+                  }),
+                  'utf8',
+                )
+              }
+
+              if (filePath === '/tmp/agent-roster/status.json') {
+                return Buffer.from(
+                  JSON.stringify({
+                    completedAt: null,
+                    resultSummary: null,
+                    startedAt: createdAt,
+                    status: 'running',
+                    updatedAt: createdAt,
+                  }),
+                  'utf8',
+                )
+              }
+
+              const error = new Error(`404 ${filePath}`)
+              ;(error as Error & { status: number }).status = 404
+              throw error
+            },
+            async uploadFile() {},
+          },
+          id,
+          process: {
+            async executeCommand() {
+              return { exitCode: 0, result: '' }
+            },
+          },
+          state: sandboxState,
+          stop: async () => {
+            sandboxState = SandboxState.STOPPED
+          },
+        }
+      },
+    }),
+  })
+
+  await assert.rejects(
+    () =>
+      provider.stopRuntimeInstance(runId, 'manual_stop', {
+        id: runId,
+        userId: 'user-test-1',
+        orderId: 'order-test-1',
+        channelConfigId: 'channel-test-1',
+        status: 'running',
+        combinedRiskLevel: 'low',
+        usesRealWorkspace: true,
+        usesTools: true,
+        networkEnabled: true,
+        resultSummary: null,
+        resultArtifacts: [],
+        createdAt,
+        startedAt: createdAt,
+        updatedAt: createdAt,
+        completedAt: null,
+      }),
+    /Sandbox is stopped/,
+  )
+})
+
 test('daytona run provider falls back to empty template state when local OpenClaw files are missing', async () => {
   let uploadedWorkspaceFile = ''
   const provider = new DaytonaRunProvider({
