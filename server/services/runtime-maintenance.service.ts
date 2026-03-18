@@ -73,7 +73,11 @@ export class RuntimeMaintenanceService {
   constructor(
     private readonly runtimeRepository: Pick<
       RuntimeInstanceRepository,
-      'findRuntimeInstanceByRunId' | 'listRuntimeInstancesByStates' | 'listRuntimeInstancesNeedingReconcile'
+      | 'closeRuntimeInterval'
+      | 'findRuntimeInstanceByRunId'
+      | 'listRuntimeInstancesByStates'
+      | 'listRuntimeInstancesNeedingReconcile'
+      | 'updateRuntimeInstance'
     > = new RuntimeInstanceRepository(),
     private readonly runRepository: Pick<RunRepository, 'findRunUsage'> = new RunRepository(),
     private readonly runService: Pick<RunService, 'getRun' | 'stopRunForReason'> = getRunService(),
@@ -104,6 +108,26 @@ export class RuntimeMaintenanceService {
     for (const runtime of activePolicyRuntimes) {
       try {
         const usage = await this.runRepository.findRunUsage(runtime.runId)
+        if (usage?.workspaceReleasedAt) {
+          await this.runtimeRepository.updateRuntimeInstance(runtime.runId, {
+            deletedAt: usage.workspaceReleasedAt,
+            lastReconciledAt: usage.workspaceReleasedAt,
+            preservedStateAvailable: false,
+            state: 'deleted',
+            stopReason: usage.terminationReason ?? 'manual_stop',
+            stoppedAt: usage.completedAt ?? usage.workspaceReleasedAt,
+            workspaceReleasedAt: usage.workspaceReleasedAt,
+          })
+          await this.runtimeRepository.closeRuntimeInterval(
+            runtime.id,
+            usage.workspaceReleasedAt,
+            usage.terminationReason ?? null,
+          )
+          touchedRunIds.push(runtime.runId)
+          handledRunIds.add(runtime.runId)
+          reconciled += 1
+          continue
+        }
         const stopReason = determineMaintenanceStopReason(runtime, usage)
         if (!stopReason) {
           continue

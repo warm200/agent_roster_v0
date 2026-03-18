@@ -208,6 +208,140 @@ test('run service preserves recoverable runtime state after stop', async () => {
   setRunServiceDepsForTesting(null)
 })
 
+test('run service marks runtime deleted when stop succeeds logically but provider sandbox is already gone', async () => {
+  const runtimeUpdates: Array<Partial<RuntimeInstance>> = []
+  const closedIntervals: Array<{ runtimeInstanceId: string; reason: string | null }> = []
+
+  const service = new RunService(
+    {
+      async findRunForUser() {
+        return baseRun
+      },
+      async updateRun(_runId: string, nextRun: Partial<Run>) {
+        return { ...baseRun, ...nextRun }
+      },
+      async updateRunUsage() {
+        return null
+      },
+    } as never,
+    {
+      async findRuntimeInstanceByRunId() {
+        return baseRuntimeRecord
+      },
+      async updateRuntimeInstance(_runId: string, input: Partial<RuntimeInstance>) {
+        runtimeUpdates.push(input)
+        return { ...baseRuntimeRecord, ...input }
+      },
+      async closeRuntimeInterval(runtimeInstanceId: string, _endedAt: string, closeReason: string | null) {
+        closedIntervals.push({ runtimeInstanceId, reason: closeReason })
+        return null
+      },
+    } as never,
+  )
+
+  setRunServiceDepsForTesting({
+    getRunProvider: () => ({
+      name: 'daytona',
+      async createRun() {
+        return baseRun
+      },
+      async getLogs() {
+        return []
+      },
+      async getResult() {
+        return null
+      },
+      async getStatus() {
+        return null
+      },
+      async stopRun() {
+        return null
+      },
+      async stopRuntimeInstance() {
+        return null
+      },
+    }),
+  })
+
+  const stopped = await service.stopRun('user-test-1', 'run-test-1')
+
+  assert.equal(stopped.status, 'completed')
+  assert.equal(runtimeUpdates.some((update) => update.state === 'deleted'), true)
+  assert.deepEqual(closedIntervals, [{ runtimeInstanceId: baseRuntimeRecord.id, reason: 'manual_stop' }])
+
+  setRunServiceDepsForTesting(null)
+})
+
+test('run service marks runtime deleted when provider stop falls back to a terminal run without runtime state', async () => {
+  const runtimeUpdates: Array<Partial<RuntimeInstance>> = []
+  const closedIntervals: Array<{ runtimeInstanceId: string; reason: string | null }> = []
+
+  const service = new RunService(
+    {
+      async findRunForUser() {
+        return baseRun
+      },
+      async updateRun(_runId: string, nextRun: Partial<Run>) {
+        return { ...baseRun, ...nextRun }
+      },
+      async updateRunUsage() {
+        return null
+      },
+    } as never,
+    {
+      async findRuntimeInstanceByRunId() {
+        return baseRuntimeRecord
+      },
+      async updateRuntimeInstance(_runId: string, input: Partial<RuntimeInstance>) {
+        runtimeUpdates.push(input)
+        return { ...baseRuntimeRecord, ...input }
+      },
+      async closeRuntimeInterval(runtimeInstanceId: string, _endedAt: string, closeReason: string | null) {
+        closedIntervals.push({ runtimeInstanceId, reason: closeReason })
+        return null
+      },
+    } as never,
+  )
+
+  setRunServiceDepsForTesting({
+    getRunProvider: () => ({
+      name: 'daytona',
+      async createRun() {
+        return baseRun
+      },
+      async getLogs() {
+        return []
+      },
+      async getResult() {
+        return null
+      },
+      async getStatus() {
+        return null
+      },
+      async stopRun() {
+        return {
+          ...baseRun,
+          completedAt: new Date().toISOString(),
+          resultSummary: 'Managed runtime was stopped after inactivity.',
+          status: 'failed',
+          updatedAt: new Date().toISOString(),
+        }
+      },
+      async stopRuntimeInstance() {
+        return null
+      },
+    }),
+  })
+
+  const stopped = await service.stopRunForReason('user-test-1', 'run-test-1', 'idle_timeout')
+
+  assert.equal(stopped.status, 'failed')
+  assert.equal(runtimeUpdates.some((update) => update.state === 'deleted'), true)
+  assert.deepEqual(closedIntervals, [{ runtimeInstanceId: baseRuntimeRecord.id, reason: 'idle_timeout' }])
+
+  setRunServiceDepsForTesting(null)
+})
+
 test('run service resumes recoverable stopped runtime state from completed status', async () => {
   const resumedAt = new Date().toISOString()
   const calls: string[] = []
@@ -353,6 +487,7 @@ test('run service resumes recoverable stopped runtime state from completed statu
     'runtime.updateRuntimeInstance',
     'runtime.createRuntimeInterval',
     'subscription.commitReservedLaunchCredit',
+    'repository.updateRunUsage',
     'repository.updateRunUsage',
     'repository.updateRun',
   ])
@@ -668,6 +803,118 @@ test('run service releases capacity from runtime state when provider status is u
   setRunServiceDepsForTesting(null)
 })
 
+test('run service repairs stale running runtime rows when provider state is missing but workspace is already released', async () => {
+  const runtimeUpdates: Array<Partial<RuntimeInstance>> = []
+  const usagePatches: Array<Record<string, unknown>> = []
+
+  const service = new RunService(
+    {
+      async findRunForUser() {
+        return {
+          ...baseRun,
+          completedAt: new Date().toISOString(),
+          resultSummary: 'Managed runtime was stopped after inactivity.',
+          status: 'failed',
+        }
+      },
+      async updateRun(_runId: string, nextRun: Partial<Run>) {
+        return { ...baseRun, ...nextRun }
+      },
+      async updateRunUsage(_runId: string, patch: Record<string, unknown>) {
+        usagePatches.push(patch)
+        return null
+      },
+      async findRunUsage() {
+        return {
+          agentCount: 1,
+          completedAt: new Date().toISOString(),
+          createdAt: baseRun.createdAt,
+          estimatedInternalCostCents: null,
+          id: 'usage-1',
+          inputTokensEst: null,
+          lastMeaningfulActivityAt: baseRun.updatedAt,
+          networkEnabled: true,
+          orderId: baseRun.orderId,
+          outputTokensEst: null,
+          planId: 'run',
+          planVersion: 'v1',
+          providerAcceptedAt: baseRun.startedAt,
+          provisioningStartedAt: baseRun.createdAt,
+          runId: baseRun.id,
+          runningStartedAt: baseRun.startedAt,
+          statusSnapshot: 'failed',
+          terminationReason: 'idle_timeout',
+          toolCallsCount: null,
+          triggerModeSnapshot: 'manual',
+          ttlPolicySnapshot: {
+            cleanupGraceMinutes: 5,
+            heartbeatMissingMinutes: null,
+            idleTimeoutMinutes: 1,
+            maxSessionTtlMinutes: 2,
+            provisioningTimeoutMinutes: 2,
+            triggerMode: 'manual',
+            unhealthyProviderTimeoutMinutes: null,
+          },
+          updatedAt: baseRun.updatedAt,
+          userId: baseRun.userId,
+          usesRealWorkspace: true,
+          usesTools: true,
+          workspaceMinutes: null,
+          workspaceReleasedAt: new Date().toISOString(),
+        }
+      },
+    } as never,
+    {
+      async findRuntimeInstanceByRunId() {
+        return baseRuntimeRecord
+      },
+      async updateRuntimeInstance(_runId: string, input: Partial<RuntimeInstance>) {
+        runtimeUpdates.push(input)
+        return { ...baseRuntimeRecord, ...input }
+      },
+      async findOpenRuntimeInterval() {
+        return null
+      },
+      async closeRuntimeInterval() {
+        return null
+      },
+    } as never,
+  )
+
+  setRunServiceDepsForTesting({
+    getRunProvider: () => ({
+      name: 'daytona',
+      async createRun() {
+        return baseRun
+      },
+      async getLogs() {
+        return []
+      },
+      async getResult() {
+        return null
+      },
+      async getRuntimeInstance() {
+        return null
+      },
+      async getStatus() {
+        return null
+      },
+      async stopRun() {
+        return null
+      },
+    }),
+  })
+
+  const run = await service.getRun('user-test-1', 'run-test-1')
+
+  assert.equal(run.status, 'completed')
+  assert.equal(run.runtimeState, 'deleted')
+  assert.equal(runtimeUpdates.some((update) => update.state === 'deleted'), true)
+  assert.equal(usagePatches.some((patch) => patch.workspaceReleasedAt != null), true)
+
+  setRunServiceDepsForTesting(null)
+})
+
 test('run service backfills missing runtime records from provider state on read', async () => {
   const createdRuntimeRecords: RuntimeInstance[] = []
 
@@ -743,6 +990,7 @@ test('run service backfills missing runtime records from provider state on read'
 
 test('run service records provider progress time as meaningful activity on read', async () => {
   const progressedAt = new Date(Date.now() + 60_000).toISOString()
+  const originalStartedAt = baseRun.startedAt!
   const usageUpdates: Array<Record<string, unknown>> = []
 
   const service = new RunService(
@@ -756,6 +1004,45 @@ test('run service records provider progress time as meaningful activity on read'
       async updateRunUsage(_runId: string, input: Record<string, unknown>) {
         usageUpdates.push(input)
         return null
+      },
+      async findRunUsage() {
+        return {
+          agentCount: 1,
+          completedAt: null,
+          createdAt: originalStartedAt,
+          estimatedInternalCostCents: null,
+          id: 'usage-1',
+          inputTokensEst: null,
+          lastMeaningfulActivityAt: originalStartedAt,
+          networkEnabled: true,
+          orderId: baseRun.orderId,
+          outputTokensEst: null,
+          planId: 'run',
+          planVersion: 'v1',
+          providerAcceptedAt: originalStartedAt,
+          provisioningStartedAt: baseRun.createdAt,
+          runId: baseRun.id,
+          runningStartedAt: originalStartedAt,
+          statusSnapshot: 'running',
+          terminationReason: null,
+          toolCallsCount: null,
+          triggerModeSnapshot: 'manual',
+          ttlPolicySnapshot: {
+            cleanupGraceMinutes: 5,
+            heartbeatMissingMinutes: null,
+            idleTimeoutMinutes: 1,
+            maxSessionTtlMinutes: 5,
+            provisioningTimeoutMinutes: 2,
+            triggerMode: 'manual',
+            unhealthyProviderTimeoutMinutes: null,
+          },
+          updatedAt: originalStartedAt,
+          userId: baseRun.userId,
+          usesRealWorkspace: true,
+          usesTools: true,
+          workspaceMinutes: null,
+          workspaceReleasedAt: null,
+        }
       },
     } as never,
     {
@@ -809,6 +1096,13 @@ test('run service records provider progress time as meaningful activity on read'
   assert.equal(run.updatedAt, progressedAt)
   assert.equal(
     usageUpdates.some((update) => update.lastMeaningfulActivityAt === progressedAt),
+    true,
+  )
+  assert.equal(
+    usageUpdates.some(
+      (update) =>
+        update.providerAcceptedAt === originalStartedAt && update.runningStartedAt === originalStartedAt,
+    ),
     true,
   )
 

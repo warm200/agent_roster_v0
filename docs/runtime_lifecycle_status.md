@@ -49,9 +49,11 @@ read_when:
 - manual stop and restart update runtime state + intervals
 - stale provider status can be overridden by runtime-instance state
 - if provider status is unavailable but runtime state exists, capacity still gets released correctly
+- if provider state is missing after a stop/release, stale `runtime_instances` rows are now healed out of `running`
 - missing `runtime_instances` rows can be backfilled from provider state on read
 - stale runtime instances can now be batch-reconciled by the maintenance service
 - timeout enforcement no longer depends on a runtime becoming stale for reconciliation
+- maintenance now self-heals stale `runtime_instances` rows when usage is already released
 - internal trigger route exists at `POST /api/internal/runtime-maintenance/reconcile`
 - cron-compatible GET trigger exists at `GET /api/internal/runtime-maintenance/reconcile`
 - CLI/cron entrypoint exists:
