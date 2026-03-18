@@ -54,6 +54,11 @@ read_when:
 - stale runtime instances can now be batch-reconciled by the maintenance service
 - timeout enforcement no longer depends on a runtime becoming stale for reconciliation
 - maintenance now self-heals stale `runtime_instances` rows when usage is already released
+- run UI badges now follow lifecycle state, so Warm stopped runtimes render as `Stopped` and offer resume instead of looking merely `Completed`
+- launch and bundle launch-policy reads now reconcile existing managed runs first, so manually deleted Daytona sandboxes do not keep blocking new runs as “live”
+- failed resume/restart attempts now re-sync persisted runtime state before surfacing the error, so run pages fall back to `Stopped`/resume instead of stale live controls
+- externally stopped Daytona sandboxes now self-heal stale `running` runtime rows on refresh/read when provider access reports a stopped sandbox path
+- explicit stop requests are now idempotent against already stopped Daytona sandboxes instead of surfacing `Sandbox is not started` back to the UI
 - internal trigger route exists at `POST /api/internal/runtime-maintenance/reconcile`
 - cron-compatible GET trigger exists at `GET /api/internal/runtime-maintenance/reconcile`
 - CLI/cron entrypoint exists:

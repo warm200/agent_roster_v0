@@ -12,15 +12,45 @@ export const api = axios.create({
   timeout: 15_000,
 })
 
+function normalizeApiErrorMessage(
+  error: AxiosError<{ detail?: unknown; error?: unknown; message?: unknown }>,
+) {
+  const payload = error.response?.data
+  const candidates = [
+    payload?.error,
+    payload?.message,
+    payload?.detail,
+    error.message,
+  ]
+
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string') {
+      const trimmed = candidate.trim()
+      if (trimmed.length > 0 && trimmed !== '[object Object]') {
+        return trimmed
+      }
+    }
+
+    if (candidate && typeof candidate === 'object') {
+      const nested = candidate as { detail?: unknown; message?: unknown }
+      for (const value of [nested.message, nested.detail]) {
+        if (typeof value === 'string') {
+          const trimmed = value.trim()
+          if (trimmed.length > 0 && trimmed !== '[object Object]') {
+            return trimmed
+          }
+        }
+      }
+    }
+  }
+
+  return 'Unexpected API request failure'
+}
+
 api.interceptors.response.use(
   (response) => response,
-  (error: AxiosError<{ error?: string }>) => {
-    const message =
-      error.response?.data?.error ??
-      error.message ??
-      'Unexpected API request failure'
-
-    return Promise.reject(new Error(message))
+  (error: AxiosError<{ detail?: unknown; error?: unknown; message?: unknown }>) => {
+    return Promise.reject(new Error(normalizeApiErrorMessage(error)))
   },
 )
 

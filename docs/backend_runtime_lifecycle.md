@@ -242,6 +242,8 @@ Important implemented properties:
 - stale provider status can be overridden by persisted runtime-instance state
 - missing runtime rows can be backfilled from provider state on read
 - if provider status becomes unavailable but runtime state exists, capacity can still be released correctly
+- if provider reads fail with an already-stopped sandbox path, refresh/read now repairs stale `runtime_instances.state = running` rows into stopped or released lifecycle state
+- explicit stop requests are idempotent against already stopped Daytona sandboxes and should reconcile back to stopped state instead of bubbling `Sandbox is not started`
 
 ## Stop Behavior
 
