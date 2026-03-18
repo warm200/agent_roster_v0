@@ -1,6 +1,6 @@
 'use client'
 
-import { use, useCallback, useEffect, useState } from 'react'
+import { use, useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
@@ -72,6 +72,8 @@ export default function BundleDetailPage({ params }: PageProps) {
   const [isTopUpDialogOpen, setIsTopUpDialogOpen] = useState(false)
   const [isReconcilingPlan, setIsReconcilingPlan] = useState(false)
   const [isReconcilingTopUp, setIsReconcilingTopUp] = useState(false)
+  const reconciledPlanSessionRef = useRef<string | null>(null)
+  const reconciledTopUpSessionRef = useRef<string | null>(null)
   const subscriptionSessionId = searchParams.get('subscription_session_id')
   const topUpSessionId = searchParams.get('top_up_session_id')
 
@@ -166,14 +168,20 @@ export default function BundleDetailPage({ params }: PageProps) {
   }, [orderId])
 
   useEffect(() => {
-    if (!subscriptionSessionId || isReconcilingPlan) {
+    if (
+      !subscriptionSessionId ||
+      isReconcilingPlan ||
+      reconciledPlanSessionRef.current === subscriptionSessionId
+    ) {
       return
     }
 
     const sessionId = subscriptionSessionId
     let isMounted = true
+    let completed = false
 
     async function reconcilePlanPurchase() {
+      reconciledPlanSessionRef.current = sessionId
       setIsReconcilingPlan(true)
 
       try {
@@ -187,15 +195,18 @@ export default function BundleDetailPage({ params }: PageProps) {
         setLaunchPolicy(nextLaunchPolicy)
         window.dispatchEvent(new CustomEvent('subscription-updated'))
         toast.success('Plan updated. Credits are ready.')
+        completed = true
+        setIsReconcilingPlan(false)
         router.replace(`/app/bundles/${orderId}`)
       } catch (error) {
         if (!isMounted) {
           return
         }
 
+        reconciledPlanSessionRef.current = null
         toast.error(error instanceof Error ? error.message : 'Unable to confirm your plan purchase')
       } finally {
-        if (isMounted) {
+        if (isMounted && !completed) {
           setIsReconcilingPlan(false)
         }
       }
@@ -209,14 +220,16 @@ export default function BundleDetailPage({ params }: PageProps) {
   }, [isReconcilingPlan, orderId, router, subscriptionSessionId])
 
   useEffect(() => {
-    if (!topUpSessionId || isReconcilingTopUp) {
+    if (!topUpSessionId || isReconcilingTopUp || reconciledTopUpSessionRef.current === topUpSessionId) {
       return
     }
 
     const sessionId = topUpSessionId
     let isMounted = true
+    let completed = false
 
     async function reconcileTopUpPurchase() {
+      reconciledTopUpSessionRef.current = sessionId
       setIsReconcilingTopUp(true)
 
       try {
@@ -230,15 +243,18 @@ export default function BundleDetailPage({ params }: PageProps) {
         setLaunchPolicy(nextLaunchPolicy)
         window.dispatchEvent(new CustomEvent('subscription-updated'))
         toast.success('Credits added. They expire 90 days after purchase.')
+        completed = true
+        setIsReconcilingTopUp(false)
         router.replace(`/app/bundles/${orderId}`)
       } catch (error) {
         if (!isMounted) {
           return
         }
 
+        reconciledTopUpSessionRef.current = null
         toast.error(error instanceof Error ? error.message : 'Unable to confirm your credit top-up')
       } finally {
-        if (isMounted) {
+        if (isMounted && !completed) {
           setIsReconcilingTopUp(false)
         }
       }
@@ -293,6 +309,13 @@ export default function BundleDetailPage({ params }: PageProps) {
     launchPolicy?.subscription &&
       (launchPolicy.plan.id === 'run' || launchPolicy.plan.id === 'warm_standby'),
   )
+  const stoppedWarmRun = orderRuns.find(
+    (run) =>
+      run.orderId === order.id &&
+      run.persistenceMode === 'recoverable' &&
+      run.preservedStateAvailable &&
+      (run.runtimeState === 'stopped' || run.runtimeState === 'archived'),
+  ) ?? null
 
   const handleLaunchRun = async () => {
     if (!canLaunchRun || isLaunching || isReconcilingPlan || isReconcilingTopUp) return
@@ -343,23 +366,6 @@ export default function BundleDetailPage({ params }: PageProps) {
         </div>
 
         <div className="flex flex-col gap-3 sm:flex-row">
-          {canTopUpCredits ? (
-            <Button
-              disabled={isReconcilingPlan || isReconcilingTopUp}
-              onClick={() => setIsTopUpDialogOpen(true)}
-              size="lg"
-              variant="outline"
-            >
-              {isReconcilingTopUp ? (
-                <>
-                  <Spinner className="w-4 h-4 mr-2" />
-                  Updating credits...
-                </>
-              ) : (
-                'Top Up Credits'
-              )}
-            </Button>
-          ) : null}
           <Button
             size="lg"
             disabled={!canLaunchRun || isLaunching || isReconcilingPlan || isReconcilingTopUp}
@@ -412,6 +418,14 @@ export default function BundleDetailPage({ params }: PageProps) {
             </div>
             {hasPlanBlockers ? (
               <div className="flex shrink-0 flex-col gap-2">
+                {stoppedWarmRun ? (
+                  <Button asChild size="sm" variant="outline">
+                    <Link href={`/app/runs/${stoppedWarmRun.id}`}>
+                      <ExternalLink className="mr-2 h-4 w-4" />
+                      Manage Stopped Run
+                    </Link>
+                  </Button>
+                ) : null}
                 <Button
                   disabled={isReconcilingPlan}
                   onClick={() => setIsPlanDialogOpen(true)}
@@ -420,7 +434,9 @@ export default function BundleDetailPage({ params }: PageProps) {
                   Adjust Plan
                 </Button>
                 <p className="text-xs text-muted-foreground">
-                  Purchase runtime credits to unlock bundle launches.
+                  {stoppedWarmRun
+                    ? 'Resume or terminate the stopped Warm Standby run to launch again from this bundle.'
+                    : 'Purchase runtime credits to unlock bundle launches.'}
                 </p>
               </div>
             ) : null}

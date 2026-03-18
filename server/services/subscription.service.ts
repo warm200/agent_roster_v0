@@ -196,7 +196,7 @@ export function buildLaunchPolicyCheck(input: {
   }
 
   if (input.plan.id === 'warm_standby' && recoverableStoppedRun) {
-    blockers.push('Resume the existing stopped Warm Standby run for this bundle instead of launching a new one.')
+    blockers.push('Resume or terminate the existing stopped Warm Standby run for this bundle instead of launching a new one.')
   }
 
   if (input.subscription && input.subscription.remainingCredits <= 0 && input.plan.includedCredits > 0) {
@@ -300,6 +300,21 @@ function parseTopUpAllocations(metadataJson: Record<string, unknown>) {
     .filter((entry): entry is TopUpAllocation => entry !== null)
 }
 
+function isMissingTopUpTableError(error: unknown) {
+  const candidate = error as {
+    cause?: { code?: string; message?: string }
+    code?: string
+    message?: string
+  }
+  const message = candidate?.message ?? candidate?.cause?.message ?? ''
+
+  return (
+    candidate?.code === '42P01' ||
+    candidate?.cause?.code === '42P01' ||
+    /relation "subscription_credit_top_ups" does not exist/i.test(message)
+  )
+}
+
 export class SubscriptionService {
   constructor(private readonly db: DbClient = getDb()) {}
 
@@ -312,94 +327,110 @@ export class SubscriptionService {
   }
 
   private async expireStaleTopUpCreditsInDb(db: MutationDb, userId: string) {
-    const now = new Date()
-    const expiredRows = await db
-      .select()
-      .from(subscriptionCreditTopUps)
-      .where(
-        and(
-          eq(subscriptionCreditTopUps.userId, userId),
-          gt(subscriptionCreditTopUps.creditsRemaining, 0),
-          lte(subscriptionCreditTopUps.expiresAt, now),
-        ),
+    try {
+      const now = new Date()
+      const expiredRows = await db
+        .select()
+        .from(subscriptionCreditTopUps)
+        .where(
+          and(
+            eq(subscriptionCreditTopUps.userId, userId),
+            gt(subscriptionCreditTopUps.creditsRemaining, 0),
+            lte(subscriptionCreditTopUps.expiresAt, now),
+          ),
+        )
+        .orderBy(asc(subscriptionCreditTopUps.expiresAt), asc(subscriptionCreditTopUps.createdAt))
+
+      if (expiredRows.length === 0) {
+        return 0
+      }
+
+      const [subscriptionRecord] = await db
+        .select()
+        .from(userSubscriptions)
+        .where(eq(userSubscriptions.userId, userId))
+        .limit(1)
+
+      const nextBalance = Math.max(
+        0,
+        (subscriptionRecord?.remainingCredits ?? 0) -
+          expiredRows.reduce((total, row) => total + row.creditsRemaining, 0),
       )
-      .orderBy(asc(subscriptionCreditTopUps.expiresAt), asc(subscriptionCreditTopUps.createdAt))
 
-    if (expiredRows.length === 0) {
-      return 0
-    }
+      if (subscriptionRecord) {
+        await db
+          .update(userSubscriptions)
+          .set({
+            remainingCredits: nextBalance,
+            updatedAt: now,
+          })
+          .where(eq(userSubscriptions.id, subscriptionRecord.id))
+      }
 
-    const [subscriptionRecord] = await db
-      .select()
-      .from(userSubscriptions)
-      .where(eq(userSubscriptions.userId, userId))
-      .limit(1)
+      for (const row of expiredRows) {
+        await db
+          .update(subscriptionCreditTopUps)
+          .set({
+            creditsRemaining: 0,
+            consumedAt: row.consumedAt ?? now,
+            updatedAt: now,
+          })
+          .where(eq(subscriptionCreditTopUps.id, row.id))
 
-    let nextBalance = Math.max(
-      0,
-      (subscriptionRecord?.remainingCredits ?? 0) -
-        expiredRows.reduce((total, row) => total + row.creditsRemaining, 0),
-    )
-
-    if (subscriptionRecord) {
-      await db
-        .update(userSubscriptions)
-        .set({
-          remainingCredits: nextBalance,
-          updatedAt: now,
+        await db.insert(creditLedger).values({
+          id: crypto.randomUUID(),
+          userId,
+          subscriptionId: row.subscriptionId,
+          orderId: null,
+          runId: null,
+          eventType: 'expire',
+          unitType: 'launch_credit',
+          deltaCredits: -row.creditsRemaining,
+          resultingBalance: subscriptionRecord ? nextBalance : null,
+          status: 'committed',
+          reasonCode: 'top_up_expired',
+          idempotencyKey: `topup-expire:${row.id}`,
+          metadataJson: {
+            expiresAt: row.expiresAt.toISOString(),
+            packId: row.packId,
+            stripeCheckoutSessionId: row.stripeCheckoutSessionId,
+          },
         })
-        .where(eq(userSubscriptions.id, subscriptionRecord.id))
+      }
+
+      return expiredRows.length
+    } catch (error) {
+      if (isMissingTopUpTableError(error)) {
+        return 0
+      }
+
+      throw error
     }
-
-    for (const row of expiredRows) {
-      await db
-        .update(subscriptionCreditTopUps)
-        .set({
-          creditsRemaining: 0,
-          consumedAt: row.consumedAt ?? now,
-          updatedAt: now,
-        })
-        .where(eq(subscriptionCreditTopUps.id, row.id))
-
-      await db.insert(creditLedger).values({
-        id: crypto.randomUUID(),
-        userId,
-        subscriptionId: row.subscriptionId,
-        orderId: null,
-        runId: null,
-        eventType: 'expire',
-        unitType: 'launch_credit',
-        deltaCredits: -row.creditsRemaining,
-        resultingBalance: subscriptionRecord ? nextBalance : null,
-        status: 'committed',
-        reasonCode: 'top_up_expired',
-        idempotencyKey: `topup-expire:${row.id}`,
-        metadataJson: {
-          expiresAt: row.expiresAt.toISOString(),
-          packId: row.packId,
-          stripeCheckoutSessionId: row.stripeCheckoutSessionId,
-        },
-      })
-    }
-
-    return expiredRows.length
   }
 
   private async sumActiveTopUpCredits(db: MutationDb, userId: string) {
-    const [row] = await db
-      .select({
-        total: sql<number>`coalesce(sum(${subscriptionCreditTopUps.creditsRemaining}), 0)`,
-      })
-      .from(subscriptionCreditTopUps)
-      .where(
-        and(
-          eq(subscriptionCreditTopUps.userId, userId),
-          gt(subscriptionCreditTopUps.creditsRemaining, 0),
-          gt(subscriptionCreditTopUps.expiresAt, new Date()),
-        ),
-      )
+    try {
+      const [row] = await db
+        .select({
+          total: sql<number>`coalesce(sum(${subscriptionCreditTopUps.creditsRemaining}), 0)`,
+        })
+        .from(subscriptionCreditTopUps)
+        .where(
+          and(
+            eq(subscriptionCreditTopUps.userId, userId),
+            gt(subscriptionCreditTopUps.creditsRemaining, 0),
+            gt(subscriptionCreditTopUps.expiresAt, new Date()),
+          ),
+        )
 
-    return Number(row?.total ?? 0)
+      return Number(row?.total ?? 0)
+    } catch (error) {
+      if (isMissingTopUpTableError(error)) {
+        return 0
+      }
+
+      throw error
+    }
   }
 
   private async expireStaleTopUpCredits(userId: string) {
@@ -411,17 +442,26 @@ export class SubscriptionService {
       return [] as TopUpAllocation[]
     }
 
-    const rows = await db
-      .select()
-      .from(subscriptionCreditTopUps)
-      .where(
-        and(
-          eq(subscriptionCreditTopUps.userId, userId),
-          gt(subscriptionCreditTopUps.creditsRemaining, 0),
-          gt(subscriptionCreditTopUps.expiresAt, new Date()),
-        ),
-      )
-      .orderBy(asc(subscriptionCreditTopUps.expiresAt), asc(subscriptionCreditTopUps.createdAt))
+    let rows: Array<typeof subscriptionCreditTopUps.$inferSelect> = []
+    try {
+      rows = await db
+        .select()
+        .from(subscriptionCreditTopUps)
+        .where(
+          and(
+            eq(subscriptionCreditTopUps.userId, userId),
+            gt(subscriptionCreditTopUps.creditsRemaining, 0),
+            gt(subscriptionCreditTopUps.expiresAt, new Date()),
+          ),
+        )
+        .orderBy(asc(subscriptionCreditTopUps.expiresAt), asc(subscriptionCreditTopUps.createdAt))
+    } catch (error) {
+      if (isMissingTopUpTableError(error)) {
+        return [] as TopUpAllocation[]
+      }
+
+      throw error
+    }
 
     const allocations: TopUpAllocation[] = []
     let remainingToAllocate = credits
@@ -1067,13 +1107,51 @@ export class SubscriptionService {
     return this.db.transaction(async (tx) => {
       await this.expireStaleTopUpCreditsInDb(tx, persistedUserId)
 
-      const existingTopUpRows = await tx
-        .select()
-        .from(subscriptionCreditTopUps)
-        .where(eq(subscriptionCreditTopUps.stripeCheckoutSessionId, session.id))
-        .limit(1)
+      const lockedSubscription = await tx.execute(sql`
+        select *
+        from user_subscriptions
+        where user_id = ${persistedUserId}
+        for update
+      `)
+      const subscriptionRow = lockedSubscription.rows[0] as Record<string, unknown> | undefined
 
-      if (existingTopUpRows[0]) {
+      if (!subscriptionRow) {
+        throw new HttpError(409, 'Top-up credits are available only on Run and Warm Standby.')
+      }
+
+      const subscriptionId = String(subscriptionRow.id)
+      const subscriptionPlanId = String(subscriptionRow.plan_id) as UserSubscription['planId']
+      const subscriptionRemainingCredits = Number(subscriptionRow.remaining_credits ?? 0)
+
+      if (!planConsumesLaunchCredits(subscriptionPlanId)) {
+        throw new HttpError(409, 'Top-up credits are available only on Run and Warm Standby.')
+      }
+
+      const now = new Date()
+      const expiresAt = getCreditTopUpExpiresAt(now)
+      const [createdTopUp] = await tx
+        .insert(subscriptionCreditTopUps)
+        .values({
+          id: crypto.randomUUID(),
+          userId: persistedUserId,
+          subscriptionId,
+          packId: pack.id,
+          creditsTotal: pack.credits,
+          creditsRemaining: pack.credits,
+          priceCents: pack.priceCents,
+          currency: 'USD',
+          stripeCheckoutSessionId: session.id,
+          expiresAt,
+          consumedAt: null,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .onConflictDoNothing({
+          target: subscriptionCreditTopUps.stripeCheckoutSessionId,
+        })
+        .returning()
+
+      if (!createdTopUp) {
         const [existingSubscription] = await tx
           .select()
           .from(userSubscriptions)
@@ -1087,19 +1165,7 @@ export class SubscriptionService {
         return toUserSubscription(existingSubscription)
       }
 
-      const [subscription] = await tx
-        .select()
-        .from(userSubscriptions)
-        .where(eq(userSubscriptions.userId, persistedUserId))
-        .limit(1)
-
-      if (!subscription || !planConsumesLaunchCredits(subscription.planId)) {
-        throw new HttpError(409, 'Top-up credits are available only on Run and Warm Standby.')
-      }
-
-      const nextBalance = subscription.remainingCredits + pack.credits
-      const now = new Date()
-      const expiresAt = getCreditTopUpExpiresAt(now)
+      const nextBalance = subscriptionRemainingCredits + pack.credits
 
       const [updatedSubscription] = await tx
         .update(userSubscriptions)
@@ -1107,44 +1173,33 @@ export class SubscriptionService {
           remainingCredits: nextBalance,
           updatedAt: now,
         })
-        .where(eq(userSubscriptions.id, subscription.id))
+        .where(eq(userSubscriptions.id, subscriptionId))
         .returning()
 
-      await tx.insert(subscriptionCreditTopUps).values({
-        id: crypto.randomUUID(),
-        userId: persistedUserId,
-        subscriptionId: subscription.id,
-        packId: pack.id,
-        creditsTotal: pack.credits,
-        creditsRemaining: pack.credits,
-        priceCents: pack.priceCents,
-        currency: 'USD',
-        stripeCheckoutSessionId: session.id,
-        expiresAt,
-        consumedAt: null,
-        createdAt: now,
-        updatedAt: now,
-      })
-
-      await tx.insert(creditLedger).values({
-        id: crypto.randomUUID(),
-        userId: persistedUserId,
-        subscriptionId: subscription.id,
-        orderId: null,
-        runId: null,
-        eventType: 'grant',
-        unitType: getPlanLedgerUnitType(subscription.planId),
-        deltaCredits: pack.credits,
-        resultingBalance: nextBalance,
-        status: 'committed',
-        reasonCode: 'top_up_purchase',
-        idempotencyKey: getTopUpGrantIdempotencyKey(session.id),
-        metadataJson: {
-          expiresAt: expiresAt.toISOString(),
-          priceCents: pack.priceCents,
-          topUpPackId: pack.id,
-        },
-      })
+      await tx
+        .insert(creditLedger)
+        .values({
+          id: crypto.randomUUID(),
+          userId: persistedUserId,
+          subscriptionId,
+          orderId: null,
+          runId: null,
+          eventType: 'grant',
+          unitType: getPlanLedgerUnitType(subscriptionPlanId),
+          deltaCredits: pack.credits,
+          resultingBalance: nextBalance,
+          status: 'committed',
+          reasonCode: 'top_up_purchase',
+          idempotencyKey: getTopUpGrantIdempotencyKey(session.id),
+          metadataJson: {
+            expiresAt: expiresAt.toISOString(),
+            priceCents: pack.priceCents,
+            topUpPackId: pack.id,
+          },
+        })
+        .onConflictDoNothing({
+          target: creditLedger.idempotencyKey,
+        })
 
       return toUserSubscription(updatedSubscription)
     })

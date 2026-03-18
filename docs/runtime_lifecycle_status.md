@@ -60,6 +60,7 @@ read_when:
 - externally stopped Daytona sandboxes now self-heal stale `running` runtime rows on refresh/read when provider access reports a stopped sandbox path
 - explicit stop requests are now idempotent against already stopped Daytona sandboxes instead of surfacing `Sandbox is not started` back to the UI
 - paired Telegram inbound messages can now auto-resume exactly one stopped Warm Standby runtime for the order
+- stopped Warm Standby runtimes can now be terminated explicitly, which deletes preserved state and clears the fresh-launch blocker for that bundle
 - auto-wake is intentionally conservative:
   - if the order already has a live run, it only records activity
   - if the order has multiple stopped recoverable Warm candidates, it does not guess

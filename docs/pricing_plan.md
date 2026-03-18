@@ -156,7 +156,7 @@ Frontend positioning:
 - Trigger Mode: `manual`
 - Runtime Access: `true`
 - Best for: testing one workflow manually
-- Public positioning: bounded manual session with auto-stop after inactivity
+- Public positioning: bounded manual session where the session ends automatically after 30 minutes
 - Persistence framing: ephemeral session
 - State after stop: may be fully cleaned up rather than preserved as a warm recoverable environment
 
@@ -168,11 +168,12 @@ Frontend positioning:
 - Trigger Mode: `auto_wake`
 - Runtime Access: `true`
 - Best for: repeat Telegram-triggered workflows
-- Public positioning: wake on message, auto-sleeps when idle, no self-hosting
+- Public positioning: wake on message, wake sessions last up to 60 minutes, state is preserved for later resume, no self-hosting
 - Persistence framing: recoverable state
 - State after stop: should sleep/stop while preserving recoverable state for later wake or recovery
 - Current backend behavior:
   - paired Telegram inbound messages can auto-resume a stopped Warm Standby runtime
+  - stopped Warm Standby runtimes can also be terminated explicitly to release preserved state and unblock a fresh launch
   - this is conservative, not fuzzy routing:
     - if one live run already exists, backend only records activity
     - if exactly one stopped recoverable Warm run exists for that bundle/order, backend resumes it
@@ -251,7 +252,7 @@ Rule:
 
 Current blocker copy:
 
-- `Resume the existing stopped Warm Standby run for this bundle instead of launching a new one.`
+- `Resume or terminate the existing stopped Warm Standby run for this bundle instead of launching a new one.`
 
 Effect:
 
@@ -260,7 +261,7 @@ Effect:
 - the intended path is:
   - launch once
   - later sleep/stop
-  - later resume/wake
+  - later resume/wake or explicitly terminate the preserved runtime if they want a fresh launch
 
 ### 4.5 Credits Remaining
 
@@ -326,18 +327,20 @@ Stored in `run_usage`:
 - workspace/tools/network flags
 - provisioning timestamp
 - provider acceptance timestamp
-- running/completed timestamps
+- running timestamp
+- stop timestamp
 - workspace release timestamp
 - termination reason
+- total runtime minutes
 - TTL policy snapshot used for that run
-- credit delta
-- resulting balance
-- reason
-- metadata
 
 Currently used for:
 
-- initial purchase / plan update bookkeeping
+- launch time tracking
+- stop time tracking
+- termination reason tracking
+- total runtime minute tracking
+- plan-type telemetry for the run
 
 Not fully used yet for:
 

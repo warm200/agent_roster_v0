@@ -86,6 +86,25 @@ function isStoppedSandboxReadError(error: unknown) {
   )
 }
 
+function isNotFoundProviderError(error: unknown) {
+  const candidate = error as {
+    message?: string
+    response?: { status?: number }
+    status?: number
+    statusCode?: number
+  }
+
+  const message = candidate?.message?.toLowerCase() ?? ''
+
+  return (
+    candidate?.response?.status === 404 ||
+    candidate?.status === 404 ||
+    candidate?.statusCode === 404 ||
+    message.includes('404') ||
+    message.includes('not found')
+  )
+}
+
 function buildStoppedRun(run: Run): Run {
   const stoppedAt = nowIso()
   return {
@@ -165,6 +184,43 @@ function isLiveRuntimeRun(run: Pick<Run, 'runtimeState' | 'status'>) {
   }
 
   return run.status === 'provisioning' || run.status === 'running'
+}
+
+function canTerminateRecoverableRuntime(runtime: RuntimeInstance | null) {
+  return Boolean(
+    runtime &&
+      runtime.planId === 'warm_standby' &&
+      runtime.persistenceMode === 'recoverable' &&
+      runtime.state === 'stopped' &&
+      runtime.preservedStateAvailable,
+  )
+}
+
+function filterLaunchBlockersForRetry(input: {
+  blockers: string[]
+  activeRunIds: string[]
+  recoverableResume: boolean
+  runId: string
+}) {
+  return input.blockers.filter((blocker) => {
+    if (!input.recoverableResume) {
+      return true
+    }
+
+    if (/resume or terminate the existing stopped warm standby run for this bundle/i.test(blocker)) {
+      return false
+    }
+
+    if (
+      /stop your current live run before starting another one/i.test(blocker) &&
+      input.activeRunIds.length > 0 &&
+      input.activeRunIds.every((id) => id === input.runId)
+    ) {
+      return false
+    }
+
+    return true
+  })
 }
 
 function chooseEarlierTimestamp(current: string | null | undefined, next: string | null | undefined) {
@@ -285,6 +341,21 @@ function buildReleasedUsagePatch(run: Run, reason: RunTerminationReason): Partia
     updatedAt: nowIso(),
     workspaceReleasedAt: completedAt,
   }
+}
+
+function calculateRuntimeMinutes(startedAt: string | null, endedAt: string | null) {
+  if (!startedAt || !endedAt) {
+    return null
+  }
+
+  const started = new Date(startedAt).getTime()
+  const ended = new Date(endedAt).getTime()
+
+  if (Number.isNaN(started) || Number.isNaN(ended) || ended <= started) {
+    return null
+  }
+
+  return Math.max(1, Math.ceil((ended - started) / 60_000))
 }
 
 function buildTerminationSummary(reason: RunTerminationReason) {
@@ -842,6 +913,73 @@ export class RunService {
     return this.stopRunForReason(userId, runId, 'manual_stop')
   }
 
+  async terminateRun(userId: string, runId: string) {
+    const run = await this.requireRun(userId, runId)
+    const syncedRun = await this.syncRun(run, true).catch(() => run)
+    const runtimeRecord = await this.findRuntimeRecordSafe(run.id)
+
+    if (!canTerminateRecoverableRuntime(runtimeRecord)) {
+      throw new HttpError(409, 'Only stopped Warm Standby runs can be terminated.')
+    }
+    if (!runtimeRecord) {
+      throw new HttpError(409, 'Only stopped Warm Standby runs can be terminated.')
+    }
+
+    const provider = runServiceDeps.getRunProvider()
+    const deletedAt = nowIso()
+
+    if (provider.deleteRuntimeInstance) {
+      try {
+        await provider.deleteRuntimeInstance(run.id)
+      } catch (error) {
+        if (!isStoppedSandboxReadError(error) && !isNotFoundProviderError(error)) {
+          throw error
+        }
+      }
+    }
+
+    const deletedRuntime = await this.updateRuntimeRecordSafe(run.id, {
+      deletedAt,
+      lastReconciledAt: deletedAt,
+      preservedStateAvailable: false,
+      recoverableUntilAt: null,
+      state: 'deleted',
+      stopReason: 'deleted_after_stop',
+      workspaceReleasedAt: deletedAt,
+    })
+
+    await this.closeRuntimeIntervalSafe(runtimeRecord.id, deletedAt, 'deleted_after_stop')
+
+    const nextRun =
+      (await this.repository.updateRun(
+        run.id,
+        applyRuntimeStateToRun(syncedRun, {
+          ...buildTerminalRuntimeFromRecord(runtimeRecord, 'deleted_after_stop', deletedAt),
+          deletedAt,
+          preservedStateAvailable: false,
+          recoverableUntilAt: null,
+          state: 'deleted',
+        }),
+      )) ??
+      applyRuntimeStateToRun(syncedRun, {
+        ...buildTerminalRuntimeFromRecord(runtimeRecord, 'deleted_after_stop', deletedAt),
+        deletedAt,
+        preservedStateAvailable: false,
+        recoverableUntilAt: null,
+        state: 'deleted',
+      })
+
+    await this.repository.updateRunUsage?.(run.id, {
+      completedAt: nextRun.completedAt ?? deletedAt,
+      statusSnapshot: nextRun.status,
+      terminationReason: 'deleted_after_stop',
+      updatedAt: deletedAt,
+      workspaceReleasedAt: deletedAt,
+    })
+
+    return applyRuntimeStateToRun(nextRun, deletedRuntime)
+  }
+
   async stopRunForReason(userId: string, runId: string, reason: RunTerminationReason) {
     const run = await this.requireRun(userId, runId)
     const runtimeRecord = await this.findRuntimeRecordSafe(run.id)
@@ -886,7 +1024,7 @@ export class RunService {
       }
       await this.repository.updateRunUsage?.(run.id, buildReleasedUsagePatch(nextRun, reason))
       if (updatedRuntime?.id) {
-        await this.runtimeRepository.closeRuntimeInterval(updatedRuntime.id, nowIso(), reason)
+        await this.closeRuntimeIntervalSafe(updatedRuntime.id, nowIso(), reason)
       }
       return nextRun
     }
@@ -952,9 +1090,15 @@ export class RunService {
         userId,
       })
       const launchPolicy = await subscriptionService.getLaunchPolicy(userId, order)
+      const effectiveBlockers = filterLaunchBlockersForRetry({
+        activeRunIds: launchPolicy.usage.activeRunIds,
+        blockers: launchPolicy.blockers,
+        recoverableResume,
+        runId: run.id,
+      })
 
-      if (!launchPolicy.allowed) {
-        throw new HttpError(409, launchPolicy.blockers.join(' '))
+      if (effectiveBlockers.length > 0) {
+        throw new HttpError(409, effectiveBlockers.join(' '))
       }
 
       const chargeKey = `restart:${run.id}:${run.updatedAt}`
@@ -1682,7 +1826,23 @@ export class RunService {
     closeReason: RunTerminationReason | null,
   ) {
     try {
-      return await this.runtimeRepository.closeRuntimeInterval(runtimeInstanceId, endedAt, closeReason)
+      const closedInterval = await this.runtimeRepository.closeRuntimeInterval(runtimeInstanceId, endedAt, closeReason)
+
+      if (!closedInterval) {
+        return null
+      }
+
+      const minutes = calculateRuntimeMinutes(closedInterval.startedAt, closedInterval.endedAt)
+
+      if (minutes !== null) {
+        const usage = await this.repository.findRunUsage(closedInterval.runId)
+        await this.repository.updateRunUsage?.(closedInterval.runId, {
+          updatedAt: nowIso(),
+          workspaceMinutes: (usage?.workspaceMinutes ?? 0) + minutes,
+        })
+      }
+
+      return closedInterval
     } catch {
       return null
     }

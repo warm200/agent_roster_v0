@@ -123,23 +123,72 @@ test('run service deletes ephemeral runtime state after stop', async () => {
 test('run service preserves recoverable runtime state after stop', async () => {
   let deleteCalled = false
   const runtimeUpdates: Array<Partial<RuntimeInstance>> = []
+  const usagePatches: Array<Record<string, unknown>> = []
+  const run = {
+    ...baseRun,
+    startedAt: '2026-03-18T12:00:00.000Z',
+  }
+  const runtimeRecord = {
+    ...baseRuntimeRecord,
+    startedAt: '2026-03-18T12:00:00.000Z',
+  }
 
   const service = new RunService(
     {
       async findRunForUser() {
-        return baseRun
+        return run
       },
       async updateRun(_runId: string, nextRun: Partial<Run>) {
-        return { ...baseRun, ...nextRun }
+        return { ...run, ...nextRun }
       },
-      async updateRunUsage() {
+      async updateRunUsage(_runId: string, patch: Record<string, unknown>) {
+        usagePatches.push(patch)
         return null
+      },
+      async findRunUsage() {
+        return {
+          agentCount: 1,
+          completedAt: null,
+          createdAt: run.createdAt,
+          estimatedInternalCostCents: null,
+          id: 'usage-1',
+          inputTokensEst: null,
+          lastMeaningfulActivityAt: run.updatedAt,
+          networkEnabled: true,
+          orderId: run.orderId,
+          outputTokensEst: null,
+          planId: 'warm_standby',
+          planVersion: 'v1',
+          providerAcceptedAt: run.startedAt,
+          provisioningStartedAt: run.createdAt,
+          runId: run.id,
+          runningStartedAt: run.startedAt,
+          statusSnapshot: 'running',
+          terminationReason: null,
+          toolCallsCount: null,
+          triggerModeSnapshot: 'auto_wake',
+          ttlPolicySnapshot: {
+            cleanupGraceMinutes: 5,
+            heartbeatMissingMinutes: null,
+            idleTimeoutMinutes: 45,
+            maxSessionTtlMinutes: 60,
+            provisioningTimeoutMinutes: 2,
+            triggerMode: 'auto_wake',
+            unhealthyProviderTimeoutMinutes: null,
+          },
+          updatedAt: run.updatedAt,
+          userId: run.userId,
+          usesRealWorkspace: true,
+          usesTools: true,
+          workspaceMinutes: null,
+          workspaceReleasedAt: null,
+        }
       },
     } as never,
     {
       async findRuntimeInstanceByRunId() {
         return {
-          ...baseRuntimeRecord,
+          ...runtimeRecord,
           persistenceMode: 'recoverable',
           planId: 'warm_standby',
           runtimeMode: 'wakeable_recoverable',
@@ -148,7 +197,7 @@ test('run service preserves recoverable runtime state after stop', async () => {
       async updateRuntimeInstance(_runId: string, input: Partial<RuntimeInstance>) {
         runtimeUpdates.push(input)
         return {
-          ...baseRuntimeRecord,
+          ...runtimeRecord,
           persistenceMode: 'recoverable',
           planId: 'warm_standby',
           runtimeMode: 'wakeable_recoverable',
@@ -156,7 +205,17 @@ test('run service preserves recoverable runtime state after stop', async () => {
         }
       },
       async closeRuntimeInterval() {
-        return null
+        return {
+          closeReason: 'manual_stop',
+          createdAt: '2026-03-18T12:00:00.000Z',
+          endedAt: '2026-03-18T12:10:00.000Z',
+          id: 'interval-1',
+          providerInstanceRef: 'sandbox-1',
+          runId: run.id,
+          runtimeInstanceId: runtimeRecord.id,
+          startedAt: '2026-03-18T12:00:00.000Z',
+          updatedAt: '2026-03-18T12:10:00.000Z',
+        }
       },
     } as never,
   )
@@ -181,7 +240,7 @@ test('run service preserves recoverable runtime state after stop', async () => {
       },
       async stopRuntimeInstance() {
         return {
-          ...baseRuntimeRecord,
+          ...runtimeRecord,
           persistenceMode: 'recoverable',
           planId: 'warm_standby',
           runtimeMode: 'wakeable_recoverable',
@@ -204,6 +263,101 @@ test('run service preserves recoverable runtime state after stop', async () => {
   assert.equal(deleteCalled, false)
   assert.equal(stopped.status, 'completed')
   assert.equal(runtimeUpdates.some((update) => update.state === 'deleted'), false)
+  assert.equal(usagePatches.some((patch) => patch.workspaceMinutes === 10), true)
+
+  setRunServiceDepsForTesting(null)
+})
+
+test('run service terminates stopped recoverable warm runtime state', async () => {
+  let deleteCalled = false
+  const runtimeUpdates: Array<Partial<RuntimeInstance>> = []
+  const usagePatches: Array<Record<string, unknown>> = []
+  const stoppedAt = '2026-03-18T12:10:00.000Z'
+  const completedRun: Run = {
+    ...baseRun,
+    completedAt: stoppedAt,
+    persistenceMode: 'recoverable',
+    preservedStateAvailable: true,
+    resultSummary: 'Managed runtime is sleeping and can be resumed later.',
+    runtimeState: 'stopped',
+    status: 'completed',
+  }
+  const runtimeRecord: RuntimeInstance = {
+    ...baseRuntimeRecord,
+    archivedAt: null,
+    deletedAt: null,
+    persistenceMode: 'recoverable',
+    planId: 'warm_standby',
+    preservedStateAvailable: true,
+    recoverableUntilAt: '2026-03-19T12:10:00.000Z',
+    runtimeMode: 'wakeable_recoverable',
+    state: 'stopped',
+    stoppedAt,
+    workspaceReleasedAt: null,
+  }
+
+  const service = new RunService(
+    {
+      async findRunForUser() {
+        return completedRun
+      },
+      async updateRun(_runId: string, nextRun: Partial<Run>) {
+        return { ...completedRun, ...nextRun }
+      },
+      async updateRunUsage(_runId: string, patch: Record<string, unknown>) {
+        usagePatches.push(patch)
+        return null
+      },
+    } as never,
+    {
+      async findRuntimeInstanceByRunId() {
+        return runtimeRecord
+      },
+      async updateRuntimeInstance(_runId: string, input: Partial<RuntimeInstance>) {
+        runtimeUpdates.push(input)
+        return { ...runtimeRecord, ...input }
+      },
+      async closeRuntimeInterval() {
+        return null
+      },
+    } as never,
+  )
+
+  setRunServiceDepsForTesting({
+    getRunProvider: () => ({
+      name: 'daytona',
+      async createRun() {
+        return completedRun
+      },
+      async deleteRuntimeInstance() {
+        deleteCalled = true
+      },
+      async getLogs() {
+        return []
+      },
+      async getResult() {
+        return null
+      },
+      async getStatus() {
+        return completedRun
+      },
+      async stopRun() {
+        return null
+      },
+    }),
+  })
+
+  const terminated = await service.terminateRun(completedRun.userId, completedRun.id)
+
+  assert.equal(deleteCalled, true)
+  assert.equal(terminated.status, 'completed')
+  assert.equal(terminated.runtimeState, 'deleted')
+  assert.equal(terminated.preservedStateAvailable, false)
+  assert.equal(runtimeUpdates.some((update) => update.state === 'deleted'), true)
+  assert.equal(
+    usagePatches.some((patch) => patch.terminationReason === 'deleted_after_stop'),
+    true,
+  )
 
   setRunServiceDepsForTesting(null)
 })
@@ -489,14 +643,16 @@ test('run service resumes recoverable stopped runtime state from completed statu
     getSubscriptionService: () =>
       ({
         getLaunchPolicy: async () => ({
-          allowed: true,
-          blockers: [],
+          allowed: false,
+          blockers: [
+            'Resume or terminate the existing stopped Warm Standby run for this bundle instead of launching a new one.',
+          ],
           plan: { id: 'warm_standby' },
           subscription: null,
           usage: {
             activeBundles: 0,
-            activeRunIds: [],
-            concurrentRuns: 0,
+            activeRunIds: [completedRun.id],
+            concurrentRuns: 1,
           },
         }),
         reserveLaunchCredit: async () => {

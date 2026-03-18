@@ -200,7 +200,7 @@ test('warm standby launch policy blocks when the same bundle already has a stopp
   assert.equal(policy.allowed, false)
   assert.ok(
     policy.blockers.some((entry) =>
-      /resume the existing stopped warm standby run for this bundle/i.test(entry),
+      /resume or terminate the existing stopped warm standby run for this bundle/i.test(entry),
     ),
   )
 })

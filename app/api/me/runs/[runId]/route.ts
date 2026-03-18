@@ -79,6 +79,11 @@ export async function PATCH(
       return NextResponse.json(await buildRunDetail(userId, run))
     }
 
+    if (action === 'terminate') {
+      const run = await getRunService().terminateRun(userId, runId)
+      return NextResponse.json(await buildRunDetail(userId, run))
+    }
+
     return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
   } catch (error) {
     if (error instanceof HttpError) {

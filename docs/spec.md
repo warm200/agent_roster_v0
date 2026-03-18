@@ -101,9 +101,16 @@ Current lifecycle shape:
 - launch checks now reconcile existing managed runs first, so stale manually deleted sandboxes do not continue blocking new launches
 - failed resume attempts now re-sync runtime state before returning the error so the UI falls back to the stopped/recoverable view
 - paired Telegram messages can now auto-wake exactly one stopped Warm Standby run for that order
+- stopped Warm Standby runs can now be terminated explicitly to release preserved state and allow a fresh launch for the same bundle
 - Telegram auto-wake is conservative by design:
   - if a live run already exists, we only record activity
   - if multiple stopped recoverable Warm runs exist, we do not auto-pick one
+- backend runtime telemetry now records:
+  - launch time
+  - stop time
+  - termination reason
+  - total runtime minutes
+  - plan type
 
 Current reconciliation model:
 

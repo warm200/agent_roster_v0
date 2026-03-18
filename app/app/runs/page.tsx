@@ -42,6 +42,14 @@ function canStopRun(run: RunSummary) {
   return run.runtimeState === 'provisioning' || run.runtimeState === 'running'
 }
 
+function canTerminateRun(run: RunSummary) {
+  return Boolean(
+    run.preservedStateAvailable &&
+      run.persistenceMode === 'recoverable' &&
+      run.runtimeState === 'stopped',
+  )
+}
+
 export default function RunsPage() {
   const [runs, setRuns] = useState<RunSummary[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -50,7 +58,7 @@ export default function RunsPage() {
   const [statusFilter, setStatusFilter] = useState<RunFilter>('all')
   const [sortBy, setSortBy] = useState<SortKey>('date')
   const [actionRunId, setActionRunId] = useState<string | null>(null)
-  const [actionType, setActionType] = useState<'cancel' | 'retry' | null>(null)
+  const [actionType, setActionType] = useState<'cancel' | 'retry' | 'terminate' | null>(null)
 
   useEffect(() => {
     let isMounted = true
@@ -121,12 +129,19 @@ export default function RunsPage() {
     [runs]
   )
 
-  const handleRunAction = async (run: RunSummary, action: 'cancel' | 'retry') => {
+  const handleRunAction = async (run: RunSummary, action: 'cancel' | 'retry' | 'terminate') => {
     if (actionRunId) {
       return
     }
 
     if (action === 'cancel' && !window.confirm('Stop this managed runtime and shut down its sandbox?')) {
+      return
+    }
+
+    if (
+      action === 'terminate' &&
+      !window.confirm('Terminate this stopped Warm Standby runtime and release its preserved state?')
+    ) {
       return
     }
 
@@ -137,7 +152,7 @@ export default function RunsPage() {
       const payload = await updateRun(
         run.id,
         action,
-        action === 'cancel' || action === 'retry' ? { timeoutMs: 60_000 } : undefined,
+        { timeoutMs: 60_000 },
       )
 
       if (action === 'retry') {
@@ -158,6 +173,14 @@ export default function RunsPage() {
         return
       }
 
+      if (action === 'terminate') {
+        setRuns((currentRuns) =>
+          currentRuns.map((currentRun) => (currentRun.id === run.id ? { ...currentRun, ...payload } : currentRun)),
+        )
+        toast.success('Stopped runtime terminated')
+        return
+      }
+
       setRuns((currentRuns) =>
         currentRuns.map((currentRun) => (currentRun.id === run.id ? { ...currentRun, ...payload } : currentRun)),
       )
@@ -168,7 +191,9 @@ export default function RunsPage() {
           ? error.message
           : action === 'retry'
             ? 'Unable to restart run'
-            : 'Unable to stop run'
+            : action === 'terminate'
+              ? 'Unable to terminate run'
+              : 'Unable to stop run'
 
       if (action === 'cancel' && message.toLowerCase().includes('sandbox is not started')) {
         const payload = await listRuns()
@@ -320,16 +345,36 @@ export default function RunsPage() {
                                 Restarting...
                               </>
                             ) : (
-                              <>
-                                <RefreshCw className="mr-2 h-4 w-4" />
-                                {canResume ? (run.runtimeState === 'archived' ? 'Recover Run' : 'Resume Run') : 'Restart Run'}
-                              </>
-                            )}
-                          </Button>
-                        )}
-                        {canStop && (
-                          <Button
-                            variant="destructive"
+                <>
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  {canResume ? (run.runtimeState === 'archived' ? 'Recover Run' : 'Resume Run') : 'Restart Run'}
+                </>
+              )}
+            </Button>
+          )}
+          {canTerminateRun(run) && (
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => handleRunAction(run, 'terminate')}
+              disabled={actionRunId === run.id}
+            >
+              {actionRunId === run.id && actionType === 'terminate' ? (
+                <>
+                  <Spinner className="mr-2 h-4 w-4" />
+                  Terminating...
+                </>
+              ) : (
+                <>
+                  <XCircle className="mr-2 h-4 w-4" />
+                  Terminate Run
+                </>
+              )}
+            </Button>
+          )}
+          {canStop && (
+            <Button
+              variant="destructive"
                             size="sm"
                             onClick={() => handleRunAction(run, 'cancel')}
                             disabled={actionRunId === run.id}

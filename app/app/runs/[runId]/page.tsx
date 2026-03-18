@@ -41,6 +41,14 @@ function canStopRun(run: NonNullable<ReturnType<typeof useRunStatus>['run']>) {
   return run.runtimeState === 'provisioning' || run.runtimeState === 'running'
 }
 
+function canTerminateRun(run: NonNullable<ReturnType<typeof useRunStatus>['run']>) {
+  return Boolean(
+    run.preservedStateAvailable &&
+      run.persistenceMode === 'recoverable' &&
+      run.runtimeState === 'stopped',
+  )
+}
+
 export default function RunDetailPage({ params }: RunDetailPageProps) {
   const { runId } = use(params)
   const router = useRouter()
@@ -49,6 +57,7 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
   const [isOpeningControlUi, setIsOpeningControlUi] = useState(false)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [isRetrying, setIsRetrying] = useState(false)
+  const [isTerminating, setIsTerminating] = useState(false)
 
   if (isLoading) {
     return <RunDetailSkeleton />
@@ -81,6 +90,7 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
 
   const isActive = run.status === 'provisioning' || run.status === 'running'
   const canResume = canResumeRun(run)
+  const canTerminate = canTerminateRun(run)
   const canOpenControlUi = run.runtimeState ? run.runtimeState === 'running' : run.status === 'running'
   const canStop = canStopRun(run)
   const timeline = buildTimeline(run)
@@ -146,6 +156,29 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
       toast.error(error instanceof Error ? error.message : 'Network error while restarting run')
     } finally {
       setIsRetrying(false)
+    }
+  }
+
+  const handleTerminate = async () => {
+    if (!run || isTerminating) {
+      return
+    }
+
+    if (!window.confirm('Terminate this stopped Warm Standby runtime and release its preserved state?')) {
+      return
+    }
+
+    setIsTerminating(true)
+
+    try {
+      const payload = await updateRun(run.id, 'terminate', { timeoutMs: 60_000 })
+      setRun(payload)
+      toast.success('Stopped runtime terminated')
+    } catch (error) {
+      await refetch()
+      toast.error(error instanceof Error ? error.message : 'Unable to terminate run')
+    } finally {
+      setIsTerminating(false)
     }
   }
 
@@ -258,6 +291,21 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
                 <>
                   <RefreshCw className="mr-2 h-4 w-4" />
                   {canResume ? (run.runtimeState === 'archived' ? 'Recover Run' : 'Resume Run') : 'Restart Run'}
+                </>
+              )}
+            </Button>
+          )}
+          {canTerminate && (
+            <Button variant="destructive" onClick={handleTerminate} disabled={isTerminating}>
+              {isTerminating ? (
+                <>
+                  <Spinner className="mr-2 h-4 w-4" />
+                  Terminating...
+                </>
+              ) : (
+                <>
+                  <XCircle className="mr-2 h-4 w-4" />
+                  Terminate Run
                 </>
               )}
             </Button>
