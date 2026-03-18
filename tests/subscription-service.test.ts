@@ -160,7 +160,7 @@ test('run plan blocks bundles above the plan agent limit', () => {
   assert.ok(policy.blockers.some((entry) => /at most 3 agents/i.test(entry)))
 })
 
-test('warm standby blocks when concurrent active runs already fill the plan', () => {
+test('launch policy blocks when any live run is still active', () => {
   const policy = buildLaunchPolicyCheck({
     order: buildOrder(2, 'order-next'),
     plan: getSubscriptionPlan('warm_standby'),
@@ -173,6 +173,7 @@ test('warm standby blocks when concurrent active runs already fill the plan', ()
   })
 
   assert.equal(policy.allowed, false)
-  assert.ok(policy.blockers.some((entry) => /3 concurrent active runs/i.test(entry)))
+  assert.ok(policy.blockers.some((entry) => /stop your current live run before starting another one/i.test(entry)))
   assert.equal(policy.usage.activeBundles, 3)
+  assert.equal(policy.usage.concurrentRuns, 3)
 })

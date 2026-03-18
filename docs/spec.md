@@ -116,6 +116,7 @@ Current reconciliation model:
   - max session TTL
   - idle timeout when meaningful activity timestamps are recorded
   - TTL/idle checks are not blocked just because run detail polling keeps reconciliation fresh
+- launch policy now allows only one live unreleased run per user at a time, regardless of plan tier
 - internal activity trigger:
   - `POST /api/internal/runs/[runId]/activity`
 - first live activity producer:

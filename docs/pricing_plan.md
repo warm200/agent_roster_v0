@@ -194,26 +194,23 @@ Effect:
 
 This matches the intended product behavior.
 
-### 4.3 Concurrent Runs
+### 4.3 One Live Run At A Time
 
 Rule:
 
-- if user already has too many active runs, launch is blocked
+- if the user already has any live unreleased run, launching another run is blocked
 
-Current active-run counting includes:
+Current live-run counting includes:
 
 - `provisioning`
 - `running`
 - `completed` if `usesRealWorkspace = true` **and** the workspace has not been released yet
 
-This matters because sandbox-backed runs can remain capacity-occupying after bootstrap, but they stop counting once cleanup or manual stop releases the workspace.
+Current blocker copy:
 
-### 4.4 Active Bundles
+- `Stop your current live run before starting another one.`
 
-Rule:
-
-- distinct `orderId`s across active runs are counted as active bundles
-- if active bundle count reaches the plan limit, launching another bundle is blocked
+This is now global per user, regardless of plan tier.
 
 ### 4.5 Credits Remaining
 
@@ -408,8 +405,7 @@ Implemented now:
 3. launch-time gating by:
    - runtime access
    - agents per bundle
-   - concurrent runs
-   - active bundles
+   - one live unreleased run at a time
    - zero remaining credits
 4. inline upgrade UX on bundle detail
 5. reserve -> commit -> refund credit handling for `Run` and `Warm Standby`

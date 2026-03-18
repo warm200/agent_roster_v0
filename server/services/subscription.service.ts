@@ -41,11 +41,15 @@ function getStripeCheckoutClient() {
 }
 
 function buildSessionPriceDescription(plan: SubscriptionPlan) {
-  if (plan.billingInterval === 'month') {
-    return `${plan.includedCredits} monthly credits, ${plan.concurrentRuns} concurrent runs, ${plan.agentsPerBundle} agents per launched bundle.`
+  if (plan.id === 'always_on') {
+    return `Persistent workspace, managed runtime, ${plan.agentsPerBundle} agents per launched bundle.`
   }
 
-  return `${plan.includedCredits} credits, ${plan.concurrentRuns} concurrent runs, ${plan.agentsPerBundle} agents per launched bundle.`
+  if (plan.billingInterval === 'month') {
+    return `${plan.includedCredits} monthly credits, ${plan.triggerMode === 'auto_wake' ? 'wake on Telegram' : 'manual only'}, ${plan.agentsPerBundle} agents per launched bundle.`
+  }
+
+  return `${plan.includedCredits} credits, manual only, ${plan.agentsPerBundle} agents per launched bundle.`
 }
 
 function requireSubscriptionPlan(planId: string) {
@@ -134,16 +138,8 @@ export function buildLaunchPolicyCheck(input: {
     )
   }
 
-  if (activeRuns.length >= input.plan.concurrentRuns) {
-    blockers.push(
-      `${input.plan.name} allows ${input.plan.concurrentRuns} concurrent active run${input.plan.concurrentRuns === 1 ? '' : 's'}.`,
-    )
-  }
-
-  if (!activeBundleIds.has(input.order.id) && activeBundleIds.size >= input.plan.activeBundles) {
-    blockers.push(
-      `${input.plan.name} allows ${input.plan.activeBundles} active bundle${input.plan.activeBundles === 1 ? '' : 's'} at a time.`,
-    )
+  if (activeRuns.length > 0) {
+    blockers.push('Stop your current live run before starting another one.')
   }
 
   if (input.subscription && input.subscription.remainingCredits <= 0 && input.plan.includedCredits > 0) {
