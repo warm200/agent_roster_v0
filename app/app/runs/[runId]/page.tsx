@@ -1,11 +1,9 @@
 "use client"
 
-import { use, useState, type ReactNode } from 'react'
+import { use, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { RiskBadge } from '@/components/risk-badge'
-import { RunLogsPanel } from '@/components/run-logs-panel'
-import { RunResultsPanel } from '@/components/run-results-panel'
 import { RunStatusBadge } from '@/components/run-status-badge'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -18,7 +16,7 @@ import { getRunStatusDisplay } from '@/lib/run-status-display'
 import { formatDateTime } from '@/lib/utils'
 import { createRunControlUiLink, updateRun } from '@/services/runs.api'
 import { toast } from 'sonner'
-import { AlertTriangle, ArrowLeft, CheckCircle2, ExternalLink, Globe, Package, RefreshCw, Wrench, XCircle } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, ExternalLink, Package, RefreshCw, XCircle } from 'lucide-react'
 
 interface RunDetailPageProps {
   params: Promise<{ runId: string }>
@@ -335,7 +333,7 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
             <div>
               <p className="font-medium text-amber-400">Run is still in progress</p>
               <p className="mt-1 text-sm text-muted-foreground">
-                This workspace is managed for you. Logs and results will continue updating until the run completes.
+                This workspace is managed for you. Status will continue updating until the run completes.
               </p>
             </div>
           </CardContent>
@@ -360,9 +358,6 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
               ))}
             </CardContent>
           </Card>
-
-          <RunLogsPanel logs={run.logs} />
-          <RunResultsPanel summary={run.resultSummary} artifacts={run.resultArtifacts} />
         </div>
 
         <div className="space-y-6">
@@ -390,66 +385,10 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
                 <div className="mb-2 text-xs text-muted-foreground">Combined risk</div>
                 <RiskBadge level={run.combinedRiskLevel} />
               </div>
-              <Separator />
-              <div>
-                <div className="mb-2 text-xs text-muted-foreground">Runtime disclosure</div>
-                <div className="space-y-3">
-                  <CapabilityRow
-                    active={run.usesRealWorkspace}
-                    icon={<Package className="h-4 w-4" />}
-                    label="Uses managed workspace"
-                  />
-                  <CapabilityRow
-                    active={run.usesTools}
-                    icon={<Wrench className="h-4 w-4" />}
-                    label="Uses tools during execution"
-                  />
-                  <CapabilityRow
-                    active={run.networkEnabled}
-                    icon={<Globe className="h-4 w-4" />}
-                    label="Network access enabled"
-                  />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Outcome</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <InfoRow label="Logs captured" value={run.logsCount.toString()} />
-              <Separator />
-              <InfoRow label="Artifacts" value={run.artifactsCount.toString()} />
-              <Separator />
-              <InfoRow label="Channel config" value={run.channelConfigId} monospace />
             </CardContent>
           </Card>
         </div>
       </div>
-    </div>
-  )
-}
-
-function CapabilityRow({
-  active,
-  icon,
-  label,
-}: {
-  active: boolean
-  icon: ReactNode
-  label: string
-}) {
-  return (
-    <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-secondary/40 p-3">
-      <div className="flex items-center gap-3">
-        <span className="text-muted-foreground">{icon}</span>
-        <span className="text-sm">{label}</span>
-      </div>
-      <span className={active ? 'text-emerald-400' : 'text-muted-foreground'}>
-        {active ? <CheckCircle2 className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
-      </span>
     </div>
   )
 }
@@ -585,12 +524,9 @@ function RunDetailSkeleton() {
       <div className="grid gap-6 xl:grid-cols-[minmax(0,2fr)_360px]">
         <div className="space-y-6">
           <Skeleton className="h-56 w-full" />
-          <Skeleton className="h-56 w-full" />
-          <Skeleton className="h-56 w-full" />
         </div>
         <div className="space-y-6">
           <Skeleton className="h-80 w-full" />
-          <Skeleton className="h-40 w-full" />
         </div>
       </div>
     </div>

@@ -97,18 +97,6 @@ export function AgentCard({ agent, onAddToCart, isInCart = false }: AgentCardPro
                   {formatPrice(agent.priceCents, agent.currency)}
                 </div>
               </div>
-              <div className="rounded-2xl border border-border/70 bg-background/70 p-3">
-                <div className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">File Access</div>
-                <div className="mt-1 font-medium text-foreground">
-                  {agent.currentVersion.riskProfile.readFiles ? 'Reads files' : 'No file reads'}
-                </div>
-              </div>
-              <div className="rounded-2xl border border-border/70 bg-background/70 p-3">
-                <div className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Network</div>
-                <div className="mt-1 font-medium text-foreground">
-                  {agent.currentVersion.riskProfile.network ? 'Enabled' : 'Disabled'}
-                </div>
-              </div>
             </div>
 
             <div className="mt-auto flex gap-2 pt-5">
