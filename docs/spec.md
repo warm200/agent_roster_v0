@@ -26,6 +26,7 @@ Important product distinction:
 - agents are free to collect
 - managed runtime is the paid product
 - runtime plans differ by behavior and persistence, not just credits
+- catalog pages should render real synced/DB-backed agents only; mock catalog fallback is not part of the product
 
 ## Source Of Truth
 
@@ -84,6 +85,8 @@ Preview notes:
 - preview does not use a real managed workspace
 - preview does not consume runtime credits
 - preview is separate from paid run lifecycle
+- preview should stay scoped to understanding the selected agent itself
+- preview should refuse unrelated general-assistant requests, prompt-injection attempts, and hidden-prompt leakage requests
 
 ## Runtime Notes
 
