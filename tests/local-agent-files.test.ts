@@ -10,6 +10,7 @@ import {
   loadLocalAgentDefinitions,
   loadRuntimeAssetsFromSnapshot,
   parseLocalAgentRuntimeSource,
+  readLocalAgentThumbnailFromSource,
   setLocalAgentsRootForTesting,
 } from '@/server/services/local-agent-files'
 
@@ -68,6 +69,28 @@ test('loadLocalAgentDefinitions builds DB-ready metadata from a local agent fold
   assert.equal(source.slug, 'test-writer')
   assert.equal(source.avatarRelativePath, 'avatars/avatar.png')
   assert.equal(buildLocalAgentThumbnailUrl(definitions[0].versionRow.runConfigSnapshot, 'test-writer'), '/api/agents/test-writer/thumbnail')
+})
+
+test('loadLocalAgentDefinitions ignores placeholder avatar paths', async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), 'local-agent-avatar-placeholder-'))
+  tempDirs.push(rootDir)
+
+  const agentDir = path.join(rootDir, 'rapid-prototyper')
+  await mkdir(agentDir, { recursive: true })
+  await writeFile(
+    path.join(agentDir, 'IDENTITY.md'),
+    ['# IDENTITY', '', '- **Name:** Rapid Prototyper', '- **Avatar:** [To be generated]'].join('\n'),
+  )
+  await writeFile(
+    path.join(agentDir, 'SOUL.md'),
+    ['# SOUL', '', '## Identity', 'name: "Rapid Prototyper"', 'version: "1.0.0"'].join('\n'),
+  )
+
+  const [definition] = await loadLocalAgentDefinitions(rootDir)
+  const source = parseLocalAgentRuntimeSource(definition.versionRow.runConfigSnapshot)
+
+  assert.equal(source?.avatarRelativePath, null)
+  assert.equal(buildLocalAgentThumbnailUrl(definition.versionRow.runConfigSnapshot, 'rapid-prototyper'), null)
 })
 
 test('loadRuntimeAssetsFromSnapshot reads optional config and workspace files from the stored source pointer', async () => {
@@ -162,6 +185,34 @@ test('buildLocalAgentArchiveFromSnapshot packages the whole agent folder', async
   assert.ok(archive)
   assert.equal(archive.fileName, 'test-writer.tar.gz')
   assert.ok(archive.contents.length > 0)
+})
+
+test('readLocalAgentThumbnailFromSource returns null when the avatar file is missing', async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), 'local-agent-missing-avatar-'))
+  tempDirs.push(rootDir)
+  setLocalAgentsRootForTesting(rootDir)
+
+  const agentDir = path.join(rootDir, 'rapid-prototyper')
+  await mkdir(agentDir, { recursive: true })
+  await writeFile(
+    path.join(agentDir, 'IDENTITY.md'),
+    ['# IDENTITY', '', '- **Name:** Rapid Prototyper', '- **Avatar:** avatars/missing.png'].join('\n'),
+  )
+  await writeFile(
+    path.join(agentDir, 'SOUL.md'),
+    ['# SOUL', '', '## Identity', 'name: "Rapid Prototyper"', 'version: "1.0.0"'].join('\n'),
+  )
+
+  const thumbnail = await readLocalAgentThumbnailFromSource({
+    avatarRelativePath: 'avatars/missing.png',
+    kind: 'local-folder',
+    openClawConfigRelativePath: null,
+    slug: 'rapid-prototyper',
+    sourceRootRelativePath: path.relative(process.cwd(), agentDir).split(path.sep).join('/'),
+    stagingRelativePath: 'rapid-prototyper',
+  })
+
+  assert.equal(thumbnail, null)
 })
 
 test('buildLocalAgentArchiveFromSnapshot rejects source roots outside agents_file', async () => {

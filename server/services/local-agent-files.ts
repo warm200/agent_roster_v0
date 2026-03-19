@@ -5,7 +5,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { promisify } from 'node:util'
 
-import { and, desc, eq } from 'drizzle-orm'
+import { and, desc, eq, like } from 'drizzle-orm'
 
 import type { AgentCategory, RiskLevel } from '@/lib/types'
 
@@ -75,6 +75,20 @@ function stripQuotes(value: string) {
     (trimmed.startsWith("'") && trimmed.endsWith("'"))
   ) {
     return trimmed.slice(1, -1)
+  }
+
+  return trimmed
+}
+
+function normalizeOptionalRelativePath(value: string | null) {
+  if (!value) {
+    return null
+  }
+
+  const trimmed = value.trim()
+
+  if (!trimmed || trimmed.startsWith('[') || trimmed.toLowerCase() === 'n/a') {
+    return null
   }
 
   return trimmed
@@ -277,7 +291,9 @@ async function buildLocalAgentDefinition(agentDir: string): Promise<LocalAgentDe
     openClawConfigRelativePath = 'openclaw.json'
   } catch {}
 
-  const avatarRelativePath = extractIdentityField(identityContents, 'Avatar')
+  const avatarRelativePath = normalizeOptionalRelativePath(
+    extractIdentityField(identityContents, 'Avatar'),
+  )
   const name =
     extractYamlField(soulContents, 'name') ??
     extractIdentityField(identityContents, 'Name') ??
@@ -475,6 +491,27 @@ export async function syncLocalAgentsToDb(rootDir = LOCAL_AGENTS_ROOT, db = getD
   }
 
   const definitions = await loadLocalAgentDefinitions(resolvedRootDir)
+  const activeLocalAgentIds = new Set(definitions.map((definition) => definition.agentRow.id))
+  const existingLocalAgents = await db
+    .select({
+      id: agents.id,
+    })
+    .from(agents)
+    .where(and(eq(agents.status, 'active'), like(agents.id, 'agent-local-%')))
+
+  for (const existingAgent of existingLocalAgents) {
+    if (activeLocalAgentIds.has(existingAgent.id)) {
+      continue
+    }
+
+    await db
+      .update(agents)
+      .set({
+        status: 'archived',
+        updatedAt: new Date(),
+      })
+      .where(eq(agents.id, existingAgent.id))
+  }
 
   for (const definition of definitions) {
     await db
@@ -546,9 +583,7 @@ export async function getLocalAgentRuntimeSourceBySlug(slug: string, db = getDb(
   return row ? parseLocalAgentRuntimeSource(row.runConfigSnapshot) : null
 }
 
-export async function getLocalAgentThumbnail(slug: string) {
-  const source = await getLocalAgentRuntimeSourceBySlug(slug)
-
+export async function readLocalAgentThumbnailFromSource(source: LocalAgentRuntimeSource | null) {
   if (!source?.avatarRelativePath) {
     return null
   }
@@ -557,11 +592,28 @@ export async function getLocalAgentThumbnail(slug: string) {
     resolveTrustedSourceRoot(source.sourceRootRelativePath),
     source.avatarRelativePath,
   )
-  const contents = await fs.readFile(absolutePath)
+  let contents: Buffer
+
+  try {
+    contents = await fs.readFile(absolutePath)
+  } catch (error) {
+    const candidate = error as NodeJS.ErrnoException
+    if (candidate.code === 'ENOENT') {
+      return null
+    }
+
+    throw error
+  }
+
   return {
     absolutePath,
     contents,
   }
+}
+
+export async function getLocalAgentThumbnail(slug: string) {
+  const source = await getLocalAgentRuntimeSourceBySlug(slug)
+  return readLocalAgentThumbnailFromSource(source)
 }
 
 export async function buildLocalAgentArchiveFromSnapshot(snapshot: string) {
