@@ -4,7 +4,7 @@ import { test } from 'node:test'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 
-import { PreviewChat } from '@/components/preview-chat'
+import { PreviewChat, PreviewMessageBody } from '@/components/preview-chat'
 import type { Agent } from '@/lib/types'
 
 function buildAgent(overrides: Partial<Agent> = {}): Agent {
@@ -52,10 +52,25 @@ test('preview chat renders a bounded scrolling transcript', () => {
   const markup = renderToStaticMarkup(
     createElement(PreviewChat, {
       agent: buildAgent(),
+      userAvatarUrl: 'https://example.com/user.png',
+      userName: 'Demo User',
     }),
   )
 
   assert.match(markup, /aria-label="Preview conversation"/)
   assert.match(markup, /overflow-y-auto/)
   assert.match(markup, /max-h-\[min\(70vh,32rem\)\]/)
+  assert.match(markup, /Send preview message/)
+})
+
+test('preview message body renders basic markdown structure', () => {
+  const markup = renderToStaticMarkup(
+    createElement(PreviewMessageBody, {
+      content: ['## Plan', '', '- **First** item', '- second item', '', 'Use `pnpm dev`.'].join('\n'),
+    }),
+  )
+
+  assert.match(markup, /<ul/)
+  assert.match(markup, /<strong>First<\/strong>/)
+  assert.match(markup, /<code[^>]*>pnpm dev<\/code>/)
 })

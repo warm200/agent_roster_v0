@@ -13,6 +13,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { formatPrice } from '@/lib/mock-data'
 import { useCart } from '@/lib/cart-context'
+import { useAuth } from '@/lib/auth-context'
 import { formatDate } from '@/lib/utils'
 import { getAgentBySlug } from '@/services/catalog.api'
 import { toast } from 'sonner'
@@ -40,6 +41,7 @@ export default function AgentDetailPage({ params }: PageProps) {
   const [isLoading, setIsLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const { addItem, isInCart } = useCart()
+  const { session } = useAuth()
   const [showChat, setShowChat] = useState(false)
 
   useEffect(() => {
@@ -281,7 +283,11 @@ export default function AgentDetailPage({ params }: PageProps) {
               </CardHeader>
               <CardContent className="min-h-0">
                 {showChat ? (
-                  <PreviewChat agent={agent} />
+                  <PreviewChat
+                    agent={agent}
+                    userAvatarUrl={session?.user?.image ?? null}
+                    userName={session?.user?.name ?? null}
+                  />
                 ) : (
                   <div className="text-center py-8">
                     <p className="text-sm text-muted-foreground mb-4">
