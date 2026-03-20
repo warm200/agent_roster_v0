@@ -72,7 +72,6 @@ export interface SecretStore {
 
 export interface TelegramApiClient {
   getMe(token: string): Promise<TelegramBotProfile>
-  getUpdates(token: string): Promise<TelegramUpdate[]>
   deleteWebhook(args: { token: string }): Promise<void>
   setWebhook(args: {
     token: string
@@ -237,10 +236,6 @@ class TelegramFetchClient implements TelegramApiClient {
     }
   }
 
-  async getUpdates(token: string) {
-    return callTelegramApi<TelegramUpdate[]>(token, 'getUpdates')
-  }
-
   async deleteWebhook(args: { token: string }) {
     await callTelegramApi(args.token, 'deleteWebhook', {
       drop_pending_updates: 'false',
@@ -316,7 +311,9 @@ function extractStartChatId(update: TelegramUpdate, pairingToken: string) {
     return null
   }
 
-  if (text !== '/start' && text !== `/start ${pairingToken}`) {
+  const normalizedText = text.replace(/^\/start(?:@[A-Za-z0-9_]+)?/, '/start')
+
+  if (normalizedText !== '/start' && normalizedText !== `/start ${pairingToken}`) {
     return null
   }
 
@@ -335,18 +332,24 @@ function serializeBotUsername(username?: string) {
   return username.startsWith('@') ? username.slice(1) : username
 }
 
-function resolveTelegramWebhookBaseUrl(origin?: string) {
-  return (
-    process.env.TELEGRAM_WEBHOOK_URL ||
-    process.env.NEXTAUTH_URL ||
-    process.env.NEXT_PUBLIC_APP_URL ||
-    origin ||
-    'http://localhost:3000'
-  )
+function resolveTelegramWebhookEndpoint(origin?: string) {
+  const configuredUrl = process.env.TELEGRAM_WEBHOOK_URL
+
+  if (configuredUrl) {
+    const url = new URL(configuredUrl)
+
+    if (url.pathname === '/' || url.pathname === '') {
+      url.pathname = '/api/webhooks/telegram'
+    }
+
+    return url
+  }
+
+  return new URL('/api/webhooks/telegram', origin || process.env.NEXTAUTH_URL || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000')
 }
 
 function supportsTelegramWebhook(origin?: string) {
-  return new URL(resolveTelegramWebhookBaseUrl(origin)).protocol === 'https:'
+  return resolveTelegramWebhookEndpoint(origin).protocol === 'https:'
 }
 
 export function createTelegramService(options: CreateTelegramServiceOptions = {}) {
@@ -363,31 +366,6 @@ export function createTelegramService(options: CreateTelegramServiceOptions = {}
     )
   const apiClient = options.apiClient ?? new TelegramFetchClient()
 
-  async function refreshPendingPairing(context: OrderChannelContext) {
-    if (
-      context.config.tokenStatus !== 'validated' ||
-      context.config.recipientBindingStatus !== 'pending' ||
-      !context.config.botTokenSecretRef ||
-      supportsTelegramWebhook()
-    ) {
-      return context.config
-    }
-
-    const botToken = await secretStore.read(context.config.botTokenSecretRef)
-    const pairingToken = buildPairingToken(context.orderId, requiredSecretSeed)
-    const updates = await apiClient.getUpdates(botToken)
-    const matchedUpdate = updates.find((update) => extractStartChatId(update, pairingToken))
-
-    if (!matchedUpdate) {
-      return context.config
-    }
-
-    return repository.updateChannelConfig(context.orderId, {
-      recipientBindingStatus: 'paired',
-      recipientExternalId: extractStartChatId(matchedUpdate, pairingToken),
-    })
-  }
-
   return {
     async getChannelConfig(args: { orderId: string; userId: string }) {
       const context = await repository.ensureOrderChannelForUser(args.orderId, args.userId)
@@ -396,7 +374,7 @@ export function createTelegramService(options: CreateTelegramServiceOptions = {}
         throw new HttpError(404, 'Order not found.')
       }
 
-      return refreshPendingPairing(context)
+      return context.config
     },
 
     async validateToken(args: { orderId: string; userId: string; botToken: string }) {
@@ -464,40 +442,40 @@ export function createTelegramService(options: CreateTelegramServiceOptions = {}
       assertPaidOrder(context)
       assertValidatedToken(context)
 
+      if (!supportsTelegramWebhook(args.origin)) {
+        throw new HttpError(
+          409,
+          'Telegram pairing requires a public HTTPS webhook URL. Set TELEGRAM_WEBHOOK_URL to your public /api/webhooks/telegram endpoint.',
+        )
+      }
+
       const botToken = await secretStore.read(context.config.botTokenSecretRef!)
       const bot = await apiClient.getMe(botToken)
       const webhookSecret = buildWebhookSecret(args.orderId, requiredSecretSeed)
       const pairingToken = buildPairingToken(args.orderId, requiredSecretSeed)
-      const webhookUrl = new URL(process.env.TELEGRAM_WEBHOOK_URL || '/api/webhooks/telegram', args.origin)
+      const webhookUrl = resolveTelegramWebhookEndpoint(args.origin)
       webhookUrl.searchParams.set('orderId', args.orderId)
+      const pendingConfig = await repository.updateChannelConfig(args.orderId, {
+        recipientBindingStatus: 'pending',
+        recipientExternalId: null,
+      })
 
       try {
-        if (supportsTelegramWebhook(args.origin)) {
-          await apiClient.setWebhook({
-            token: botToken,
-            url: webhookUrl.toString(),
-            secretToken: webhookSecret,
-          })
-        } else {
-          await apiClient.deleteWebhook({
-            token: botToken,
-          })
-        }
+        await apiClient.setWebhook({
+          token: botToken,
+          url: webhookUrl.toString(),
+          secretToken: webhookSecret,
+        })
       } catch (error) {
         await repository.updateChannelConfig(args.orderId, {
           recipientBindingStatus: 'failed',
         })
         throw error
       }
-
-      const config = await repository.updateChannelConfig(args.orderId, {
-        recipientBindingStatus: 'pending',
-        recipientExternalId: null,
-      })
       const botUsername = serializeBotUsername(bot.username)
 
       return {
-        config,
+        config: pendingConfig,
         botUsername,
         pairingCommand: botUsername
           ? `https://t.me/${botUsername}?start=${pairingToken}`

@@ -252,6 +252,9 @@ export function TelegramSetupWizard({
               <p className="text-sm text-muted-foreground">
                 Now, open Telegram and start a chat with your bot:
               </p>
+              <p className="text-xs text-muted-foreground">
+                Pairing finishes when Telegram sends the <code className="bg-secondary px-1 py-0.5 rounded">/start</code> event back to your configured webhook.
+              </p>
 
               {pairingCommand && (
                 <p className="text-sm text-muted-foreground">
@@ -286,7 +289,7 @@ export function TelegramSetupWizard({
             {(isPairing || isPolling) && (
               <div className="flex items-center gap-3 p-4 bg-amber-500/10 border border-amber-500/20 rounded-lg">
                 <Spinner className="w-5 h-5 text-amber-400" />
-                <span className="text-sm text-amber-400">Waiting for your message in Telegram and checking pairing status...</span>
+                <span className="text-sm text-amber-400">Waiting for Telegram to deliver your /start webhook confirmation...</span>
               </div>
             )}
           </CardContent>
@@ -296,7 +299,7 @@ export function TelegramSetupWizard({
                 {isPairing || isPolling ? (
                   <>
                     <Spinner className="w-4 h-4 mr-2" />
-                    Checking pairing...
+                    Waiting for webhook...
                   </>
                 ) : (
                   <>

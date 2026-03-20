@@ -289,6 +289,8 @@ Rule:
 
 - Telegram token must be validated
 - recipient pairing must be complete
+- pairing completion is webhook-based, not Telegram `getUpdates` polling
+- local/dev pairing therefore requires a public HTTPS webhook URL
 
 So even a paid user still cannot launch until Telegram setup is ready.
 

@@ -90,27 +90,21 @@ afterEach(() => {
   }
 })
 
-test('telegram service falls back to polling mode on local http origins', async () => {
+test('telegram service requires a public https webhook url for pairing', async () => {
   process.env.NEXTAUTH_URL = 'http://localhost:3000'
   delete process.env.TELEGRAM_WEBHOOK_URL
 
   const { repository, context } = createRepository()
-  let deletedWebhook = false
   let setWebhookCalled = false
 
   const service = createTelegramService({
     apiClient: {
-      async deleteWebhook() {
-        deletedWebhook = true
-      },
+      async deleteWebhook() {},
       async getMe() {
         return {
           id: 42,
           username: 'ops_bot',
         }
-      },
-      async getUpdates() {
-        return []
       },
       async setWebhook() {
         setWebhookCalled = true
@@ -128,15 +122,23 @@ test('telegram service falls back to polling mode on local http origins', async 
     },
   })
 
-  const result = await service.startPairing({
-    orderId: context.orderId,
-    origin: 'http://localhost:3000',
-    userId: context.userId,
-  })
+  await assert.rejects(
+    service.startPairing({
+      orderId: context.orderId,
+      origin: 'http://localhost:3000',
+      userId: context.userId,
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof HttpError)
+      assert.equal(
+        error.message,
+        'Telegram pairing requires a public HTTPS webhook URL. Set TELEGRAM_WEBHOOK_URL to your public /api/webhooks/telegram endpoint.',
+      )
+      return true
+    },
+  )
 
-  assert.equal(deletedWebhook, true)
   assert.equal(setWebhookCalled, false)
-  assert.match(result.pairingCommand, /^https:\/\/t\.me\/ops_bot\?start=/)
 })
 
 test('telegram service disconnects the current bot and resets the channel config', async () => {
@@ -156,9 +158,6 @@ test('telegram service disconnects the current bot and resets the channel config
           id: 42,
           username: 'ops_bot',
         }
-      },
-      async getUpdates() {
-        return []
       },
       async setWebhook() {},
     },
@@ -186,9 +185,9 @@ test('telegram service disconnects the current bot and resets the channel config
   assert.equal(config.recipientExternalId, null)
 })
 
-test('telegram service pairs pending local-dev chats by polling getUpdates', async () => {
+test('telegram service surfaces unreadable stored bot credentials clearly when pairing starts', async () => {
   process.env.NEXTAUTH_URL = 'http://localhost:3000'
-  delete process.env.TELEGRAM_WEBHOOK_URL
+  process.env.TELEGRAM_WEBHOOK_URL = 'https://example.com/api/webhooks/telegram'
 
   const { repository, context } = createRepository()
   const service = createTelegramService({
@@ -199,89 +198,6 @@ test('telegram service pairs pending local-dev chats by polling getUpdates', asy
           id: 42,
           username: 'ops_bot',
         }
-      },
-      async getUpdates() {
-        return []
-      },
-      async setWebhook() {},
-    },
-    repository,
-    secretSeed: 'test-secret',
-    secretStore: {
-      async read() {
-        return 'telegram-token'
-      },
-      async write() {
-        return 'secret-ref'
-      },
-    },
-  })
-
-  const started = await service.startPairing({
-    orderId: context.orderId,
-    origin: 'http://localhost:3000',
-    userId: context.userId,
-  })
-  const token = started.pairingCommand.split('start=')[1]
-
-  const pollingService = createTelegramService({
-    apiClient: {
-      async deleteWebhook() {},
-      async getMe() {
-        return {
-          id: 42,
-          username: 'ops_bot',
-        }
-      },
-      async getUpdates() {
-        return [
-          {
-            message: {
-              chat: { id: 77 },
-              text: `/start ${token}`,
-            },
-          },
-        ]
-      },
-      async setWebhook() {},
-    },
-    repository,
-    secretSeed: 'test-secret',
-    secretStore: {
-      async read() {
-        return 'telegram-token'
-      },
-      async write() {
-        return 'secret-ref'
-      },
-    },
-  })
-
-  const config = await pollingService.getChannelConfig({
-    orderId: context.orderId,
-    userId: context.userId,
-  })
-
-  assert.equal(config.recipientBindingStatus, 'paired')
-  assert.equal(config.recipientExternalId, '77')
-})
-
-test('telegram service surfaces unreadable stored bot credentials clearly', async () => {
-  process.env.NEXTAUTH_URL = 'http://localhost:3000'
-  delete process.env.TELEGRAM_WEBHOOK_URL
-
-  const { repository, context } = createRepository()
-  const service = createTelegramService({
-    apiClient: {
-      async deleteWebhook() {},
-      async getMe() {
-        return {
-          id: 42,
-          username: 'ops_bot',
-        }
-      },
-      async getUpdates() {
-        return []
       },
       async setWebhook() {},
     },
@@ -301,8 +217,9 @@ test('telegram service surfaces unreadable stored bot credentials clearly', asyn
   })
 
   await assert.rejects(
-    service.getChannelConfig({
+    service.startPairing({
       orderId: context.orderId,
+      origin: 'http://localhost:3000',
       userId: context.userId,
     }),
     (error: unknown) => {
@@ -335,9 +252,6 @@ test('telegram service marks paired recipient messages as runtime activity', asy
           username: 'ops_bot',
         }
       },
-      async getUpdates() {
-        return []
-      },
       async setWebhook() {},
     },
     repository,
@@ -367,4 +281,165 @@ test('telegram service marks paired recipient messages as runtime activity', asy
     chatId: '77',
     outcome: 'runtime_activity',
   })
+})
+
+test('telegram service pairs pending chats from webhook start messages', async () => {
+  process.env.NEXTAUTH_URL = 'https://example.com'
+  process.env.TELEGRAM_WEBHOOK_URL = 'https://example.com/api/webhooks/telegram'
+
+  const { repository, context } = createRepository()
+  const service = createTelegramService({
+    apiClient: {
+      async deleteWebhook() {},
+      async getMe() {
+        return {
+          id: 42,
+          username: 'ops_bot',
+        }
+      },
+      async setWebhook() {},
+    },
+    repository,
+    secretSeed: 'test-secret',
+    secretStore: {
+      async read() {
+        return 'telegram-token'
+      },
+      async write() {
+        return 'secret-ref'
+      },
+    },
+  })
+
+  const started = await service.startPairing({
+    orderId: context.orderId,
+    origin: 'https://example.com',
+    userId: context.userId,
+  })
+  const token = started.pairingCommand.split('start=')[1]
+
+  const result = await service.handleWebhook({
+    orderId: context.orderId,
+    secretToken: createHmac('sha256', 'test-secret').update(context.orderId).digest('hex'),
+    update: {
+      message: {
+        chat: { id: 77 },
+        text: `/start ${token}`,
+      },
+    },
+  })
+
+  assert.deepEqual(result, {
+    config: {
+      ...context.config,
+      recipientBindingStatus: 'paired',
+      recipientExternalId: '77',
+    },
+    outcome: 'paired',
+  })
+})
+
+test('telegram service appends the telegram webhook route when only a base url is configured', async () => {
+  process.env.NEXTAUTH_URL = 'https://example.com'
+  process.env.TELEGRAM_WEBHOOK_URL = 'https://example.com'
+
+  const { repository, context } = createRepository()
+  let registeredWebhookUrl: string | null = null
+
+  const service = createTelegramService({
+    apiClient: {
+      async deleteWebhook() {},
+      async getMe() {
+        return {
+          id: 42,
+          username: 'ops_bot',
+        }
+      },
+      async setWebhook(args) {
+        registeredWebhookUrl = args.url
+      },
+    },
+    repository,
+    secretSeed: 'test-secret',
+    secretStore: {
+      async read() {
+        return 'telegram-token'
+      },
+      async write() {
+        return 'secret-ref'
+      },
+    },
+  })
+
+  await service.startPairing({
+    orderId: context.orderId,
+    origin: 'https://example.com',
+    userId: context.userId,
+  })
+
+  assert.equal(
+    registeredWebhookUrl,
+    `https://example.com/api/webhooks/telegram?orderId=${context.orderId}`,
+  )
+})
+
+test('telegram service marks pairing pending before webhook registration completes', async () => {
+  process.env.NEXTAUTH_URL = 'https://example.com'
+  process.env.TELEGRAM_WEBHOOK_URL = 'https://example.com/api/webhooks/telegram'
+
+  const { repository, context } = createRepository()
+  let service: ReturnType<typeof createTelegramService>
+
+  service = createTelegramService({
+    apiClient: {
+      async deleteWebhook() {},
+      async getMe() {
+        return {
+          id: 42,
+          username: 'ops_bot',
+        }
+      },
+      async setWebhook() {
+        const result = await service.handleWebhook({
+          orderId: context.orderId,
+          secretToken: createHmac('sha256', 'test-secret').update(context.orderId).digest('hex'),
+          update: {
+            message: {
+              chat: { id: 77 },
+              text: '/start',
+            },
+          },
+        })
+
+        assert.deepEqual(result, {
+          config: {
+            ...context.config,
+            recipientBindingStatus: 'paired',
+            recipientExternalId: '77',
+          },
+          outcome: 'paired',
+        })
+      },
+    },
+    repository,
+    secretSeed: 'test-secret',
+    secretStore: {
+      async read() {
+        return 'telegram-token'
+      },
+      async write() {
+        return 'secret-ref'
+      },
+    },
+  })
+
+  const started = await service.startPairing({
+    orderId: context.orderId,
+    origin: 'https://example.com',
+    userId: context.userId,
+  })
+
+  assert.equal(started.config.recipientBindingStatus, 'pending')
+  assert.equal(context.config.recipientBindingStatus, 'paired')
+  assert.equal(context.config.recipientExternalId, '77')
 })
