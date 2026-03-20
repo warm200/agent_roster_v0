@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
+import { canOpenRunControlUi } from '@/lib/run-control-ui'
 import type { Order, Run, RuntimeInstance } from '@/lib/types'
 import { RunService, setRunServiceDepsForTesting } from '@/server/services/run.service'
 
@@ -1931,6 +1932,132 @@ test('run service records provider progress time as meaningful activity on read'
     ),
     true,
   )
+
+  setRunServiceDepsForTesting(null)
+})
+
+test('run service sends telegram notice when a run becomes control-ui ready', async () => {
+  let currentRun: Run = {
+    ...baseRun,
+    resultSummary: 'Managed runtime is restarting for bundle order-test-1. Status will update automatically.',
+    runtimeState: 'running',
+    status: 'running',
+  }
+  const delivered: Array<{ orderId: string; text: string }> = []
+
+  const service = new RunService(
+    {
+      async findRunForUser() {
+        return currentRun
+      },
+      async updateRun(_runId: string, nextRun: Partial<Run>) {
+        currentRun = { ...currentRun, ...nextRun }
+        return currentRun
+      },
+      async updateRunUsage() {
+        return null
+      },
+    } as never,
+    {
+      async findRuntimeInstanceByRunId() {
+        return {
+          ...baseRuntimeRecord,
+          persistenceMode: 'recoverable',
+          planId: 'warm_standby',
+          runtimeMode: 'wakeable_recoverable',
+          state: 'running',
+          preservedStateAvailable: true,
+        }
+      },
+      async updateRuntimeInstance(_runId: string, input: Partial<RuntimeInstance>) {
+        return {
+          ...baseRuntimeRecord,
+          persistenceMode: 'recoverable',
+          planId: 'warm_standby',
+          runtimeMode: 'wakeable_recoverable',
+          state: 'running',
+          preservedStateAvailable: true,
+          ...input,
+        }
+      },
+      async findOpenRuntimeInterval() {
+        return null
+      },
+      async createRuntimeInterval() {
+        return null
+      },
+      async closeRuntimeInterval() {
+        return null
+      },
+    } as never,
+  )
+
+  setRunServiceDepsForTesting({
+    getRunProvider: () => ({
+      name: 'daytona',
+      async createRun() {
+        return baseRun
+      },
+      async getLogs() {
+        return []
+      },
+      async getResult() {
+        return {
+          artifacts: [],
+          summary: 'Managed runtime is ready for bundle order-test-1. Open Control UI to continue.',
+        }
+      },
+      async getRuntimeInstance() {
+        return {
+          ...baseRuntimeRecord,
+          lastReconciledAt: new Date().toISOString(),
+          persistenceMode: 'recoverable',
+          planId: 'warm_standby',
+          preservedStateAvailable: true,
+          providerInstanceRef: 'sandbox-1',
+          providerName: 'daytona',
+          runId: baseRun.id,
+          runtimeMode: 'wakeable_recoverable',
+          startedAt: baseRun.startedAt,
+          state: 'running',
+          stoppedAt: null,
+          stopReason: null,
+          workspaceReleasedAt: null,
+          metadataJson: {},
+          archivedAt: null,
+          deletedAt: null,
+          recoverableUntilAt: null,
+        }
+      },
+      async getStatus() {
+        return {
+          ...baseRun,
+          resultSummary: 'Managed runtime is ready for bundle order-test-1. Open Control UI to continue.',
+          runtimeState: 'running',
+          status: 'running',
+        }
+      },
+      async stopRun() {
+        return null
+      },
+    }),
+    getTelegramService: () => ({
+      async sendPairedMessage(args: { orderId: string; text: string }) {
+        delivered.push(args)
+        return { chatId: '77', orderId: args.orderId }
+      },
+    } as never),
+  })
+
+  const run = await service.getRun('user-test-1', 'run-test-1')
+
+  assert.equal(canOpenRunControlUi(run), true)
+  assert.deepEqual(delivered, [
+    {
+      orderId: 'order-test-1',
+      text: 'Your sandbox is ready. You can open Control UI now, or send a Telegram message here to start.',
+    },
+  ])
 
   setRunServiceDepsForTesting(null)
 })

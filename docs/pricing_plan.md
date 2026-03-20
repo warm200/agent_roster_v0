@@ -1,5 +1,5 @@
 ---
-summary: Runtime pricing-plan reference for AgentRoster, including current product flow, enforced constraints, and known gaps.
+summary: Runtime pricing-plan reference for OpenRoster, including current product flow, enforced constraints, and known gaps.
 read_when:
   - Evaluating subscription tiers, credits, runtime access limits, or launch guardrails.
   - Reasoning about whether the current pricing matrix fits the product and user behavior.
@@ -23,7 +23,7 @@ This is meant for external reasoning by another AI model, without requiring full
 
 ## 1. Product Summary
 
-AgentRoster is a productized platform for:
+OpenRoster is a productized platform for:
 
 1. discovering agents in a catalog
 2. previewing their persona/behavior through preview chat
@@ -179,6 +179,7 @@ Frontend positioning:
     - after successful launch/resume, the app deletes the webhook so OpenClaw can use Telegram long polling
     - when the runtime stops again, the app reclaims the webhook
   - when a recoverable Warm runtime stops, the app can notify the paired Telegram user that the sandbox stopped and that any new message will wake it again
+  - when a launched or resumed runtime later becomes Control-UI-ready, the app can notify the paired Telegram user that the sandbox is ready for use
   - this is conservative, not fuzzy routing:
     - if one live run already exists, backend only records activity
     - if exactly one stopped recoverable Warm run exists for that bundle/order, backend resumes it
@@ -188,7 +189,7 @@ Frontend positioning:
 
 - Price: `$149/mo`
 - Included Credits: `100`
-- Agents per Bundle: `8`
+- Agents per Bundle: `Unlimited`
 - Trigger Mode: `always_active`
 - Runtime Access: `true`
 - Best for: one core workspace running full time

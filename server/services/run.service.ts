@@ -210,6 +210,10 @@ function buildStoppedWarmTelegramNotice(reason: RunTerminationReason) {
   }
 }
 
+function buildReadyRuntimeTelegramNotice() {
+  return 'Your sandbox is ready. You can open Control UI now, or send a Telegram message here to start.'
+}
+
 function filterLaunchBlockersForRetry(input: {
   blockers: string[]
   activeRunIds: string[]
@@ -669,6 +673,19 @@ export class RunService {
       logServerError('run-service:telegram:send-stopped-notice', error, {
         orderId: order.id,
         reason,
+      })
+    }
+  }
+
+  private async notifyRuntimeReady(order: Pick<Order, 'id'>) {
+    try {
+      await runServiceDeps.getTelegramService().sendPairedMessage?.({
+        orderId: order.id,
+        text: buildReadyRuntimeTelegramNotice(),
+      })
+    } catch (error) {
+      logServerError('run-service:telegram:send-ready-notice', error, {
+        orderId: order.id,
       })
     }
   }
@@ -1635,6 +1652,9 @@ export class RunService {
       }
 
       const persistedRun = (await this.repository.updateRun(run.id, runtimeOnlyRun)) ?? runtimeOnlyRun
+      if (canOpenRunControlUi(persistedRun) && !canOpenRunControlUi(run)) {
+        await this.notifyRuntimeReady({ id: run.orderId })
+      }
       if (persistedRuntime?.state === 'running') {
         await this.updateRunningUsageSafe(run.id, {
           activityAt: persistedRuntime.startedAt ?? nowIso(),
@@ -1799,6 +1819,9 @@ export class RunService {
     }
 
     const persistedRun = (await this.repository.updateRun(run.id, reconciledRun)) ?? reconciledRun
+    if (canOpenRunControlUi(persistedRun) && !canOpenRunControlUi(run)) {
+      await this.notifyRuntimeReady({ id: run.orderId })
+    }
     if (persist && persistedRun.status === 'failed') {
       await this.repository.updateRunUsage?.(run.id, buildReleasedUsagePatch(persistedRun, 'provider_unhealthy'))
     }
