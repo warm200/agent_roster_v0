@@ -153,6 +153,11 @@ function nowIso() {
   return new Date().toISOString()
 }
 
+function readNonEmptyEnv(name: string) {
+  const value = process.env[name]?.trim()
+  return value ? value : null
+}
+
 function resolveDaytonaApiKey(explicitApiKey?: string) {
   const apiKey = explicitApiKey ?? process.env.DAYTONA_API_KEY
 
@@ -171,7 +176,7 @@ function resolveDaytonaApiKey(explicitApiKey?: string) {
 }
 
 function resolveOpenClawPort(explicitPort?: number) {
-  const rawPort = explicitPort ?? Number.parseInt(process.env.OPENCLAW_PORT ?? '', 10)
+  const rawPort = explicitPort ?? Number.parseInt(readNonEmptyEnv('OPENCLAW_PORT') ?? '', 10)
   if (!Number.isFinite(rawPort)) {
     return DEFAULT_OPENCLAW_PORT
   }
@@ -186,7 +191,9 @@ function resolveOpenClawPort(explicitPort?: number) {
 function resolveOpenClawTemplateDir(explicitTemplateDir?: string) {
   return path.resolve(
     process.cwd(),
-    explicitTemplateDir ?? process.env.OPENCLAW_TEMPLATE_DIR ?? DEFAULT_OPENCLAW_TEMPLATE_DIR,
+    explicitTemplateDir ??
+      readNonEmptyEnv('OPENCLAW_TEMPLATE_DIR') ??
+      DEFAULT_OPENCLAW_TEMPLATE_DIR,
   )
 }
 
@@ -927,11 +934,14 @@ async function readOptionalEnvFile(filePath: string) {
 }
 
 function resolveDaytonaSnapshot() {
-  return process.env.DAYTONA_SNAPSHOT ?? DEFAULT_DAYTONA_SNAPSHOT
+  return readNonEmptyEnv('DAYTONA_SNAPSHOT') ?? DEFAULT_DAYTONA_SNAPSHOT
 }
 
 function resolveEnvSandboxPath() {
-  return path.resolve(process.cwd(), process.env.DAYTONA_ENV_SANDBOX_PATH ?? DEFAULT_ENV_SANDBOX_PATH)
+  return path.resolve(
+    process.cwd(),
+    readNonEmptyEnv('DAYTONA_ENV_SANDBOX_PATH') ?? DEFAULT_ENV_SANDBOX_PATH,
+  )
 }
 
 function buildOpenClawConfig(
@@ -1180,8 +1190,8 @@ export class DaytonaRunProvider implements RunProvider {
   constructor(options: DaytonaRunProviderOptions = {}) {
     const config: DaytonaConfig = {
       apiKey: resolveDaytonaApiKey(options.apiKey),
-      apiUrl: options.apiUrl ?? process.env.DAYTONA_API_URL ?? 'https://app.daytona.io/api',
-      target: options.target ?? process.env.DAYTONA_TARGET,
+      apiUrl: options.apiUrl ?? readNonEmptyEnv('DAYTONA_API_URL') ?? 'https://app.daytona.io/api',
+      target: options.target ?? readNonEmptyEnv('DAYTONA_TARGET') ?? undefined,
     }
 
     this.client = options.clientFactory ? options.clientFactory(config) : new Daytona(config)
@@ -1189,7 +1199,7 @@ export class DaytonaRunProvider implements RunProvider {
     this.envSandboxPath = resolveEnvSandboxPath()
     this.openClawPort = resolveOpenClawPort(options.openClawPort)
     this.openClawTemplateDir = resolveOpenClawTemplateDir(options.openClawTemplateDir)
-    this.openClawPackage = process.env.OPENCLAW_PACKAGE ?? DEFAULT_OPENCLAW_PACKAGE
+    this.openClawPackage = readNonEmptyEnv('OPENCLAW_PACKAGE') ?? DEFAULT_OPENCLAW_PACKAGE
   }
 
   async createRuntimeInstance(input: CreateRuntimeInstanceInput): Promise<RuntimeProviderInstance> {

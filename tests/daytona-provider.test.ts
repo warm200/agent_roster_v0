@@ -1444,6 +1444,61 @@ test('daytona run provider falls back to empty template state when local OpenCla
   assert.equal(uploadedWorkspaceFile, '')
 })
 
+test('daytona run provider treats blank env sandbox path as unset', async () => {
+  const previousEnvSandboxPath = process.env.DAYTONA_ENV_SANDBOX_PATH
+  let uploadedStatusPath = ''
+
+  process.env.DAYTONA_ENV_SANDBOX_PATH = ''
+
+  try {
+    const provider = new DaytonaRunProvider({
+      apiKey: 'daytona-test',
+      clientFactory: () => ({
+        async create(params) {
+          const runId = String(params?.name)
+          return {
+            createdAt: new Date().toISOString(),
+            fs: {
+              async downloadFile() {
+                throw Object.assign(new Error('404 missing'), { status: 404 })
+              },
+              async uploadFile(_file: Buffer, filePath: string) {
+                if (filePath === '/tmp/agent-roster/status.json') {
+                  uploadedStatusPath = filePath
+                }
+              },
+            },
+            id: runId,
+            process: {
+              async executeCommand() {
+                return {
+                  exitCode: 0,
+                  result: '',
+                }
+              },
+            },
+            state: SandboxState.STARTED,
+          }
+        },
+        async get() {
+          throw new Error('not used')
+        },
+      }),
+      openClawTemplateDir: 'openclaw_config_test-missing',
+    })
+
+    const created = await provider.createRun(order)
+    assert.equal(created.status, 'provisioning')
+    assert.equal(uploadedStatusPath, '/tmp/agent-roster/status.json')
+  } finally {
+    if (previousEnvSandboxPath === undefined) {
+      delete process.env.DAYTONA_ENV_SANDBOX_PATH
+    } else {
+      process.env.DAYTONA_ENV_SANDBOX_PATH = previousEnvSandboxPath
+    }
+  }
+})
+
 test('daytona run provider can stop a sandbox even when toolbox manifest reads fail', async () => {
   const runId = 'run-stop-fallback'
   let sandboxState = 'started'
