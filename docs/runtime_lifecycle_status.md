@@ -59,12 +59,16 @@ read_when:
 - failed resume/restart attempts now re-sync persisted runtime state before surfacing the error, so run pages fall back to `Stopped`/resume instead of stale live controls
 - externally stopped Daytona sandboxes now self-heal stale `running` runtime rows on refresh/read when provider access reports a stopped sandbox path
 - explicit stop requests are now idempotent against already stopped Daytona sandboxes instead of surfacing `Sandbox is not started` back to the UI
+- archived Daytona sandboxes now restart via `start()` instead of `recover()`, which fixes archived Warm resume/wake
 - paired Telegram inbound messages can now auto-resume exactly one stopped Warm Standby runtime for the order
 - stopped Warm Standby runtimes can now be terminated explicitly, which deletes preserved state and clears the fresh-launch blocker for that bundle
 - Telegram bot ownership now hands off by runtime state:
   - pairing / stopped Warm state => app webhook owns the bot
   - live launched / resumed runtime => app deletes the webhook so OpenClaw can use Telegram long polling
   - stop / terminate reclaims the app webhook for later pairing or Warm wake
+- Control UI is now gated on actual OpenClaw readiness rather than raw `runtimeState = running`
+  - UI button stays disabled until the existing OpenClaw process probe flips the ready summary
+  - Control UI link creation uses the same readiness gate on the server
 - stopped recoverable Warm runtimes now send a paired Telegram notice after reclaiming the webhook
   - message includes the stop reason in plain language
   - tells the user they can send any text to wake the sandbox again

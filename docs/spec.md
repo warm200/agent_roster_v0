@@ -1,15 +1,15 @@
 ---
-summary: Product spec map for AgentRoster, including where runtime, pricing, credits, and preview behavior are documented.
+summary: Product spec map for OpenRoster, including where runtime, pricing, credits, and preview behavior are documented.
 read_when:
   - Starting work in this repo and deciding which product/runtime doc to read first.
   - Changing preview chat, pricing, runtime lifecycle, bundles, or checkout behavior.
 ---
 
-# AgentRoster Spec Map
+# OpenRoster Spec Map
 
 ## Product Summary
 
-AgentRoster is a managed-agent marketplace and runtime product.
+OpenRoster is a managed-agent marketplace and runtime product.
 
 Core user flow:
 
@@ -27,6 +27,8 @@ Important product distinction:
 - managed runtime is the paid product
 - runtime plans differ by behavior and persistence, not just credits
 - catalog pages should render real synced/DB-backed agents only; mock catalog fallback is not part of the product
+- agent-facing risk labels should be driven by `agents_file/agent-risk-report.json`, with only `risk_driving: true` findings treated as primary risk signals
+- agent setup model placeholders are treated as real defaults at launch time if the user leaves model fields blank
 
 ## Source Of Truth
 
@@ -93,6 +95,7 @@ Preview notes:
 Current runtime provider:
 
 - Daytona, behind the provider interface in `server/providers/run-provider.interface.ts`
+- Telegram pairing is webhook-based; backend polling of Telegram updates is no longer part of the pairing flow
 
 Current lifecycle shape:
 
@@ -104,7 +107,16 @@ Current lifecycle shape:
 - launch checks now reconcile existing managed runs first, so stale manually deleted sandboxes do not continue blocking new launches
 - failed resume attempts now re-sync runtime state before returning the error so the UI falls back to the stopped/recoverable view
 - paired Telegram messages can now auto-wake exactly one stopped Warm Standby run for that order
+- Telegram pairing now requires a public HTTPS `TELEGRAM_WEBHOOK_URL`; local plain-HTTP origins are not a supported pairing transport
+- Telegram bot ownership is state-based:
+  - app webhook owns the bot during pairing and while Warm state is stopped
+  - on successful launch/resume the app deletes the webhook so OpenClaw can take over with long polling
+  - stop / terminate claims the app webhook again for later wake/pairing
+- `Open Control UI` is now gated on real OpenClaw readiness, not just sandbox/runtime `running`
+  - backend waits for the existing OpenClaw process probe to flip the run into the ready summary
+  - UI and Control UI link creation both use that ready summary as the gate
 - stopped Warm Standby runs can now be terminated explicitly to release preserved state and allow a fresh launch for the same bundle
+- when a launch/resume later becomes Control-UI-ready, backend can send one paired Telegram notice that the sandbox is ready for use
 - Telegram auto-wake is conservative by design:
   - if a live run already exists, we only record activity
   - if multiple stopped recoverable Warm runs exist, we do not auto-pick one
