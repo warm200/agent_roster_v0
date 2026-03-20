@@ -121,7 +121,7 @@ const plans = [
     whyExists: 'This plan exists when sleeping and waking becomes the wrong operating model.',
     whoItsFor: 'Teams or operators who need a long-running managed setup with a core workspace kept alive.',
     activeBundles: '3',
-    agentsPerBundle: '8',
+    agentsPerBundle: 'Unlimited',
     triggerMode: 'Persistent workspace',
     alwaysOnBundles: '10',
     accent: 'border-rose-300/25 bg-rose-300/[0.07]',
@@ -134,7 +134,7 @@ const plans = [
     includes: ['Persistent managed runtime', 'Long-running workspace support', 'Persistent workspace'],
     metrics: [
       { label: 'Runtime behavior', value: 'Persistent workspace', icon: Zap },
-      { label: 'Agents in bundle', value: '8', icon: Bot },
+      { label: 'Agents in bundle', value: 'Unlimited', icon: Bot },
       { label: 'Runtime shape', value: 'Long-running setup', icon: Flame },
     ],
     hideBudget: true,

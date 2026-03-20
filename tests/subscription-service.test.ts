@@ -192,6 +192,20 @@ test('warm standby allows large bundles without an agent-count blocker', () => {
   )
 })
 
+test('always on allows large bundles without an agent-count blocker', () => {
+  const policy = buildLaunchPolicyCheck({
+    order: buildOrder(25, 'order-always-large'),
+    plan: getSubscriptionPlan('always_on'),
+    runRows: [],
+    subscription: buildSubscription('always_on', 50),
+  })
+
+  assert.equal(
+    policy.blockers.some((entry) => /agents per launched bundle|at most/i.test(entry)),
+    false,
+  )
+})
+
 test('warm standby launch policy blocks when the same bundle already has a stopped recoverable run', () => {
   const policy = buildLaunchPolicyCheck({
     order: buildOrder(2, 'order-warm'),

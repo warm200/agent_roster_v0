@@ -59,7 +59,7 @@ export const SUBSCRIPTION_PLANS = [
     billingInterval: 'month',
     includedCredits: 100,
     activeBundles: 3,
-    agentsPerBundle: 8,
+    agentsPerBundle: UNLIMITED_AGENTS_PER_BUNDLE,
     triggerMode: 'always_active',
     concurrentRuns: 10,
     alwaysOnBundles: 10,
