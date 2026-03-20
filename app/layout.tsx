@@ -15,9 +15,9 @@ const jetbrainsMono = JetBrains_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'AgentRoster - Personal Ops Agents Marketplace',
+  title: 'OpenRoster.ai - Personal Ops Agents Marketplace',
   description: 'Discover, purchase, and run trusted Personal Ops AI agents. Browse agents for Inbox, Calendar, and Docs workflows.',
-  generator: 'AgentRoster',
+  generator: 'OpenRoster',
 }
 
 export const viewport: Viewport = {

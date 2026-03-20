@@ -372,7 +372,7 @@ if (!chromePath) {
 
       try {
         await page.goto(`${BASE_URL}/app`, { waitUntil: 'domcontentloaded' })
-        await waitForText(page, 'Sign in to AgentRoster')
+        await waitForText(page, 'Sign in to OpenRoster')
         assert.ok(page.url().includes('/login?callbackUrl='), page.url())
       } finally {
         await page.close()

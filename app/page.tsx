@@ -122,7 +122,7 @@ export default function HomePage() {
               </h1>
 
               <p className="mt-6 max-w-2xl text-base leading-8 text-muted-foreground md:text-lg">
-                AgentRoster is not mainly about buying a single agent. It is about composing the right
+                OpenRoster is not mainly about buying a single agent. It is about composing the right
                 combinations, running them as a bundle, and keeping the setups that actually fit your day.
               </p>
 
@@ -493,7 +493,7 @@ export default function HomePage() {
             <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-foreground text-background">
               <Bot className="h-4 w-4" />
             </div>
-            AgentRoster
+            OpenRoster
           </div>
           <p>Compose bundles. Run focused workspaces.</p>
         </div>

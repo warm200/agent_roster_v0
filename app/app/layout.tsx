@@ -40,7 +40,7 @@ export default function AppLayout({
             <div className="w-8 h-8 rounded-lg bg-sidebar-foreground flex items-center justify-center">
               <Bot className="w-5 h-5 text-sidebar" />
             </div>
-            <span>AgentRoster</span>
+            <span>OpenRoster</span>
           </Link>
         </div>
 
@@ -105,7 +105,7 @@ export default function AppLayout({
             <div className="w-8 h-8 rounded-lg bg-foreground flex items-center justify-center">
               <Bot className="w-5 h-5 text-background" />
             </div>
-            <span>AgentRoster</span>
+            <span>OpenRoster</span>
           </Link>
           <nav className="flex items-center gap-1">
             {sidebarLinks.map((link) => (

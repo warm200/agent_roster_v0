@@ -676,7 +676,7 @@ Stripe webhook、provider callback、前端重复点击，都会重放。
 你可以直接把下面这段扔给 Claude / Codex：
 
 ```text
-Implement runtime credit deduction for AgentRoster.
+Implement runtime credit deduction for OpenRoster.
 
 Requirements:
 1. Keep current entitlement checks:

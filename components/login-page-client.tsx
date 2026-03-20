@@ -77,7 +77,7 @@ export function LoginPageClient({ callbackUrl }: { callbackUrl: string }) {
                     <Bot className="h-6 w-6 text-background" />
                   </div>
                   <div>
-                    <CardTitle className="text-3xl">Sign in to AgentRoster</CardTitle>
+                    <CardTitle className="text-3xl">Sign in to OpenRoster</CardTitle>
                     <p className="text-sm text-muted-foreground">
                       Access your bundles, Telegram setup, and run workbench.
                     </p>
