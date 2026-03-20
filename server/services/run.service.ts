@@ -1,4 +1,5 @@
 import { riskProfileSchema, runLogSchema, runResultSchema } from '@/lib/schemas'
+import { canOpenRunControlUi, getRunControlUiBlockedReason } from '@/lib/run-control-ui'
 import { getSubscriptionPlan } from '@/lib/subscription-plans'
 import type {
   AgentVersion,
@@ -527,6 +528,8 @@ function buildRunPatchFromRuntime(
   >,
 ): Partial<Run> {
   const status = mapRuntimeStateToRunStatus(instance.state)
+  const shouldPreserveExistingSummary =
+    instance.state === 'running' || instance.state === 'provisioning'
   const defaultSummary =
     instance.state === 'stopped'
       ? instance.persistenceMode === 'recoverable'
@@ -548,7 +551,7 @@ function buildRunPatchFromRuntime(
     persistenceMode: instance.persistenceMode,
     preservedStateAvailable: instance.preservedStateAvailable,
     recoverableUntilAt: instance.recoverableUntilAt ?? null,
-    resultSummary: run.resultSummary ?? defaultSummary,
+    resultSummary: shouldPreserveExistingSummary ? run.resultSummary ?? defaultSummary : defaultSummary,
     runtimeState: instance.state,
     startedAt: instance.startedAt ?? run.startedAt,
     status,
@@ -938,12 +941,8 @@ export class RunService {
   async getRunControlUiLink(userId: string, runId: string): Promise<RunControlUiLink> {
     const run = await this.getRun(userId, runId)
 
-    if (run.status === 'provisioning') {
-      throw new HttpError(409, 'Control UI is still starting. Try again in a few moments.')
-    }
-
-    if (run.status === 'failed') {
-      throw new HttpError(409, 'Control UI is unavailable because this run is no longer active.')
+    if (!canOpenRunControlUi(run)) {
+      throw new HttpError(409, getRunControlUiBlockedReason(run))
     }
 
     const provider = runServiceDeps.getRunProvider()

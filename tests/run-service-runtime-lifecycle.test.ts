@@ -1734,6 +1734,7 @@ test('run service repairs stale running runtime rows when provider state is miss
 
   assert.equal(run.status, 'completed')
   assert.equal(run.runtimeState, 'deleted')
+  assert.equal(run.resultSummary, 'Managed runtime session ended and state was released.')
   assert.equal(runtimeUpdates.some((update) => update.state === 'deleted'), true)
   assert.equal(usagePatches.some((patch) => patch.workspaceReleasedAt != null), true)
 

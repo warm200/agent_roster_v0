@@ -12,6 +12,7 @@ import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Spinner } from '@/components/ui/spinner'
 import { useRunStatus } from '@/hooks/use-run-status'
+import { canOpenRunControlUi } from '@/lib/run-control-ui'
 import { getRunStatusDisplay } from '@/lib/run-status-display'
 import { formatDateTime } from '@/lib/utils'
 import { createRunControlUiLink, updateRun } from '@/services/runs.api'
@@ -89,7 +90,7 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
   const isActive = run.status === 'provisioning' || run.status === 'running'
   const canResume = canResumeRun(run)
   const canTerminate = canTerminateRun(run)
-  const canOpenControlUi = run.runtimeState ? run.runtimeState === 'running' : run.status === 'running'
+  const canOpenControlUi = canOpenRunControlUi(run)
   const canStop = canStopRun(run)
   const timeline = buildTimeline(run)
 
