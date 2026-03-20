@@ -159,6 +159,9 @@ If you use this path:
 
 - use `pnpm runtime:maintenance:watch`
 - interval: `60s` to `300s`
+- in Docker Compose, run it as a separate long-lived `maintenance` service, not inside the web container
+- for schema changes, use the one-shot helper:
+  - `docker compose run --rm --profile tools migrate`
 
 ### Production on Vercel Pro without separate workers
 

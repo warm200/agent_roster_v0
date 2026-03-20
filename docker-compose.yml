@@ -17,5 +17,71 @@ services:
       timeout: 5s
       retries: 5
 
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: app
+    container_name: openroster-app
+    restart: unless-stopped
+    command: ['/app/docker/entrypoints/run-with-env.sh', 'pnpm', 'start']
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://agent_roster:agent_roster@postgres:5432/agent_roster
+    expose:
+      - '3000'
+    volumes:
+      - ./.env:/app/.env:ro
+      - ./.env.sandbox:/app/.env.sandbox:ro
+
+  maintenance:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: app
+    container_name: openroster-maintenance
+    restart: unless-stopped
+    command: ['/app/docker/entrypoints/run-with-env.sh', 'pnpm', 'runtime:maintenance:watch']
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://agent_roster:agent_roster@postgres:5432/agent_roster
+      RUN_PROVIDER: daytona
+    volumes:
+      - ./.env:/app/.env:ro
+      - ./.env.sandbox:/app/.env.sandbox:ro
+
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: app
+    profiles: ['tools']
+    command: ['/app/docker/entrypoints/run-with-env.sh', 'pnpm', 'db:migrate']
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://agent_roster:agent_roster@postgres:5432/agent_roster
+    restart: 'no'
+    volumes:
+      - ./.env:/app/.env:ro
+      - ./.env.sandbox:/app/.env.sandbox:ro
+
+  nginx:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: nginx
+    container_name: openroster-nginx
+    restart: unless-stopped
+    depends_on:
+      - app
+    ports:
+      - '80:80'
+
 volumes:
   postgres_data:
