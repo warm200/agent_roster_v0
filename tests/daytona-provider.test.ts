@@ -1612,7 +1612,7 @@ test('daytona run provider restarts the same stopped sandbox in place', async ()
 test('daytona run provider recovers archived sandboxes before restart', async () => {
   const runId = 'run-recover-archived-sandbox'
   const createdAt = new Date().toISOString()
-  let recovered = false
+  let started = false
   const files: Record<string, string> = {
     '/tmp/agent-roster/manifest.json': JSON.stringify({
       agentTitles: ['Inbox Triage Agent'],
@@ -1675,11 +1675,8 @@ test('daytona run provider recovers archived sandboxes before restart', async ()
               return { exitCode: 0, result: '' }
             },
           },
-          recover: async () => {
-            recovered = true
-          },
           start: async () => {
-            throw new Error('start should not be used for archived recover')
+            started = true
           },
           state: SandboxState.ARCHIVED,
         }
@@ -1709,7 +1706,7 @@ test('daytona run provider recovers archived sandboxes before restart', async ()
   )
 
   assert.ok(restarted)
-  assert.equal(recovered, true)
+  assert.equal(started, true)
 })
 
 test('daytona run provider exposes recoverableUntilAt for stopped warm standby sandboxes', async () => {

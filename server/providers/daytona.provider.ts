@@ -1272,7 +1272,9 @@ export class DaytonaRunProvider implements RunProvider {
     if (!sandbox) {
       return null
     }
-    if (sandbox.recover) {
+    if ((sandbox.state === SandboxState.ARCHIVED || sandbox.state === SandboxState.ARCHIVING) && sandbox.start) {
+      await sandbox.start(60)
+    } else if (sandbox.recover) {
       await sandbox.recover(60)
     } else if (sandbox.start) {
       await sandbox.start(60)
@@ -1300,8 +1302,8 @@ export class DaytonaRunProvider implements RunProvider {
     if (!sandbox) {
       return null
     }
-    if ((sandbox.state === SandboxState.ARCHIVED || sandbox.state === SandboxState.ARCHIVING) && sandbox.recover) {
-      await sandbox.recover(60)
+    if ((sandbox.state === SandboxState.ARCHIVED || sandbox.state === SandboxState.ARCHIVING) && sandbox.start) {
+      await sandbox.start(60)
     }
     const runtime = await this.restartRun(runId, order, undefined, runtimeConfig)
     if (!runtime) {
