@@ -7,7 +7,13 @@ import {
   subscriptionPlanSchema,
   userSubscriptionSchema,
 } from '@/lib/schemas'
-import { getFreeSubscriptionPlan, getSubscriptionPlan, listSubscriptionPlans } from '@/lib/subscription-plans'
+import {
+  formatAgentsPerBundleLabel,
+  getFreeSubscriptionPlan,
+  getSubscriptionPlan,
+  isUnlimitedAgentsPerBundle,
+  listSubscriptionPlans,
+} from '@/lib/subscription-plans'
 import type {
   CreditTopUpPack,
   Order,
@@ -66,15 +72,17 @@ function getStripeCheckoutClient() {
 }
 
 function buildSessionPriceDescription(plan: SubscriptionPlan) {
+  const agentsPerBundleLabel = formatAgentsPerBundleLabel(plan.agentsPerBundle).toLowerCase()
+
   if (plan.id === 'always_on') {
-    return `Persistent workspace, managed runtime, ${plan.agentsPerBundle} agents per launched bundle.`
+    return `Persistent workspace, managed runtime, ${agentsPerBundleLabel} agents per launched bundle.`
   }
 
   if (plan.billingInterval === 'month') {
-    return `${plan.includedCredits} monthly credits, ${plan.triggerMode === 'auto_wake' ? 'wake on Telegram' : 'manual only'}, ${plan.agentsPerBundle} agents per launched bundle.`
+    return `${plan.includedCredits} monthly credits, ${plan.triggerMode === 'auto_wake' ? 'wake on Telegram' : 'manual only'}, ${agentsPerBundleLabel} agents per launched bundle.`
   }
 
-  return `${plan.includedCredits} credits, manual only, ${plan.agentsPerBundle} agents per launched bundle.`
+  return `${plan.includedCredits} credits, manual only, ${agentsPerBundleLabel} agents per launched bundle.`
 }
 
 function buildTopUpPriceDescription(pack: CreditTopUpPack) {
@@ -185,7 +193,10 @@ export function buildLaunchPolicyCheck(input: {
     blockers.push(`${input.plan.name} does not include run launches.`)
   }
 
-  if (input.order.items.length > input.plan.agentsPerBundle) {
+  if (
+    !isUnlimitedAgentsPerBundle(input.plan.agentsPerBundle) &&
+    input.order.items.length > input.plan.agentsPerBundle
+  ) {
     blockers.push(
       `${input.plan.name} allows at most ${input.plan.agentsPerBundle} agent${input.plan.agentsPerBundle === 1 ? '' : 's'} per launched bundle.`,
     )

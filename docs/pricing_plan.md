@@ -164,7 +164,7 @@ Frontend positioning:
 
 - Price: `$19/mo`
 - Included Credits: `10`
-- Agents per Bundle: `5`
+- Agents per Bundle: `Unlimited`
 - Trigger Mode: `auto_wake`
 - Runtime Access: `true`
 - Best for: repeat Telegram-triggered workflows

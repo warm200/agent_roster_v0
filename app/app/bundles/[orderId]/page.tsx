@@ -17,6 +17,7 @@ import { AgentSetupCard } from '@/components/agent-setup-card'
 import { PlanUpgradeDialog } from '@/components/plan-upgrade-dialog'
 import { TelegramSetupWizard } from '@/components/telegram-setup-wizard'
 import { formatPrice } from '@/lib/mock-data'
+import { formatAgentsPerBundleLabel } from '@/lib/subscription-plans'
 import type { AgentSetup, LaunchPolicyCheck, Order, Run } from '@/lib/types'
 import { formatDate, formatDateTime } from '@/lib/utils'
 import { createOrderRun, getOrder, getOrderDownloads, getOrderLaunchPolicy } from '@/services/orders.api'
@@ -454,7 +455,7 @@ export default function BundleDetailPage({ params }: PageProps) {
               <p className="text-sm text-muted-foreground">
                 Credits {currentCredits}
                 {' · '}
-                Agents per bundle {launchPolicy.plan.agentsPerBundle}
+                Agents per bundle {formatAgentsPerBundleLabel(launchPolicy.plan.agentsPerBundle)}
                 {' · '}
                 Runtime mode {formatPlanTriggerMode(launchPolicy.plan.triggerMode)}
               </p>

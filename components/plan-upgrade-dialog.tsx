@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { Check, CreditCard, Flame, Play, Snowflake, TimerReset } from 'lucide-react'
 import { toast } from 'sonner'
 
+import { formatAgentsPerBundleLabel } from '@/lib/subscription-plans'
 import type { SubscriptionPlanId } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import {
@@ -162,7 +163,7 @@ export function PlanUpgradeDialog({
                   </div>
 
                   <div className="mt-5 space-y-2 text-sm text-zinc-300">
-                    <div>{plan.agentsPerBundle} agents per launched bundle</div>
+                    <div>{formatAgentsPerBundleLabel(plan.agentsPerBundle)} agents per launched bundle</div>
                     <div>
                       {plan.triggerMode === 'manual'
                         ? 'Manual only'

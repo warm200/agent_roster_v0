@@ -1,5 +1,7 @@
 import type { SubscriptionPlan, SubscriptionPlanId } from './types'
 
+export const UNLIMITED_AGENTS_PER_BUNDLE = Number.MAX_SAFE_INTEGER
+
 export const SUBSCRIPTION_PLANS = [
   {
     id: 'free',
@@ -41,7 +43,7 @@ export const SUBSCRIPTION_PLANS = [
     billingInterval: 'month',
     includedCredits: 10,
     activeBundles: 3,
-    agentsPerBundle: 5,
+    agentsPerBundle: UNLIMITED_AGENTS_PER_BUNDLE,
     triggerMode: 'auto_wake',
     concurrentRuns: 3,
     alwaysOnBundles: 0,
@@ -66,6 +68,14 @@ export const SUBSCRIPTION_PLANS = [
     suitFor: 'One core workspace running full time',
   },
 ] as const satisfies readonly SubscriptionPlan[]
+
+export function isUnlimitedAgentsPerBundle(agentsPerBundle: number) {
+  return agentsPerBundle >= UNLIMITED_AGENTS_PER_BUNDLE
+}
+
+export function formatAgentsPerBundleLabel(agentsPerBundle: number) {
+  return isUnlimitedAgentsPerBundle(agentsPerBundle) ? 'Unlimited' : String(agentsPerBundle)
+}
 
 export function listSubscriptionPlans() {
   return [...SUBSCRIPTION_PLANS]

@@ -55,7 +55,7 @@ const plans = [
     budgetBadge: 'Usage budget included',
     budgetDetail: 'Includes 15 runtime credits.',
     bestFor: 'Test one workflow manually',
-    runtimeBehavior: 'Manual bounded session. Start it yourself, test the workflow, and let it auto-stop after inactivity.',
+    runtimeBehavior: 'Manual bounded session. Start it yourself, test the workflow, and let the session end automatically after 30 minutes.',
     whyExists: 'This is the first paid step after preview when you want one real managed run without parallel operating complexity.',
     whoItsFor: 'Solo operators validating a workflow end to end before they commit to repeat use.',
     activeBundles: '1',
@@ -70,14 +70,14 @@ const plans = [
     tone: 'Starting point',
     highlight: undefined,
     hideBudget: undefined,
-    includes: ['Usage budget included', 'Manual bounded session', 'Auto-stop after inactivity'],
+    includes: ['Usage budget included', 'Manual bounded session', 'Session ends automatically after 30 minutes'],
     metrics: [
       { label: 'Runtime behavior', value: 'Bounded manual session', icon: Zap },
       { label: 'Agents in bundle', value: '3', icon: Bot },
       { label: 'Trigger mode', value: 'Manual only', icon: Play },
     ],
     persistence: 'Ephemeral session',
-    stopBehavior: 'Auto-stops after inactivity and may be fully cleaned up.',
+    stopBehavior: 'Session ends automatically after 30 minutes and may be fully cleaned up.',
     recoveryModel: 'New launch',
   },
   {
@@ -86,11 +86,11 @@ const plans = [
     budgetBadge: 'Fair-use runtime budget included',
     budgetDetail: 'Includes 10 runtime credits per month.',
     bestFor: 'Repeat Telegram-triggered workflows',
-    runtimeBehavior: 'Wake on message, work, then auto-sleep when idle. Designed for recoverable runtime state without self-hosting.',
+    runtimeBehavior: 'Wake on message. Each wake session lasts up to 60 minutes, then state is preserved for later resume without self-hosting.',
     whyExists: 'This exists for workflows that should wake repeatedly from Telegram without behaving like a permanent live workspace.',
     whoItsFor: 'Operators running recurring Telegram-triggered workflows who want wake-on-demand behavior with recoverable state.',
     activeBundles: '3',
-    agentsPerBundle: '5',
+    agentsPerBundle: 'Unlimited',
     triggerMode: 'Wake on Telegram',
     alwaysOnBundles: '0',
     accent: 'border-orange-300/25 bg-orange-300/[0.07]',
@@ -101,14 +101,14 @@ const plans = [
     tone: 'Wake on demand',
     highlight: 'Wake on demand',
     hideBudget: undefined,
-    includes: ['Fair-use runtime budget included', 'Wake on message', 'Auto-sleeps when idle'],
+    includes: ['Fair-use runtime budget included', 'Wake on message', 'State is preserved for later resume'],
     metrics: [
       { label: 'Runtime behavior', value: 'Wake on message', icon: Zap },
-      { label: 'Agents in bundle', value: '5', icon: Bot },
+      { label: 'Agents in bundle', value: 'Unlimited', icon: Bot },
       { label: 'Trigger mode', value: 'Telegram wake', icon: TimerReset },
     ],
     persistence: 'Recoverable state',
-    stopBehavior: 'Auto-sleeps when idle instead of behaving like a full-time live workspace.',
+    stopBehavior: 'Wake session lasts up to 60 minutes, then state is preserved for later resume.',
     recoveryModel: 'Sleep and restore',
   },
   {
@@ -165,7 +165,7 @@ const workflowChoices = [
   {
     title: 'Test manually',
     plan: 'Run',
-    description: 'Use this when you want one real managed run, expect it to stop when idle, and do not need recoverable warm state.',
+    description: 'Use this when you want one real managed run, expect a bounded 30-minute session, and do not need recoverable warm state.',
   },
   {
     title: 'Wake on Telegram',
@@ -193,7 +193,7 @@ const supportCallouts = [
   {
     title: 'Warm Standby is for wake-on-message use',
     description:
-      'Best when you want Telegram-triggered repeat workflows that sleep when idle, recover later, and avoid self-hosting.',
+      'Best when you want Telegram-triggered repeat workflows with recoverable state that can resume later without self-hosting.',
   },
   {
     title: 'Always On is for a persistent managed workspace',
@@ -216,12 +216,12 @@ const decisionFaqs = [
   {
     question: 'What is the difference between Run and Warm Standby after a session stops?',
     answer:
-      'Run is the bounded test-session tier: once it stops, you should think in terms of a fresh launch. Warm Standby is the wake-and-recover tier: it is meant to sleep when idle and later resume from preserved state instead of acting like a brand-new environment every time.',
+      'Run is the bounded test-session tier: once it stops, you should think in terms of a fresh launch. Warm Standby is the wake-and-recover tier: each wake session lasts up to 60 minutes and then resumes later from preserved state instead of acting like a brand-new environment every time.',
   },
   {
     question: 'Why would I pay for Warm Standby instead of just buying Run again?',
     answer:
-      'Choose Warm Standby when the same workflow keeps coming back and you care about recoverable state after idle stop. Choose Run when you only need a temporary test session and do not care about keeping warm recoverable context around between wakes.',
+      'Choose Warm Standby when the same workflow keeps coming back and you care about recoverable state after a bounded wake session. Choose Run when you only need a temporary test session and do not care about keeping warm recoverable context around between wakes.',
   },
   {
     question: 'Does stopping always mean deleting everything?',
@@ -231,7 +231,7 @@ const decisionFaqs = [
   {
     question: 'Do plans auto-stop?',
     answer:
-      'Yes. Run is designed as a bounded session, Warm Standby sleeps when idle, and Always On is for a persistent workspace instead of a sleep-first model.',
+      'Yes. Run is designed as a bounded 30-minute session, Warm Standby wakes for sessions up to 60 minutes and preserves state for resume, and Always On is for a persistent workspace instead of a session-first model.',
   },
   {
     question: 'Why not just self-host OpenClaw?',
