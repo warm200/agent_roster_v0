@@ -16,7 +16,10 @@ if [ -f /app/.env ]; then
     value=${line#*=}
 
     if [ -n "$key" ] && [ "$key" != "$line" ]; then
-      export "$key=$value"
+      eval "already_set=\${$key+x}"
+      if [ -z "$already_set" ]; then
+        export "$key=$value"
+      fi
     fi
   done < /app/.env
 fi

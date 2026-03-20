@@ -154,14 +154,17 @@ If you use this path:
 
 - use `pnpm runtime:maintenance:watch`
 - interval: `60s`
+- in Docker dev override mode, `maintenance` can run via:
+  - `pnpm exec tsx watch scripts/runtime-maintenance.ts --watch`
 
 ### Production with worker support
 
 - use `pnpm runtime:maintenance:watch`
 - interval: `60s` to `300s`
 - in Docker Compose, run it as a separate long-lived `maintenance` service, not inside the web container
-- for schema changes, use the one-shot helper:
-  - `docker compose run --rm --profile tools migrate`
+- Docker Compose startup now runs the one-shot `migrate` service before `app` and `maintenance`
+- for manual schema reruns, use:
+  - `docker compose run --rm migrate`
 
 ### Production on Vercel Pro without separate workers
 
