@@ -1,3 +1,57 @@
+x-app-env-files: &app-env-files
+  env_file:
+    - .env
+    - .env.sandbox
+
+x-app-env-vars: &app-env-vars
+  DATABASE_URL: ${DATABASE_URL:-}
+  AUTH_SECRET: ${AUTH_SECRET:-}
+  NEXTAUTH_URL: ${NEXTAUTH_URL:-}
+  GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+  GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+  GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
+  GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
+  STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+  STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+  NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY:-}
+  DOWNLOAD_URL_SECRET: ${DOWNLOAD_URL_SECRET:-}
+  RUN_PROVIDER: ${RUN_PROVIDER:-}
+  DAYTONA_API_KEY: ${DAYTONA_API_KEY:-}
+  DAYTONA_API_URL: ${DAYTONA_API_URL:-}
+  DAYTONA_TARGET: ${DAYTONA_TARGET:-}
+  DAYTONA_SNAPSHOT: ${DAYTONA_SNAPSHOT:-}
+  DAYTONA_ENV_SANDBOX_PATH: ${DAYTONA_ENV_SANDBOX_PATH:-}
+  OPENCLAW_PORT: ${OPENCLAW_PORT:-}
+  OPENCLAW_TEMPLATE_DIR: ${OPENCLAW_TEMPLATE_DIR:-}
+  OPENCLAW_PACKAGE: ${OPENCLAW_PACKAGE:-}
+  OPENAI_RUN_MODEL: ${OPENAI_RUN_MODEL:-}
+  RUNTIME_PROVISIONING_TIMEOUT_MINUTES: ${RUNTIME_PROVISIONING_TIMEOUT_MINUTES:-}
+  RUN_AUTO_STOP_MINUTES: ${RUN_AUTO_STOP_MINUTES:-}
+  RUN_AUTO_DELETE_MINUTES: ${RUN_AUTO_DELETE_MINUTES:-}
+  RUN_AUTO_ARCHIVE_MINUTES: ${RUN_AUTO_ARCHIVE_MINUTES:-}
+  RUN_IDLE_TIMEOUT_MINUTES: ${RUN_IDLE_TIMEOUT_MINUTES:-}
+  RUN_MAX_SESSION_TTL_MINUTES: ${RUN_MAX_SESSION_TTL_MINUTES:-}
+  RUN_CLEANUP_GRACE_MINUTES: ${RUN_CLEANUP_GRACE_MINUTES:-}
+  WARM_STANDBY_AUTO_STOP_MINUTES: ${WARM_STANDBY_AUTO_STOP_MINUTES:-}
+  WARM_STANDBY_AUTO_ARCHIVE_MINUTES: ${WARM_STANDBY_AUTO_ARCHIVE_MINUTES:-}
+  WARM_STANDBY_IDLE_TIMEOUT_MINUTES: ${WARM_STANDBY_IDLE_TIMEOUT_MINUTES:-}
+  WARM_STANDBY_MAX_SESSION_TTL_MINUTES: ${WARM_STANDBY_MAX_SESSION_TTL_MINUTES:-}
+  WARM_STANDBY_CLEANUP_GRACE_MINUTES: ${WARM_STANDBY_CLEANUP_GRACE_MINUTES:-}
+  ALWAYS_ON_SAFETY_AUTO_STOP_MINUTES: ${ALWAYS_ON_SAFETY_AUTO_STOP_MINUTES:-}
+  ALWAYS_ON_HEARTBEAT_MISSING_MINUTES: ${ALWAYS_ON_HEARTBEAT_MISSING_MINUTES:-}
+  ALWAYS_ON_UNHEALTHY_PROVIDER_TIMEOUT_MINUTES: ${ALWAYS_ON_UNHEALTHY_PROVIDER_TIMEOUT_MINUTES:-}
+  RUNTIME_MAINTENANCE_BATCH_SIZE: ${RUNTIME_MAINTENANCE_BATCH_SIZE:-}
+  RUNTIME_MAINTENANCE_STALE_MINUTES: ${RUNTIME_MAINTENANCE_STALE_MINUTES:-}
+  RUNTIME_MAINTENANCE_INTERVAL_SECONDS: ${RUNTIME_MAINTENANCE_INTERVAL_SECONDS:-}
+  RUNTIME_MAINTENANCE_BASE_URL: ${RUNTIME_MAINTENANCE_BASE_URL:-}
+  RUNTIME_MAINTENANCE_HTTP_TIMEOUT_SECONDS: ${RUNTIME_MAINTENANCE_HTTP_TIMEOUT_SECONDS:-}
+  OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+  OPENAI_PREVIEW_MODEL: ${OPENAI_PREVIEW_MODEL:-}
+  TELEGRAM_SECRET_SEED: ${TELEGRAM_SECRET_SEED:-}
+  TELEGRAM_WEBHOOK_URL: ${TELEGRAM_WEBHOOK_URL:-}
+  INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:-}
+  CRON_SECRET: ${CRON_SECRET:-}
+
 services:
   postgres:
     image: postgres:16
@@ -18,6 +72,7 @@ services:
       retries: 5
 
   app:
+    <<: *app-env-files
     build:
       context: .
       dockerfile: Dockerfile
@@ -29,6 +84,7 @@ services:
       migrate:
         condition: service_completed_successfully
     environment:
+      <<: *app-env-vars
       DATABASE_URL: postgres://agent_roster:agent_roster@postgres:5432/agent_roster
     expose:
       - '3000'
@@ -37,6 +93,7 @@ services:
       - ./.env.sandbox:/app/.env.sandbox:ro
 
   maintenance:
+    <<: *app-env-files
     build:
       context: .
       dockerfile: Dockerfile
@@ -48,6 +105,7 @@ services:
       migrate:
         condition: service_completed_successfully
     environment:
+      <<: *app-env-vars
       DATABASE_URL: postgres://agent_roster:agent_roster@postgres:5432/agent_roster
       RUN_PROVIDER: daytona
     volumes:
@@ -55,6 +113,7 @@ services:
       - ./.env.sandbox:/app/.env.sandbox:ro
 
   migrate:
+    <<: *app-env-files
     build:
       context: .
       dockerfile: Dockerfile
@@ -64,6 +123,7 @@ services:
       postgres:
         condition: service_healthy
     environment:
+      <<: *app-env-vars
       DATABASE_URL: postgres://agent_roster:agent_roster@postgres:5432/agent_roster
     restart: 'no'
     volumes:
