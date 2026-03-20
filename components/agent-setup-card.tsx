@@ -16,6 +16,11 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Spinner } from '@/components/ui/spinner'
+import {
+  DEFAULT_AGENT_SETUP_MODEL_FALLBACKS,
+  DEFAULT_AGENT_SETUP_MODEL_PRIMARY,
+  resolveAgentSetupModelDefaults,
+} from '@/lib/agent-setup-defaults'
 import { updateOrderAgentSetup } from '@/services/orders.api'
 import { Eye, EyeOff, KeyRound } from 'lucide-react'
 import { toast } from 'sonner'
@@ -140,15 +145,19 @@ export function AgentSetupCard(props: {
     setIsSaving(true)
 
     try {
-      const agentSetup: Omit<AgentSetup, 'providerKeyStatus'> = {
-        defaultAgentSlug: form.defaultAgentSlug || defaultAgentSlug,
-        workspace: form.workspace.trim() || null,
-        timeFormat: form.timeFormat,
-        modelPrimary: form.modelPrimary.trim() || null,
+      const modelDefaults = resolveAgentSetupModelDefaults({
+        modelPrimary: form.modelPrimary,
         modelFallbacks: form.modelFallbacks
           .split(',')
           .map((value) => value.trim())
           .filter(Boolean),
+      })
+      const agentSetup: Omit<AgentSetup, 'providerKeyStatus'> = {
+        defaultAgentSlug: form.defaultAgentSlug || defaultAgentSlug,
+        workspace: form.workspace.trim() || null,
+        timeFormat: form.timeFormat,
+        modelPrimary: modelDefaults.modelPrimary,
+        modelFallbacks: modelDefaults.modelFallbacks,
         subagentsMaxConcurrent: Number.parseInt(form.subagentsMaxConcurrent, 10) || null,
       }
       const nextVendorApiKeys = Object.fromEntries(
@@ -288,7 +297,7 @@ export function AgentSetupCard(props: {
               id="agent-setup-model-primary"
               value={form.modelPrimary}
               onChange={(event) => setForm((current) => ({ ...current, modelPrimary: event.target.value }))}
-              placeholder="anthropic/claude-sonnet-4-5"
+              placeholder={DEFAULT_AGENT_SETUP_MODEL_PRIMARY}
             />
           </div>
 
@@ -312,7 +321,7 @@ export function AgentSetupCard(props: {
               id="agent-setup-model-fallbacks"
               value={form.modelFallbacks}
               onChange={(event) => setForm((current) => ({ ...current, modelFallbacks: event.target.value }))}
-              placeholder="openai/gpt-5-mini, openrouter/openai/gpt-4.1-mini"
+              placeholder={DEFAULT_AGENT_SETUP_MODEL_FALLBACKS.join(', ')}
             />
           <p className="text-xs text-muted-foreground">
               Comma-separated values write to OpenClaw `agents.defaults.model.fallbacks`.

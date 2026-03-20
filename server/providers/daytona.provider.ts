@@ -15,6 +15,7 @@ import type {
   RuntimeInstanceState,
   SubscriptionPlanId,
 } from '@/lib/types'
+import { resolveAgentSetupModelDefaults } from '@/lib/agent-setup-defaults'
 import { getSubscriptionPlan } from '@/lib/subscription-plans'
 
 import { extractErrorMessage, HttpError, logServerError } from '../lib/http'
@@ -1031,24 +1032,19 @@ function shouldSkipOpenClawBootstrap(
 }
 
 function buildOpenClawAgentDefaultsConfig(agentSetup?: AgentSetup | null) {
-  if (!agentSetup) {
-    return null
-  }
-
   const defaults: Record<string, unknown> = {}
+  const modelDefaults = resolveAgentSetupModelDefaults(agentSetup ?? null)
 
-  if (agentSetup.timeFormat) {
+  if (agentSetup?.timeFormat) {
     defaults.timeFormat = agentSetup.timeFormat
   }
 
-  if (agentSetup.modelPrimary || agentSetup.modelFallbacks.length > 0) {
-    defaults.model = {
-      ...(agentSetup.modelPrimary ? { primary: agentSetup.modelPrimary } : {}),
-      ...(agentSetup.modelFallbacks.length > 0 ? { fallbacks: agentSetup.modelFallbacks } : {}),
-    }
+  defaults.model = {
+    primary: modelDefaults.modelPrimary,
+    fallbacks: modelDefaults.modelFallbacks,
   }
 
-  if (agentSetup.subagentsMaxConcurrent) {
+  if (agentSetup?.subagentsMaxConcurrent) {
     defaults.subagents = {
       maxConcurrent: agentSetup.subagentsMaxConcurrent,
     }

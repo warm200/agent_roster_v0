@@ -3,6 +3,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto'
 import { and, desc, eq } from 'drizzle-orm'
 
 import type { AgentProviderKeyName, AgentSetup } from '@/lib/types'
+import { resolveAgentSetupModelDefaults } from '@/lib/agent-setup-defaults'
 import { createDb, type DbClient } from '../db'
 import { agents, agentVersions, cartItems, carts, orderItems, orders, riskProfiles, runChannelConfigs } from '../db/schema'
 import { EncryptedSecretStore } from '../lib/encrypted-secret-store'
@@ -322,8 +323,11 @@ export async function updateOrderAgentSetupForUser(input: {
     extractProviderApiKeySecretRefs(existingSetup),
     input.vendorApiKeys,
   )
+  const modelDefaults = resolveAgentSetupModelDefaults(input.agentSetup)
   const storedSetup = {
     ...input.agentSetup,
+    modelPrimary: modelDefaults.modelPrimary,
+    modelFallbacks: modelDefaults.modelFallbacks,
     providerApiKeySecretRefs,
   } satisfies Record<string, unknown>
 

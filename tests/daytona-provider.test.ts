@@ -413,6 +413,108 @@ test('daytona run provider stages OpenClaw and returns a signed control ui link'
   )
 })
 
+test('daytona run provider writes default model refs when agent setup leaves models blank', async () => {
+  const sandboxes = new Map<
+    string,
+    {
+      createdAt: string
+      files: Record<string, string>
+      processCommands: string[]
+      state: string
+    }
+  >()
+
+  const provider = new DaytonaRunProvider({
+    apiKey: 'daytona-test',
+    clientFactory: () => ({
+      async create(params) {
+        const runId = String(params?.name)
+        const createdAt = new Date().toISOString()
+        const sandbox = {
+          createdAt,
+          files: {} as Record<string, string>,
+          processCommands: [] as string[],
+          state: 'started',
+        }
+        sandboxes.set(runId, sandbox)
+
+        return {
+          createdAt,
+          delete: async () => {
+            sandbox.state = 'destroyed'
+          },
+          fs: {
+            async downloadFile(filePath: string) {
+              const value = sandbox.files[filePath]
+              if (value === undefined) {
+                const error = new Error(`404 ${filePath}`)
+                ;(error as Error & { status: number }).status = 404
+                throw error
+              }
+
+              return Buffer.from(value, 'utf8')
+            },
+            async uploadFile(file: Buffer, remotePath: string) {
+              sandbox.files[remotePath] = file.toString('utf8')
+            },
+          },
+          getPreviewLink: async () => ({
+            token: 'preview-token',
+            url: 'https://preview.daytona.test/openclaw',
+          }),
+          id: runId,
+          process: {
+            async executeCommand(command: string) {
+              sandbox.processCommands.push(command)
+              if (command.includes('cat /tmp/agent-roster/status.json')) {
+                sandbox.files['/tmp/agent-roster/status.json'] = JSON.stringify({
+                  completedAt: null,
+                  resultSummary: 'Managed runtime is ready for bundle order-test-1. Open Control UI to continue.',
+                  startedAt: new Date().toISOString(),
+                  status: 'running',
+                  updatedAt: new Date().toISOString(),
+                })
+                sandbox.files['/tmp/agent-roster/result.json'] = JSON.stringify({
+                  artifacts: [],
+                  summary: 'Managed runtime is ready for bundle order-test-1. Open Control UI to continue.',
+                })
+              }
+
+              return { exitCode: 0, result: '' }
+            },
+          },
+          state: SandboxState.STARTED,
+        }
+      },
+      async get() {
+        throw new Error('not used')
+      },
+    }),
+  })
+
+  const created = await provider.createRun(
+    {
+      ...order,
+      agentSetup: {
+        ...order.agentSetup!,
+        modelPrimary: null,
+        modelFallbacks: [],
+      },
+    },
+    'run-default-models',
+  )
+
+  const uploadedConfig = JSON.parse(
+    sandboxes.get(created.id)?.files['/home/daytona/.openclaw/openclaw.json'] ?? '{}',
+  )
+
+  assert.equal(uploadedConfig.agents?.defaults?.model?.primary, 'anthropic/claude-sonnet-4-5')
+  assert.deepEqual(uploadedConfig.agents?.defaults?.model?.fallbacks, [
+    'openai/gpt-5-mini',
+    'openrouter/openai/gpt-4.1-mini',
+  ])
+})
+
 test('daytona run provider stages DB-sourced local agent assets into the sandbox workspace', async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), 'daytona-local-agent-'))
   tempDirs.push(rootDir)

@@ -11,6 +11,7 @@ import {
   providerKeyStatusSchema,
   runChannelConfigSchema,
 } from '@/lib/schemas'
+import { resolveAgentSetupModelDefaults } from '@/lib/agent-setup-defaults'
 import type {
   Agent,
   AgentSetup,
@@ -183,13 +184,19 @@ export function buildAgentSetupSnapshot(config: Record<string, unknown> | null):
     !Array.isArray(config.providerApiKeySecretRefs)
       ? (config.providerApiKeySecretRefs as Record<string, unknown>)
       : {}
+  const modelDefaults = resolveAgentSetupModelDefaults({
+    modelPrimary: typeof config.modelPrimary === 'string' ? config.modelPrimary : null,
+    modelFallbacks: Array.isArray(config.modelFallbacks)
+      ? config.modelFallbacks.filter((value): value is string => typeof value === 'string')
+      : [],
+  })
 
   return agentSetupSchema.parse({
     defaultAgentSlug: typeof config.defaultAgentSlug === 'string' ? config.defaultAgentSlug : null,
     workspace: typeof config.workspace === 'string' ? config.workspace : null,
     timeFormat: config.timeFormat,
-    modelPrimary: typeof config.modelPrimary === 'string' ? config.modelPrimary : null,
-    modelFallbacks: Array.isArray(config.modelFallbacks) ? config.modelFallbacks : [],
+    modelPrimary: modelDefaults.modelPrimary,
+    modelFallbacks: modelDefaults.modelFallbacks,
     subagentsMaxConcurrent:
       typeof config.subagentsMaxConcurrent === 'number' ? config.subagentsMaxConcurrent : null,
     providerKeyStatus: providerKeyStatusSchema.parse({
