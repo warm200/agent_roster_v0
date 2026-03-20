@@ -73,6 +73,11 @@ export interface SecretStore {
 export interface TelegramApiClient {
   getMe(token: string): Promise<TelegramBotProfile>
   deleteWebhook(args: { token: string }): Promise<void>
+  sendMessage(args: {
+    token: string
+    chatId: string
+    text: string
+  }): Promise<void>
   setWebhook(args: {
     token: string
     url: string
@@ -239,6 +244,13 @@ class TelegramFetchClient implements TelegramApiClient {
   async deleteWebhook(args: { token: string }) {
     await callTelegramApi(args.token, 'deleteWebhook', {
       drop_pending_updates: 'false',
+    })
+  }
+
+  async sendMessage(args: { token: string; chatId: string; text: string }) {
+    await callTelegramApi(args.token, 'sendMessage', {
+      chat_id: args.chatId,
+      text: args.text,
     })
   }
 
@@ -523,6 +535,30 @@ export function createTelegramService(options: CreateTelegramServiceOptions = {}
       })
 
       return {
+        orderId: args.orderId,
+      }
+    },
+
+    async sendPairedMessage(args: { orderId: string; text: string }) {
+      const context = await loadValidatedChannel(args.orderId)
+
+      if (
+        context.config.recipientBindingStatus !== 'paired' ||
+        !context.config.recipientExternalId
+      ) {
+        return null
+      }
+
+      const botToken = await secretStore.read(context.config.botTokenSecretRef!)
+
+      await apiClient.sendMessage({
+        token: botToken,
+        chatId: context.config.recipientExternalId,
+        text: args.text,
+      })
+
+      return {
+        chatId: context.config.recipientExternalId,
         orderId: args.orderId,
       }
     },

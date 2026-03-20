@@ -65,6 +65,9 @@ read_when:
   - pairing / stopped Warm state => app webhook owns the bot
   - live launched / resumed runtime => app deletes the webhook so OpenClaw can use Telegram long polling
   - stop / terminate reclaims the app webhook for later pairing or Warm wake
+- stopped recoverable Warm runtimes now send a paired Telegram notice after reclaiming the webhook
+  - message includes the stop reason in plain language
+  - tells the user they can send any text to wake the sandbox again
 - auto-wake is intentionally conservative:
   - if the order already has a live run, it only records activity
   - if the order has multiple stopped recoverable Warm candidates, it does not guess

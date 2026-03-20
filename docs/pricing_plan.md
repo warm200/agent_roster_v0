@@ -178,6 +178,7 @@ Frontend positioning:
     - while the runtime is stopped, the app webhook owns the bot so pairing and Warm wake can work
     - after successful launch/resume, the app deletes the webhook so OpenClaw can use Telegram long polling
     - when the runtime stops again, the app reclaims the webhook
+  - when a recoverable Warm runtime stops, the app can notify the paired Telegram user that the sandbox stopped and that any new message will wake it again
   - this is conservative, not fuzzy routing:
     - if one live run already exists, backend only records activity
     - if exactly one stopped recoverable Warm run exists for that bundle/order, backend resumes it

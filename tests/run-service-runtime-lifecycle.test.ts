@@ -154,6 +154,7 @@ test('run service deletes ephemeral runtime state after stop', async () => {
 test('run service preserves recoverable runtime state after stop', async () => {
   let deleteCalled = false
   let claimCalled = false
+  let stoppedNotice: string | null = null
   const runtimeUpdates: Array<Partial<RuntimeInstance>> = []
   const usagePatches: Array<Record<string, unknown>> = []
   const run = {
@@ -299,6 +300,10 @@ test('run service preserves recoverable runtime state after stop', async () => {
           claimCalled = true
           return { orderId: run.orderId, url: 'https://example.com/api/webhooks/telegram?orderId=order-test-1' }
         },
+        sendPairedMessage: async ({ text }: { text: string }) => {
+          stoppedNotice = text
+          return { chatId: '77', orderId: run.orderId }
+        },
       }) as never,
   })
 
@@ -306,6 +311,10 @@ test('run service preserves recoverable runtime state after stop', async () => {
 
   assert.equal(deleteCalled, false)
   assert.equal(claimCalled, true)
+  assert.equal(
+    stoppedNotice,
+    'Your sandbox was stopped. Send any message here to wake it up again.',
+  )
   assert.equal(stopped.status, 'completed')
   assert.equal(runtimeUpdates.some((update) => update.state === 'deleted'), false)
   assert.equal(usagePatches.some((patch) => patch.workspaceMinutes === 10), true)
@@ -316,6 +325,7 @@ test('run service preserves recoverable runtime state after stop', async () => {
 test('run service terminates stopped recoverable warm runtime state', async () => {
   let deleteCalled = false
   let claimCalled = false
+  let sendCalled = false
   const runtimeUpdates: Array<Partial<RuntimeInstance>> = []
   const usagePatches: Array<Record<string, unknown>> = []
   const stoppedAt = '2026-03-18T12:10:00.000Z'
@@ -402,6 +412,10 @@ test('run service terminates stopped recoverable warm runtime state', async () =
           claimCalled = true
           return { orderId: completedRun.orderId, url: 'https://example.com/api/webhooks/telegram?orderId=order-test-1' }
         },
+        sendPairedMessage: async () => {
+          sendCalled = true
+          return { chatId: '77', orderId: completedRun.orderId }
+        },
       }) as never,
   })
 
@@ -409,6 +423,7 @@ test('run service terminates stopped recoverable warm runtime state', async () =
 
   assert.equal(deleteCalled, true)
   assert.equal(claimCalled, true)
+  assert.equal(sendCalled, false)
   assert.equal(terminated.status, 'completed')
   assert.equal(terminated.runtimeState, 'deleted')
   assert.equal(terminated.preservedStateAvailable, false)
@@ -423,6 +438,7 @@ test('run service terminates stopped recoverable warm runtime state', async () =
 
 test('run service honors already stopped recoverable sandboxes when provider stop readback throws', async () => {
   let claimCalled = false
+  let stoppedNotice: string | null = null
   const runtimeUpdates: Array<Partial<RuntimeInstance>> = []
 
   const service = new RunService(
@@ -493,6 +509,10 @@ test('run service honors already stopped recoverable sandboxes when provider sto
           claimCalled = true
           return { orderId: baseOrder.id, url: 'https://example.com/api/webhooks/telegram?orderId=order-test-1' }
         },
+        sendPairedMessage: async ({ text }: { text: string }) => {
+          stoppedNotice = text
+          return { chatId: '77', orderId: baseOrder.id }
+        },
       }) as never,
   })
 
@@ -500,6 +520,10 @@ test('run service honors already stopped recoverable sandboxes when provider sto
 
   assert.equal(stopped.status, 'completed')
   assert.equal(claimCalled, true)
+  assert.equal(
+    stoppedNotice,
+    'Your sandbox was stopped. Send any message here to wake it up again.',
+  )
   assert.equal(stopped.runtimeState, 'stopped')
   assert.equal(stopped.preservedStateAvailable, true)
   assert.equal(runtimeUpdates.some((update) => update.state === 'stopped'), true)

@@ -106,6 +106,7 @@ test('telegram service requires a public https webhook url for pairing', async (
           username: 'ops_bot',
         }
       },
+      async sendMessage() {},
       async setWebhook() {
         setWebhookCalled = true
       },
@@ -159,6 +160,7 @@ test('telegram service disconnects the current bot and resets the channel config
           username: 'ops_bot',
         }
       },
+      async sendMessage() {},
       async setWebhook() {},
     },
     repository,
@@ -199,6 +201,7 @@ test('telegram service surfaces unreadable stored bot credentials clearly when p
           username: 'ops_bot',
         }
       },
+      async sendMessage() {},
       async setWebhook() {},
     },
     repository,
@@ -252,6 +255,7 @@ test('telegram service marks paired recipient messages as runtime activity', asy
           username: 'ops_bot',
         }
       },
+      async sendMessage() {},
       async setWebhook() {},
     },
     repository,
@@ -297,6 +301,7 @@ test('telegram service pairs pending chats from webhook start messages', async (
           username: 'ops_bot',
         }
       },
+      async sendMessage() {},
       async setWebhook() {},
     },
     repository,
@@ -355,6 +360,7 @@ test('telegram service appends the telegram webhook route when only a base url i
           username: 'ops_bot',
         }
       },
+      async sendMessage() {},
       async setWebhook(args) {
         registeredWebhookUrl = args.url
       },
@@ -402,6 +408,7 @@ test('telegram service can reclaim the app webhook for a paired order', async ()
       async getMe() {
         return { id: 42, username: 'ops_bot' }
       },
+      async sendMessage() {},
       async setWebhook(args) {
         registeredWebhookUrl = args.url
         registeredSecret = args.secretToken
@@ -445,6 +452,7 @@ test('telegram service can release the app webhook back to runtime polling', asy
       async getMe() {
         return { id: 42, username: 'ops_bot' }
       },
+      async sendMessage() {},
       async setWebhook() {},
     },
     repository,
@@ -467,6 +475,58 @@ test('telegram service can release the app webhook back to runtime polling', asy
   assert.equal(deletedWebhookToken, 'telegram-token')
 })
 
+test('telegram service can send a paired message to the bound recipient', async () => {
+  const { repository, context } = createRepository()
+  let delivered: { chatId: string; text: string; token: string } | null = null
+
+  Object.assign(context.config, {
+    recipientBindingStatus: 'paired' as const,
+    recipientExternalId: '77',
+  })
+
+  const service = createTelegramService({
+    apiClient: {
+      async deleteWebhook() {},
+      async getMe() {
+        return { id: 42, username: 'ops_bot' }
+      },
+      async sendMessage(args) {
+        delivered = {
+          chatId: args.chatId,
+          text: args.text,
+          token: args.token,
+        }
+      },
+      async setWebhook() {},
+    },
+    repository,
+    secretSeed: 'test-secret',
+    secretStore: {
+      async read() {
+        return 'telegram-token'
+      },
+      async write() {
+        return 'secret-ref'
+      },
+    },
+  })
+
+  const result = await service.sendPairedMessage({
+    orderId: context.orderId,
+    text: 'Your sandbox stopped due to inactivity. Send any message here to wake it up.',
+  })
+
+  assert.deepEqual(result, {
+    chatId: '77',
+    orderId: context.orderId,
+  })
+  assert.deepEqual(delivered, {
+    chatId: '77',
+    text: 'Your sandbox stopped due to inactivity. Send any message here to wake it up.',
+    token: 'telegram-token',
+  })
+})
+
 test('telegram service marks pairing pending before webhook registration completes', async () => {
   process.env.NEXTAUTH_URL = 'https://example.com'
   process.env.TELEGRAM_WEBHOOK_URL = 'https://example.com/api/webhooks/telegram'
@@ -483,6 +543,7 @@ test('telegram service marks pairing pending before webhook registration complet
           username: 'ops_bot',
         }
       },
+      async sendMessage() {},
       async setWebhook() {
         const result = await service.handleWebhook({
           orderId: context.orderId,
