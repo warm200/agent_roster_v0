@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import type { Run, RuntimeInstance } from '@/lib/types'
+import type { Order, Run, RuntimeInstance } from '@/lib/types'
 import { RunService, setRunServiceDepsForTesting } from '@/server/services/run.service'
 
 const baseRun: Run = {
@@ -47,8 +47,30 @@ const baseRuntimeRecord: RuntimeInstance = {
   updatedAt: new Date().toISOString(),
 }
 
+const baseOrder: Order = {
+  amountCents: 1900,
+  bundleRisk: {
+    highestRiskDriver: 'Test Agent',
+    level: 'low',
+    summary: 'Low-risk test bundle.',
+  },
+  cartId: 'cart-test-1',
+  channelConfig: null,
+  createdAt: new Date().toISOString(),
+  currency: 'USD',
+  id: 'order-test-1',
+  items: [],
+  paidAt: new Date().toISOString(),
+  paymentProvider: 'stripe',
+  paymentReference: 'pi_test_1',
+  status: 'paid',
+  updatedAt: new Date().toISOString(),
+  userId: 'user-test-1',
+}
+
 test('run service deletes ephemeral runtime state after stop', async () => {
   let deleteCalled = false
+  let claimCalled = false
   const runtimeUpdates: Array<Partial<RuntimeInstance>> = []
 
   const service = new RunService(
@@ -78,6 +100,7 @@ test('run service deletes ephemeral runtime state after stop', async () => {
   )
 
   setRunServiceDepsForTesting({
+    getOrderByIdForUser: async () => baseOrder,
     getRunProvider: () => ({
       name: 'daytona',
       async createRun() {
@@ -109,11 +132,19 @@ test('run service deletes ephemeral runtime state after stop', async () => {
         deleteCalled = true
       },
     }),
+    getTelegramService: () =>
+      ({
+        claimWebhookForApp: async () => {
+          claimCalled = true
+          return { orderId: baseOrder.id, url: 'https://example.com/api/webhooks/telegram?orderId=order-test-1' }
+        },
+      }) as never,
   })
 
   const stopped = await service.stopRun('user-test-1', 'run-test-1')
 
   assert.equal(deleteCalled, true)
+  assert.equal(claimCalled, true)
   assert.equal(stopped.status, 'completed')
   assert.equal(runtimeUpdates.some((update) => update.state === 'deleted'), true)
 
@@ -122,6 +153,7 @@ test('run service deletes ephemeral runtime state after stop', async () => {
 
 test('run service preserves recoverable runtime state after stop', async () => {
   let deleteCalled = false
+  let claimCalled = false
   const runtimeUpdates: Array<Partial<RuntimeInstance>> = []
   const usagePatches: Array<Record<string, unknown>> = []
   const run = {
@@ -221,6 +253,11 @@ test('run service preserves recoverable runtime state after stop', async () => {
   )
 
   setRunServiceDepsForTesting({
+    getOrderByIdForUser: async () => ({
+      ...baseOrder,
+      id: run.orderId,
+      userId: run.userId,
+    }),
     getRunProvider: () => ({
       name: 'daytona',
       async createRun() {
@@ -256,11 +293,19 @@ test('run service preserves recoverable runtime state after stop', async () => {
         deleteCalled = true
       },
     }),
+    getTelegramService: () =>
+      ({
+        claimWebhookForApp: async () => {
+          claimCalled = true
+          return { orderId: run.orderId, url: 'https://example.com/api/webhooks/telegram?orderId=order-test-1' }
+        },
+      }) as never,
   })
 
   const stopped = await service.stopRun('user-test-1', 'run-test-1')
 
   assert.equal(deleteCalled, false)
+  assert.equal(claimCalled, true)
   assert.equal(stopped.status, 'completed')
   assert.equal(runtimeUpdates.some((update) => update.state === 'deleted'), false)
   assert.equal(usagePatches.some((patch) => patch.workspaceMinutes === 10), true)
@@ -270,6 +315,7 @@ test('run service preserves recoverable runtime state after stop', async () => {
 
 test('run service terminates stopped recoverable warm runtime state', async () => {
   let deleteCalled = false
+  let claimCalled = false
   const runtimeUpdates: Array<Partial<RuntimeInstance>> = []
   const usagePatches: Array<Record<string, unknown>> = []
   const stoppedAt = '2026-03-18T12:10:00.000Z'
@@ -324,6 +370,11 @@ test('run service terminates stopped recoverable warm runtime state', async () =
   )
 
   setRunServiceDepsForTesting({
+    getOrderByIdForUser: async () => ({
+      ...baseOrder,
+      id: completedRun.orderId,
+      userId: completedRun.userId,
+    }),
     getRunProvider: () => ({
       name: 'daytona',
       async createRun() {
@@ -345,11 +396,19 @@ test('run service terminates stopped recoverable warm runtime state', async () =
         return null
       },
     }),
+    getTelegramService: () =>
+      ({
+        claimWebhookForApp: async () => {
+          claimCalled = true
+          return { orderId: completedRun.orderId, url: 'https://example.com/api/webhooks/telegram?orderId=order-test-1' }
+        },
+      }) as never,
   })
 
   const terminated = await service.terminateRun(completedRun.userId, completedRun.id)
 
   assert.equal(deleteCalled, true)
+  assert.equal(claimCalled, true)
   assert.equal(terminated.status, 'completed')
   assert.equal(terminated.runtimeState, 'deleted')
   assert.equal(terminated.preservedStateAvailable, false)
@@ -363,6 +422,7 @@ test('run service terminates stopped recoverable warm runtime state', async () =
 })
 
 test('run service honors already stopped recoverable sandboxes when provider stop readback throws', async () => {
+  let claimCalled = false
   const runtimeUpdates: Array<Partial<RuntimeInstance>> = []
 
   const service = new RunService(
@@ -405,6 +465,7 @@ test('run service honors already stopped recoverable sandboxes when provider sto
   )
 
   setRunServiceDepsForTesting({
+    getOrderByIdForUser: async () => baseOrder,
     getRunProvider: () => ({
       name: 'daytona',
       async createRun() {
@@ -426,11 +487,19 @@ test('run service honors already stopped recoverable sandboxes when provider sto
         throw new Error('Sandbox is not started')
       },
     }),
+    getTelegramService: () =>
+      ({
+        claimWebhookForApp: async () => {
+          claimCalled = true
+          return { orderId: baseOrder.id, url: 'https://example.com/api/webhooks/telegram?orderId=order-test-1' }
+        },
+      }) as never,
   })
 
   const stopped = await service.stopRun('user-test-1', 'run-test-1')
 
   assert.equal(stopped.status, 'completed')
+  assert.equal(claimCalled, true)
   assert.equal(stopped.runtimeState, 'stopped')
   assert.equal(stopped.preservedStateAvailable, true)
   assert.equal(runtimeUpdates.some((update) => update.state === 'stopped'), true)
@@ -439,6 +508,7 @@ test('run service honors already stopped recoverable sandboxes when provider sto
 })
 
 test('run service marks runtime deleted when stop succeeds logically but provider sandbox is already gone', async () => {
+  let claimCalled = false
   const runtimeUpdates: Array<Partial<RuntimeInstance>> = []
   const closedIntervals: Array<{ runtimeInstanceId: string; reason: string | null }> = []
 
@@ -470,6 +540,7 @@ test('run service marks runtime deleted when stop succeeds logically but provide
   )
 
   setRunServiceDepsForTesting({
+    getOrderByIdForUser: async () => baseOrder,
     getRunProvider: () => ({
       name: 'daytona',
       async createRun() {
@@ -491,11 +562,19 @@ test('run service marks runtime deleted when stop succeeds logically but provide
         return null
       },
     }),
+    getTelegramService: () =>
+      ({
+        claimWebhookForApp: async () => {
+          claimCalled = true
+          return { orderId: baseOrder.id, url: 'https://example.com/api/webhooks/telegram?orderId=order-test-1' }
+        },
+      }) as never,
   })
 
   const stopped = await service.stopRun('user-test-1', 'run-test-1')
 
   assert.equal(stopped.status, 'completed')
+  assert.equal(claimCalled, false)
   assert.equal(runtimeUpdates.some((update) => update.state === 'deleted'), true)
   assert.deepEqual(closedIntervals, [{ runtimeInstanceId: baseRuntimeRecord.id, reason: 'manual_stop' }])
 
@@ -503,6 +582,7 @@ test('run service marks runtime deleted when stop succeeds logically but provide
 })
 
 test('run service marks runtime deleted when provider stop falls back to a terminal run without runtime state', async () => {
+  let claimCalled = false
   const runtimeUpdates: Array<Partial<RuntimeInstance>> = []
   const closedIntervals: Array<{ runtimeInstanceId: string; reason: string | null }> = []
 
@@ -534,6 +614,7 @@ test('run service marks runtime deleted when provider stop falls back to a termi
   )
 
   setRunServiceDepsForTesting({
+    getOrderByIdForUser: async () => baseOrder,
     getRunProvider: () => ({
       name: 'daytona',
       async createRun() {
@@ -561,11 +642,19 @@ test('run service marks runtime deleted when provider stop falls back to a termi
         return null
       },
     }),
+    getTelegramService: () =>
+      ({
+        claimWebhookForApp: async () => {
+          claimCalled = true
+          return { orderId: baseOrder.id, url: 'https://example.com/api/webhooks/telegram?orderId=order-test-1' }
+        },
+      }) as never,
   })
 
   const stopped = await service.stopRunForReason('user-test-1', 'run-test-1', 'idle_timeout')
 
   assert.equal(stopped.status, 'failed')
+  assert.equal(claimCalled, true)
   assert.equal(runtimeUpdates.some((update) => update.state === 'deleted'), true)
   assert.deepEqual(closedIntervals, [{ runtimeInstanceId: baseRuntimeRecord.id, reason: 'idle_timeout' }])
 
@@ -706,6 +795,13 @@ test('run service resumes recoverable stopped runtime state from completed statu
         return null
       },
     }),
+    getTelegramService: () =>
+      ({
+        releaseWebhookToRuntimePolling: async () => {
+          calls.push('telegram.releaseWebhookToRuntimePolling')
+          return { orderId: completedRun.orderId }
+        },
+      }) as never,
   })
 
   const resumed = await service.retryRun(completedRun.userId, completedRun.id)
@@ -719,6 +815,7 @@ test('run service resumes recoverable stopped runtime state from completed statu
     'runtime.updateRuntimeInstance',
     'runtime.createRuntimeInterval',
     'subscription.commitReservedLaunchCredit',
+    'telegram.releaseWebhookToRuntimePolling',
     'repository.updateRunUsage',
     'repository.updateRunUsage',
     'repository.updateRun',
@@ -924,6 +1021,13 @@ test('run service auto-wakes a single stopped warm standby run for an order', as
         return null
       },
     }),
+    getTelegramService: () =>
+      ({
+        releaseWebhookToRuntimePolling: async () => {
+          calls.push('telegram.releaseWebhookToRuntimePolling')
+          return { orderId: stoppedRun.orderId }
+        },
+      }) as never,
   })
 
   const wake = await service.wakeStoppedRunForOrder(stoppedRun.orderId, occurredAt)
@@ -937,6 +1041,7 @@ test('run service auto-wakes a single stopped warm standby run for an order', as
   assert.equal(calls.includes('provider.restartRuntimeInstance'), true)
   assert.equal(calls.includes('subscription.reserve'), true)
   assert.equal(calls.includes('subscription.commit'), true)
+  assert.equal(calls.includes('telegram.releaseWebhookToRuntimePolling'), true)
 
   setRunServiceDepsForTesting(null)
 })

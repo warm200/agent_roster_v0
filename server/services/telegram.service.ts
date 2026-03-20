@@ -366,6 +366,18 @@ export function createTelegramService(options: CreateTelegramServiceOptions = {}
     )
   const apiClient = options.apiClient ?? new TelegramFetchClient()
 
+  async function loadValidatedChannel(orderId: string) {
+    const context = await repository.findOrderChannel(orderId)
+
+    if (!context) {
+      throw new HttpError(404, 'Order not found.')
+    }
+
+    assertValidatedToken(context)
+
+    return context
+  }
+
   return {
     async getChannelConfig(args: { orderId: string; userId: string }) {
       const context = await repository.ensureOrderChannelForUser(args.orderId, args.userId)
@@ -480,6 +492,38 @@ export function createTelegramService(options: CreateTelegramServiceOptions = {}
         pairingCommand: botUsername
           ? `https://t.me/${botUsername}?start=${pairingToken}`
           : `Open Telegram and send /start ${pairingToken} to your bot.`,
+      }
+    },
+
+    async claimWebhookForApp(args: { orderId: string; origin?: string }) {
+      const context = await loadValidatedChannel(args.orderId)
+      const botToken = await secretStore.read(context.config.botTokenSecretRef!)
+      const webhookSecret = buildWebhookSecret(args.orderId, requiredSecretSeed)
+      const webhookUrl = resolveTelegramWebhookEndpoint(args.origin)
+      webhookUrl.searchParams.set('orderId', args.orderId)
+
+      await apiClient.setWebhook({
+        token: botToken,
+        url: webhookUrl.toString(),
+        secretToken: webhookSecret,
+      })
+
+      return {
+        orderId: args.orderId,
+        url: webhookUrl.toString(),
+      }
+    },
+
+    async releaseWebhookToRuntimePolling(args: { orderId: string }) {
+      const context = await loadValidatedChannel(args.orderId)
+      const botToken = await secretStore.read(context.config.botTokenSecretRef!)
+
+      await apiClient.deleteWebhook({
+        token: botToken,
+      })
+
+      return {
+        orderId: args.orderId,
       }
     },
 

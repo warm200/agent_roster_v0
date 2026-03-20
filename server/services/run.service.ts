@@ -13,7 +13,7 @@ import type {
   SubscriptionPlan,
 } from '@/lib/types'
 
-import { HttpError } from '../lib/http'
+import { HttpError, logServerError } from '../lib/http'
 import { scanAgentVersion as scanAgentVersionRiskProfile } from '../lib/risk-engine'
 import { getRunProvider } from '../providers'
 import type { RunControlUiLink, RuntimeProviderInstance } from '../providers/run-provider.interface'
@@ -619,6 +619,30 @@ export class RunService {
     private readonly launchAttemptRepository: LaunchAttemptRepository = new LaunchAttemptRepository(),
   ) {}
 
+  private async releaseTelegramWebhookToRuntimePolling(order: Pick<Order, 'id'>) {
+    try {
+      await runServiceDeps.getTelegramService().releaseWebhookToRuntimePolling?.({
+        orderId: order.id,
+      })
+    } catch (error) {
+      logServerError('run-service:telegram:release-webhook', error, {
+        orderId: order.id,
+      })
+    }
+  }
+
+  private async claimTelegramWebhookForApp(order: Pick<Order, 'id'>) {
+    try {
+      await runServiceDeps.getTelegramService().claimWebhookForApp?.({
+        orderId: order.id,
+      })
+    } catch (error) {
+      logServerError('run-service:telegram:claim-webhook', error, {
+        orderId: order.id,
+      })
+    }
+  }
+
   async createRun(userId: string, orderId: string) {
     await runServiceDeps.getTelegramService().getChannelConfig({ orderId, userId })
     const order = await runServiceDeps.getOrderByIdForUser({ orderId, userId })
@@ -765,6 +789,7 @@ export class RunService {
         if (!providerRun) {
           return
         }
+        await this.releaseTelegramWebhookToRuntimePolling(order)
         await subscriptionService.commitReservedLaunchCredit?.({
           plan: launchPolicy.plan,
           runId,
@@ -917,6 +942,10 @@ export class RunService {
     const run = await this.requireRun(userId, runId)
     const syncedRun = await this.syncRun(run, true).catch(() => run)
     const runtimeRecord = await this.findRuntimeRecordSafe(run.id)
+    const order = await runServiceDeps.getOrderByIdForUser({
+      orderId: run.orderId,
+      userId,
+    })
 
     if (!canTerminateRecoverableRuntime(runtimeRecord)) {
       throw new HttpError(409, 'Only stopped Warm Standby runs can be terminated.')
@@ -976,12 +1005,17 @@ export class RunService {
       updatedAt: deletedAt,
       workspaceReleasedAt: deletedAt,
     })
+    await this.claimTelegramWebhookForApp(order)
 
     return applyRuntimeStateToRun(nextRun, deletedRuntime)
   }
 
   async stopRunForReason(userId: string, runId: string, reason: RunTerminationReason) {
     const run = await this.requireRun(userId, runId)
+    const order = await runServiceDeps.getOrderByIdForUser({
+      orderId: run.orderId,
+      userId,
+    })
     const runtimeRecord = await this.findRuntimeRecordSafe(run.id)
     const provider = runServiceDeps.getRunProvider()
     let runtime: RuntimeProviderInstance | null = null
@@ -1023,6 +1057,7 @@ export class RunService {
         ...buildRunPatchFromRuntime(run, runtime),
       }
       await this.repository.updateRunUsage?.(run.id, buildReleasedUsagePatch(nextRun, reason))
+      await this.claimTelegramWebhookForApp(order)
       if (updatedRuntime?.id) {
         await this.closeRuntimeIntervalSafe(updatedRuntime.id, nowIso(), reason)
       }
@@ -1070,6 +1105,7 @@ export class RunService {
       await this.closeRuntimeIntervalSafe(runtimeRecord.id, releasedAt, reason)
     }
     await this.repository.updateRunUsage?.(run.id, buildReleasedUsagePatch(nextRun, reason))
+    await this.claimTelegramWebhookForApp(order)
     return nextRun
   }
 
@@ -1209,6 +1245,7 @@ export class RunService {
         runId: run.id,
         userId,
       })
+      await this.releaseTelegramWebhookToRuntimePolling(order)
       await this.updateRunningUsageSafe(run.id, {
         activityAt: resolveProviderActivityTimestamp(restarted),
         providerAcceptedAt: restarted.startedAt ?? nowIso(),

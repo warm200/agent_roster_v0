@@ -383,6 +383,90 @@ test('telegram service appends the telegram webhook route when only a base url i
   )
 })
 
+test('telegram service can reclaim the app webhook for a paired order', async () => {
+  process.env.NEXTAUTH_URL = 'https://example.com'
+  process.env.TELEGRAM_WEBHOOK_URL = 'https://example.com/api/webhooks/telegram'
+
+  const { repository, context } = createRepository()
+  let registeredWebhookUrl: string | null = null
+  let registeredSecret: string | null = null
+
+  Object.assign(context.config, {
+    recipientBindingStatus: 'paired' as const,
+    recipientExternalId: '77',
+  })
+
+  const service = createTelegramService({
+    apiClient: {
+      async deleteWebhook() {},
+      async getMe() {
+        return { id: 42, username: 'ops_bot' }
+      },
+      async setWebhook(args) {
+        registeredWebhookUrl = args.url
+        registeredSecret = args.secretToken
+      },
+    },
+    repository,
+    secretSeed: 'test-secret',
+    secretStore: {
+      async read() {
+        return 'telegram-token'
+      },
+      async write() {
+        return 'secret-ref'
+      },
+    },
+  })
+
+  const result = await service.claimWebhookForApp({
+    orderId: context.orderId,
+  })
+
+  assert.equal(result.url, `https://example.com/api/webhooks/telegram?orderId=${context.orderId}`)
+  assert.equal(registeredWebhookUrl, result.url)
+  assert.equal(registeredSecret, createHmac('sha256', 'test-secret').update(context.orderId).digest('hex'))
+})
+
+test('telegram service can release the app webhook back to runtime polling', async () => {
+  const { repository, context } = createRepository()
+  let deletedWebhookToken: string | null = null
+
+  Object.assign(context.config, {
+    recipientBindingStatus: 'paired' as const,
+    recipientExternalId: '77',
+  })
+
+  const service = createTelegramService({
+    apiClient: {
+      async deleteWebhook(args) {
+        deletedWebhookToken = args.token
+      },
+      async getMe() {
+        return { id: 42, username: 'ops_bot' }
+      },
+      async setWebhook() {},
+    },
+    repository,
+    secretSeed: 'test-secret',
+    secretStore: {
+      async read() {
+        return 'telegram-token'
+      },
+      async write() {
+        return 'secret-ref'
+      },
+    },
+  })
+
+  const result = await service.releaseWebhookToRuntimePolling({
+    orderId: context.orderId,
+  })
+
+  assert.equal(result.orderId, context.orderId)
+  assert.equal(deletedWebhookToken, 'telegram-token')
+})
+
 test('telegram service marks pairing pending before webhook registration completes', async () => {
   process.env.NEXTAUTH_URL = 'https://example.com'
   process.env.TELEGRAM_WEBHOOK_URL = 'https://example.com/api/webhooks/telegram'

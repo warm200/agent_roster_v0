@@ -61,6 +61,10 @@ read_when:
 - explicit stop requests are now idempotent against already stopped Daytona sandboxes instead of surfacing `Sandbox is not started` back to the UI
 - paired Telegram inbound messages can now auto-resume exactly one stopped Warm Standby runtime for the order
 - stopped Warm Standby runtimes can now be terminated explicitly, which deletes preserved state and clears the fresh-launch blocker for that bundle
+- Telegram bot ownership now hands off by runtime state:
+  - pairing / stopped Warm state => app webhook owns the bot
+  - live launched / resumed runtime => app deletes the webhook so OpenClaw can use Telegram long polling
+  - stop / terminate reclaims the app webhook for later pairing or Warm wake
 - auto-wake is intentionally conservative:
   - if the order already has a live run, it only records activity
   - if the order has multiple stopped recoverable Warm candidates, it does not guess

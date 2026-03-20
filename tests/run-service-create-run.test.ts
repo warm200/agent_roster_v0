@@ -216,6 +216,10 @@ test('run service refreshes telegram pairing state before launch checks', async 
           calls.push('telegram.getChannelConfig')
           return order.channelConfig!
         },
+        releaseWebhookToRuntimePolling: async () => {
+          calls.push('telegram.releaseWebhookToRuntimePolling')
+          return { orderId: order.id }
+        },
       } as unknown as ReturnType<typeof getTelegramService>),
   })
 
@@ -232,6 +236,7 @@ test('run service refreshes telegram pairing state before launch checks', async 
     'loadProviderKeys',
     'subscription.reserveLaunchCredit',
     'provider.createRun',
+    'telegram.releaseWebhookToRuntimePolling',
     'subscription.commitReservedLaunchCredit',
   ])
 })
@@ -500,6 +505,10 @@ test('run service refunds reserved credit when provider never accepts the launch
     getTelegramService: () =>
       ({
         getChannelConfig: async () => order.channelConfig!,
+        releaseWebhookToRuntimePolling: async () => {
+          calls.push('telegram.releaseWebhookToRuntimePolling')
+          return { orderId: order.id }
+        },
       } as unknown as ReturnType<typeof getTelegramService>),
   })
 
@@ -859,4 +868,5 @@ test('run service re-syncs stopped runtime state when managed resume throws', as
   )
 
   assert.equal(calls.includes('repository.updateRun'), true)
+  assert.equal(calls.includes('telegram.releaseWebhookToRuntimePolling'), false)
 })
