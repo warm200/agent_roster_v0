@@ -6,6 +6,7 @@ import type { Agent, AgentCategory, PreviewMessage, RiskLevel } from '@/lib/type
 import { createDb, type DbClient } from '../db'
 import { agents, agentVersions, riskProfiles } from '../db/schema'
 import { HttpError } from '../lib/http'
+import { buildFallbackAgentRiskReview, loadAgentRiskReviewMap } from './agent-risk-reports'
 import { buildLocalAgentThumbnailUrl, syncLocalAgentsToDb } from './local-agent-files'
 
 type AgentRow = typeof agents.$inferSelect
@@ -138,12 +139,18 @@ export function createCatalogService(
   return {
     async listAgents(filters = {}) {
       const records = await deps.listAgentRecords(filters)
-      return filterAgents(records.map(toAgent), filters)
+      const riskReviews = await loadAgentRiskReviewMap()
+      return filterAgents(records.map((record) => toAgent(record, riskReviews.get(record.agent.slug))), filters)
     },
 
     async getAgentBySlug(slug) {
       const record = await deps.getAgentRecordBySlug(slug)
-      return record ? toAgent(record) : null
+      if (!record) {
+        return null
+      }
+
+      const riskReviews = await loadAgentRiskReviewMap()
+      return toAgent(record, riskReviews.get(record.agent.slug))
     },
 
     async previewInterview(input) {
@@ -248,7 +255,7 @@ async function hydrateAgentRecords(agentRows: AgentRow[]): Promise<DbAgentRecord
   }))
 }
 
-function toAgent(record: DbAgentRecord): Agent {
+function toAgent(record: DbAgentRecord, riskReview: Agent['riskReview'] = null): Agent {
   const currentVersionRow = record.versions[0]
   if (!currentVersionRow) {
     throw new Error(`Agent "${record.agent.slug}" has no versions.`)
@@ -268,6 +275,14 @@ function toAgent(record: DbAgentRecord): Agent {
     priceCents: record.agent.priceCents,
     currency: record.agent.currency,
     status: record.agent.status,
+    riskReview:
+      riskReview ??
+      buildFallbackAgentRiskReview({
+        displayName: record.agent.title,
+        storedRiskLevel: currentVersionRow.riskProfile.riskLevel,
+        storedScanSummary: currentVersionRow.riskProfile.scanSummary,
+        summary: record.agent.summary,
+      }),
     currentVersion: {
       id: currentVersionRow.version.id,
       agentId: currentVersionRow.version.agentId,

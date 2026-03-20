@@ -2,15 +2,17 @@
 
 import { use, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
+import { AgentRiskBadge } from '@/components/agent-risk-badge'
 import { Header } from '@/components/header'
-import { RiskBadge } from '@/components/risk-badge'
 import { PreviewChat } from '@/components/preview-chat'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { getAgentCapabilityChips, getAgentRiskLevel, getAgentSummary } from '@/lib/agent-risk'
 import { formatPrice } from '@/lib/mock-data'
 import { useCart } from '@/lib/cart-context'
 import { useAuth } from '@/lib/auth-context'
@@ -24,15 +26,27 @@ import {
   MessageSquare,
   ChevronLeft,
   CheckCircle2,
-  XCircle,
+  ScrollText,
   Shield,
   GitBranch,
   AlertTriangle,
   Bot,
+  ChevronDown,
+  FileText,
 } from 'lucide-react'
 
 interface PageProps {
   params: Promise<{ slug: string }>
+}
+
+function getVisibleChangelog(markdown: string) {
+  const sanitized = markdown
+    .split('\n')
+    .filter((line) => !line.includes('Imported from `agents_file/'))
+    .join('\n')
+    .trim()
+
+  return sanitized || '- Initial catalog release'
 }
 
 export default function AgentDetailPage({ params }: PageProps) {
@@ -117,8 +131,10 @@ export default function AgentDetailPage({ params }: PageProps) {
   }
 
   const { currentVersion } = agent
-  const { riskProfile } = currentVersion
   const inCart = isInCart(agent.id)
+  const riskLevel = getAgentRiskLevel(agent)
+  const riskSummary = getAgentSummary(agent)
+  const capabilityChips = getAgentCapabilityChips(agent, 4)
 
   const handleAddToCart = () => {
     addItem(agent)
@@ -149,7 +165,7 @@ export default function AgentDetailPage({ params }: PageProps) {
                   </AvatarFallback>
                 </Avatar>
                 <Badge variant="secondary">{agent.category}</Badge>
-                <RiskBadge level={riskProfile.riskLevel} />
+                <AgentRiskBadge level={riskLevel} />
               </div>
               <h1 className="text-3xl font-bold text-foreground mb-3">{agent.title}</h1>
               <p className="text-lg text-muted-foreground">{agent.summary}</p>
@@ -168,7 +184,7 @@ export default function AgentDetailPage({ params }: PageProps) {
                     <CardHeader>
                       <CardTitle className="flex items-center gap-2 text-lg">
                         <CheckCircle2 className="w-5 h-5 text-emerald-400" />
-                        What this agent does
+                        Capabilities
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
@@ -191,8 +207,8 @@ export default function AgentDetailPage({ params }: PageProps) {
                   <Card>
                     <CardHeader>
                       <CardTitle className="flex items-center gap-2 text-lg">
-                        <XCircle className="w-5 h-5 text-red-400" />
-                        What this agent does NOT do
+                        <ScrollText className="w-5 h-5 text-sky-300" />
+                        Rules
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
@@ -217,22 +233,90 @@ export default function AgentDetailPage({ params }: PageProps) {
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2 text-lg">
                       <Shield className="w-5 h-5" />
-                      Risk Profile
+                      Risk Review
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    <div className="flex items-center gap-3 pb-4 border-b border-border">
-                      <RiskBadge level={riskProfile.riskLevel} size="lg" />
+                    <div className="flex flex-wrap items-center gap-3 border-b border-border pb-4">
+                      <AgentRiskBadge level={riskLevel} />
+                      {capabilityChips.map((chip) => (
+                        <span
+                          key={chip.id}
+                          className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-secondary/60 px-2.5 py-1 text-xs text-muted-foreground"
+                        >
+                          <chip.icon className="h-3.5 w-3.5" />
+                          <span>{chip.label}</span>
+                        </span>
+                      ))}
                     </div>
 
-                    <p className="text-sm text-muted-foreground">{riskProfile.scanSummary}</p>
+                    <p className="text-sm leading-6 text-muted-foreground">{riskSummary}</p>
 
-                    <div className="grid grid-cols-2 gap-4 pt-4">
-                      <RiskFlag label="Chat Only" value={riskProfile.chatOnly} positive="text-emerald-400" />
-                      <RiskFlag label="Read Files" value={riskProfile.readFiles} positive="text-amber-400" />
-                      <RiskFlag label="Write Files" value={riskProfile.writeFiles} positive="text-red-400" />
-                      <RiskFlag label="Network" value={riskProfile.network} positive="text-amber-400" />
-                      <RiskFlag label="Shell Access" value={riskProfile.shell} positive="text-red-400" />
+                    <div className="space-y-4 pt-2">
+                      <div>
+                        <h3 className="text-sm font-medium text-foreground">Key findings</h3>
+                        {agent.riskReview?.primaryFindings.length ? (
+                          <div className="mt-3 space-y-3">
+                            {agent.riskReview.primaryFindings.slice(0, 3).map((finding) => (
+                              <div key={`${finding.code}-${finding.filePath ?? 'none'}-${finding.title}`} className="rounded-xl border border-border/70 bg-secondary/30 p-4">
+                                <div className="flex flex-wrap items-center justify-between gap-3">
+                                  <p className="font-medium text-foreground">{finding.title}</p>
+                                  <span className="rounded-full border border-red-500/30 bg-red-500/10 px-2 py-0.5 text-[11px] tracking-[0.14em] text-red-300">
+                                    {finding.severity}
+                                  </span>
+                                </div>
+                                {finding.evidenceSnippet ? (
+                                  <p className="mt-3 text-sm leading-6 text-muted-foreground">{finding.evidenceSnippet}</p>
+                                ) : null}
+                                {finding.filePath ? (
+                                  <div className="mt-3 inline-flex items-center gap-2 text-xs text-muted-foreground">
+                                    <FileText className="h-3.5 w-3.5" />
+                                    <span>{finding.filePath}</span>
+                                  </div>
+                                ) : null}
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="mt-3 rounded-xl border border-border/70 bg-secondary/20 p-4 text-sm text-muted-foreground">
+                            No high-confidence risky behavior detected.
+                          </div>
+                        )}
+                      </div>
+
+                      <Collapsible defaultOpen={false}>
+                        <CollapsibleTrigger className="flex w-full items-center justify-between gap-3 rounded-xl border border-border/70 bg-secondary/20 px-4 py-3 text-left">
+                          <div>
+                            <p className="text-sm font-medium text-foreground">Additional context</p>
+                            <p className="mt-1 text-xs text-muted-foreground">Descriptive findings that help explain the agent without driving the primary badge.</p>
+                          </div>
+                          <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                        </CollapsibleTrigger>
+                        <CollapsibleContent className="space-y-3 pt-3">
+                          {agent.riskReview?.additionalContext.length ? (
+                            agent.riskReview.additionalContext.map((finding) => (
+                              <div key={`${finding.code}-${finding.filePath ?? 'context'}-${finding.title}`} className="rounded-xl border border-border/70 bg-secondary/20 p-4">
+                                <div className="flex flex-wrap items-center justify-between gap-3">
+                                  <p className="font-medium text-foreground">{finding.title}</p>
+                                  <span className="rounded-full border border-border/70 bg-background/70 px-2 py-0.5 text-[11px] tracking-[0.14em] text-muted-foreground">
+                                    {finding.severity}
+                                  </span>
+                                </div>
+                                {finding.evidenceSnippet ? (
+                                  <p className="mt-3 text-sm leading-6 text-muted-foreground">{finding.evidenceSnippet}</p>
+                                ) : null}
+                                {finding.filePath ? (
+                                  <div className="mt-3 text-xs text-muted-foreground">{finding.filePath}</div>
+                                ) : null}
+                              </div>
+                            ))
+                          ) : (
+                            <div className="rounded-xl border border-border/70 bg-secondary/20 p-4 text-sm text-muted-foreground">
+                              No additional context was recorded for this agent.
+                            </div>
+                          )}
+                        </CollapsibleContent>
+                      </Collapsible>
                     </div>
                   </CardContent>
                 </Card>
@@ -258,9 +342,8 @@ export default function AgentDetailPage({ params }: PageProps) {
                         </span>
                       </div>
                       <div className="text-sm text-muted-foreground">
-                        <p className="mb-2 text-foreground">{currentVersion.releaseNotes}</p>
-                        <pre className="bg-secondary p-3 rounded-lg whitespace-pre-wrap">
-                          {currentVersion.changelogMarkdown}
+                        <pre className="rounded-lg bg-secondary p-3 whitespace-pre-wrap">
+                          {getVisibleChangelog(currentVersion.changelogMarkdown)}
                         </pre>
                       </div>
                     </div>
@@ -374,25 +457,6 @@ export default function AgentDetailPage({ params }: PageProps) {
           </div>
         </div>
       </div>
-    </div>
-  )
-}
-
-function RiskFlag({
-  label,
-  positive,
-  value,
-}: {
-  label: string
-  positive: string
-  value: boolean
-}) {
-  return (
-    <div className="flex items-center justify-between p-3 bg-secondary rounded-lg">
-      <span className="text-sm">{label}</span>
-      <span className={value ? positive : 'text-muted-foreground'}>
-        {value ? 'Yes' : 'No'}
-      </span>
     </div>
   )
 }

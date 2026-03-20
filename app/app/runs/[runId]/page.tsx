@@ -12,6 +12,7 @@ import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Spinner } from '@/components/ui/spinner'
 import { useRunStatus } from '@/hooks/use-run-status'
+import { calculateBundleRiskFromAgents } from '@/lib/bundle-risk'
 import { canOpenRunControlUi } from '@/lib/run-control-ui'
 import { getRunStatusDisplay } from '@/lib/run-status-display'
 import { formatDateTime } from '@/lib/utils'
@@ -93,6 +94,7 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
   const canOpenControlUi = canOpenRunControlUi(run)
   const canStop = canStopRun(run)
   const timeline = buildTimeline(run)
+  const liveBundleRisk = calculateBundleRiskFromAgents(run.agents)
 
   const handleStop = async () => {
     if (!run || isCancelling) {
@@ -384,7 +386,7 @@ export default function RunDetailPage({ params }: RunDetailPageProps) {
               <Separator />
               <div>
                 <div className="mb-2 text-xs text-muted-foreground">Combined risk</div>
-                <RiskBadge level={run.combinedRiskLevel} />
+                <RiskBadge level={liveBundleRisk.level} />
               </div>
             </CardContent>
           </Card>

@@ -3,8 +3,8 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { AgentRiskBadge } from '@/components/agent-risk-badge'
 import { Header } from '@/components/header'
-import { RiskBadge } from '@/components/risk-badge'
 import { BundleRiskSummary } from '@/components/bundle-risk-summary'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
@@ -12,6 +12,7 @@ import { Separator } from '@/components/ui/separator'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import { Spinner } from '@/components/ui/spinner'
+import { getAgentRiskLevel } from '@/lib/agent-risk'
 import { useCart } from '@/lib/cart-context'
 import { formatPrice } from '@/lib/mock-data'
 import { createCheckoutSession } from '@/services/checkout.api'
@@ -122,11 +123,7 @@ export default function CheckoutPage() {
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
                           <span className="font-medium">{item.agent.title}</span>
-                          <RiskBadge
-                            level={item.agentVersion.riskProfile.riskLevel}
-                            size="sm"
-                            showLabel={false}
-                          />
+                          <AgentRiskBadge level={getAgentRiskLevel(item.agent)} />
                         </div>
                         <span>{formatPrice(item.agent.priceCents, item.agent.currency)}</span>
                       </div>

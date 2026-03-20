@@ -16,6 +16,7 @@ import { CreditTopUpDialog } from '@/components/credit-top-up-dialog'
 import { AgentSetupCard } from '@/components/agent-setup-card'
 import { PlanUpgradeDialog } from '@/components/plan-upgrade-dialog'
 import { TelegramSetupWizard } from '@/components/telegram-setup-wizard'
+import { calculateBundleRiskFromVersions } from '@/lib/bundle-risk'
 import { formatPrice } from '@/lib/mock-data'
 import { formatAgentsPerBundleLabel } from '@/lib/subscription-plans'
 import type { AgentSetup, LaunchPolicyCheck, Order, Run } from '@/lib/types'
@@ -304,6 +305,12 @@ export default function BundleDetailPage({ params }: PageProps) {
   const planAllowsLaunch = launchPolicy ? launchPolicy.allowed : true
   const canLaunchRun = order.status === 'paid' && hasTelegramSetup && planAllowsLaunch
   const effectiveDefaultAgentSlug = order.agentSetup?.defaultAgentSlug ?? order.items[0]?.agent.slug ?? null
+  const liveBundleRisk = calculateBundleRiskFromVersions(
+    order.items.map((item) => ({
+      title: item.agent.title,
+      version: item.agentVersion,
+    })),
+  )
   const hasPlanBlockers = Boolean(launchPolicy && launchPolicy.blockers.length > 0)
   const currentCredits = launchPolicy?.subscription?.remainingCredits ?? launchPolicy?.plan.includedCredits ?? 0
   const canTopUpCredits = Boolean(
@@ -494,7 +501,7 @@ export default function BundleDetailPage({ params }: PageProps) {
 
         {/* Agents Tab */}
         <TabsContent value="agents" className="space-y-6">
-          <BundleRiskSummary bundleRisk={order.bundleRisk} />
+          <BundleRiskSummary bundleRisk={liveBundleRisk} />
 
           <AgentSetupCard
             orderId={order.id}

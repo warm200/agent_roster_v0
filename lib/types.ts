@@ -2,6 +2,7 @@
 
 // Risk levels
 export type RiskLevel = 'low' | 'medium' | 'high'
+export type AgentRiskReviewLevel = 'info' | 'medium' | 'high'
 
 // Run statuses
 export type RunStatus = 'provisioning' | 'running' | 'completed' | 'failed'
@@ -79,6 +80,31 @@ export interface RiskProfile {
   createdAt: string
 }
 
+export interface AgentRiskCapabilityFlags {
+  fileWrite: boolean
+  network: boolean
+  secrets: boolean
+  shell: boolean
+}
+
+export interface AgentRiskFinding {
+  code: string
+  evidenceSnippet: string | null
+  filePath: string | null
+  riskDriving: boolean
+  severity: string
+  title: string
+}
+
+export interface AgentRiskReview {
+  additionalContext: AgentRiskFinding[]
+  capabilityFlags: AgentRiskCapabilityFlags
+  displayName: string
+  level: AgentRiskReviewLevel
+  primaryFindings: AgentRiskFinding[]
+  summary: string
+}
+
 // Agent Version
 export interface AgentVersion {
   id: string
@@ -106,6 +132,7 @@ export interface Agent {
   priceCents: number
   currency: string
   status: AgentStatus
+  riskReview?: AgentRiskReview | null
   currentVersion: AgentVersion
   createdAt: string
   updatedAt: string

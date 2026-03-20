@@ -1,13 +1,14 @@
 'use client'
 
 import Link from 'next/link'
+import { AgentRiskBadge } from '@/components/agent-risk-badge'
 import { Header } from '@/components/header'
-import { RiskBadge } from '@/components/risk-badge'
 import { BundleRiskSummary } from '@/components/bundle-risk-summary'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { getAgentRiskLevel } from '@/lib/agent-risk'
 import { useCart } from '@/lib/cart-context'
 import { formatPrice } from '@/lib/mock-data'
 import { Trash2, ShoppingCart, ArrowRight, Package } from 'lucide-react'
@@ -84,10 +85,7 @@ export default function CartPage() {
 
                         <div className="flex items-center justify-between mt-4">
                           <div className="flex items-center gap-3">
-                            <RiskBadge
-                              level={item.agentVersion.riskProfile.riskLevel}
-                              size="sm"
-                            />
+                            <AgentRiskBadge level={getAgentRiskLevel(item.agent)} />
                             <span className="text-xs text-muted-foreground">
                               v{item.agentVersion.version}
                             </span>

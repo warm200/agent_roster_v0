@@ -32,6 +32,7 @@ import {
 const timestampSchema = z.string().min(1)
 
 export const riskLevelSchema = z.enum(RISK_LEVELS)
+export const agentRiskReviewLevelSchema = z.enum(['info', 'medium', 'high'])
 export const runStatusSchema = z.enum(RUN_STATUSES)
 export const agentTimeFormatSchema = z.enum(AGENT_TIME_FORMATS)
 export const orderStatusSchema = z.enum(ORDER_STATUSES)
@@ -71,6 +72,31 @@ export const riskProfileSchema = z.object({
   createdAt: timestampSchema,
 })
 
+export const agentRiskCapabilityFlagsSchema = z.object({
+  fileWrite: z.boolean(),
+  network: z.boolean(),
+  secrets: z.boolean(),
+  shell: z.boolean(),
+})
+
+export const agentRiskFindingSchema = z.object({
+  code: z.string().min(1),
+  evidenceSnippet: z.string().nullable(),
+  filePath: z.string().nullable(),
+  riskDriving: z.boolean(),
+  severity: z.string().min(1),
+  title: z.string().min(1),
+})
+
+export const agentRiskReviewSchema = z.object({
+  additionalContext: z.array(agentRiskFindingSchema),
+  capabilityFlags: agentRiskCapabilityFlagsSchema,
+  displayName: z.string().min(1),
+  level: agentRiskReviewLevelSchema,
+  primaryFindings: z.array(agentRiskFindingSchema),
+  summary: z.string().min(1),
+})
+
 export const agentVersionSchema = z.object({
   id: z.string().min(1),
   agentId: z.string().min(1),
@@ -96,6 +122,7 @@ export const agentSchema = z.object({
   priceCents: z.number().int().nonnegative(),
   currency: z.string().length(3),
   status: agentStatusSchema,
+  riskReview: agentRiskReviewSchema.nullable().optional(),
   currentVersion: agentVersionSchema,
   createdAt: timestampSchema,
   updatedAt: timestampSchema,

@@ -365,7 +365,7 @@ async function buildLocalAgentDefinition(agentDir: string): Promise<LocalAgentDe
     runtimeSource,
     versionRow: {
       agentId,
-      changelogMarkdown: `- Imported from \`${runtimeSource.sourceRootRelativePath}\``,
+      changelogMarkdown: '- Initial catalog release',
       createdAt,
       id: versionId,
       installPackageUrl: `/api/agents/${slug}/download`,

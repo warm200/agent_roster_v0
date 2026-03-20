@@ -7,10 +7,11 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useCart } from '@/lib/cart-context'
+import { AGENT_FILTER_OPTIONS, matchesAgentCatalogFilter, sortAgentsForCatalog } from '@/lib/agent-risk'
 import { getAgents } from '@/services/catalog.api'
 import { toast } from 'sonner'
 import type { Agent, AgentCategory } from '@/lib/types'
-import { Search, Mail, Calendar, FileText, Zap, BarChart3, LayoutGrid, AlertTriangle } from 'lucide-react'
+import { Search, Mail, Calendar, FileText, Zap, BarChart3, LayoutGrid } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const categoryIcons = {
@@ -31,6 +32,7 @@ const categoryLabels: Record<AgentCategory, string> = {
 
 export default function AgentsPage() {
   const [selectedCategory, setSelectedCategory] = useState<AgentCategory | null>(null)
+  const [selectedFilter, setSelectedFilter] = useState<(typeof AGENT_FILTER_OPTIONS)[number]['id']>('all')
   const [searchQuery, setSearchQuery] = useState('')
   const [agents, setAgents] = useState<Agent[]>([])
   const [categories, setCategories] = useState<AgentCategory[]>([])
@@ -87,6 +89,12 @@ export default function AgentsPage() {
       .sort((left, right) => categoryLabels[left].localeCompare(categoryLabels[right]))
   }, [categories])
 
+  const visibleAgents = useMemo(() => {
+    return sortAgentsForCatalog(
+      agents.filter((agent) => matchesAgentCatalogFilter(agent, selectedFilter)),
+    )
+  }, [agents, selectedFilter])
+
   const handleAddToCart = (agent: Agent) => {
     addItem(agent)
     toast.success(`${agent.title} added to cart`)
@@ -123,46 +131,81 @@ export default function AgentsPage() {
 
           <main className="flex-1 min-w-0">
             <div className="mb-8">
-              <h1 className="text-3xl font-bold text-foreground mb-2">Agent Catalog</h1>
-              <p className="text-muted-foreground">
-                Browse and purchase Personal Ops agents for your workflows.
+              <h1 className="mb-2 text-3xl font-bold text-foreground">Agent Catalog</h1>
+              <p className="max-w-3xl text-muted-foreground">
+                Scan the catalog by visible risk first. Open any agent to review the evidence in full and try the preview chat there.
               </p>
             </div>
 
-            <div className="relative mb-8">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                type="search"
-                placeholder="Search agents..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10 bg-card"
-              />
+            <div className="mb-8 space-y-4 rounded-[1.5rem] border border-border/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.02),rgba(10,10,12,0.92))] p-4">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  type="search"
+                  placeholder="Search agents..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="border-border/70 bg-card pl-10"
+                />
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {AGENT_FILTER_OPTIONS.map((filter) => (
+                  <Button
+                    key={filter.id}
+                    className={cn(
+                      'rounded-full',
+                      selectedFilter === filter.id ? '' : 'bg-background/60',
+                    )}
+                    onClick={() => setSelectedFilter(filter.id)}
+                    size="sm"
+                    variant={selectedFilter === filter.id ? 'default' : 'outline'}
+                  >
+                    {filter.label}
+                  </Button>
+                ))}
+              </div>
             </div>
 
             {isLoading ? (
               <CatalogSkeleton />
             ) : loadError ? (
-              <div className="rounded-lg border border-red-500/30 bg-red-500/5 p-6 text-center">
-                <AlertTriangle className="mx-auto mb-3 h-6 w-6 text-red-400" />
-                <p className="font-medium text-red-400">Unable to load agents</p>
-                <p className="mt-1 text-sm text-muted-foreground">{loadError}</p>
+              <div className="rounded-[1.5rem] border border-border/70 bg-card p-8 text-center">
+                <p className="font-medium text-foreground">Unable to load agents</p>
+                <p className="mt-2 text-sm text-muted-foreground">{loadError}</p>
               </div>
-            ) : agents.length > 0 ? (
-              <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-6">
-                {agents.map((agent) => (
-                  <AgentCard
-                    key={agent.id}
-                    agent={agent}
-                    onAddToCart={handleAddToCart}
-                    isInCart={isInCart(agent.id)}
-                  />
-                ))}
-              </div>
+            ) : visibleAgents.length > 0 ? (
+              <>
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <p className="text-sm text-muted-foreground">
+                    {visibleAgents.length} agent{visibleAgents.length === 1 ? '' : 's'} shown
+                  </p>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                  {visibleAgents.map((agent) => (
+                    <AgentCard
+                      key={agent.id}
+                      agent={agent}
+                      onAddToCart={handleAddToCart}
+                      isInCart={isInCart(agent.id)}
+                    />
+                  ))}
+                </div>
+              </>
             ) : (
-              <div className="text-center py-16">
-                <p className="text-muted-foreground mb-4">No agents found matching your criteria.</p>
-                <Button variant="outline" onClick={() => { setSearchQuery(''); setSelectedCategory(null) }}>
+              <div className="rounded-[1.5rem] border border-border/70 bg-card px-6 py-14 text-center">
+                <p className="text-base text-foreground">No agents match this view.</p>
+                <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted-foreground">
+                  Try a broader search or switch back to a calmer filter. This view only shows agents matching the selected risk criteria.
+                </p>
+                <Button
+                  className="mt-5"
+                  variant="outline"
+                  onClick={() => {
+                    setSearchQuery('')
+                    setSelectedCategory(null)
+                    setSelectedFilter('all')
+                  }}
+                >
                   Clear filters
                 </Button>
               </div>

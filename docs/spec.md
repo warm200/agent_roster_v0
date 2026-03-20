@@ -28,6 +28,7 @@ Important product distinction:
 - runtime plans differ by behavior and persistence, not just credits
 - catalog pages should render real synced/DB-backed agents only; mock catalog fallback is not part of the product
 - agent-facing risk labels should be driven by `agents_file/agent-risk-report.json`, with only `risk_driving: true` findings treated as primary risk signals
+- bundle detail and run detail combined-risk displays should be recomputed from the actual agents in the bundle/run, not trusted from stale stored aggregate fields
 - agent setup model placeholders are treated as real defaults at launch time if the user leaves model fields blank
 
 ## Source Of Truth
