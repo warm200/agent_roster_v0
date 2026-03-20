@@ -1377,7 +1377,6 @@ export class DaytonaRunProvider implements RunProvider {
           runId,
         },
         name: runId,
-        networkBlockAll: !order.items.some((item) => item.agentVersion.riskProfile.network),
         public: true,
         snapshot: this.daytonaSnapshot,
       },

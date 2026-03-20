@@ -515,6 +515,77 @@ test('daytona run provider writes default model refs when agent setup leaves mod
   ])
 })
 
+test('daytona run provider does not request sandbox-wide network blocking', async () => {
+  let createParams: Record<string, unknown> | undefined
+
+  const provider = new DaytonaRunProvider({
+    apiKey: 'daytona-test',
+    clientFactory: () => ({
+      async create(params) {
+        createParams = params
+
+        return {
+          createdAt: new Date().toISOString(),
+          delete: async () => {},
+          fs: {
+            async downloadFile() {
+              throw new Error('not used')
+            },
+            async uploadFile() {},
+          },
+          getPreviewLink: async () => ({
+            token: 'preview-token',
+            url: 'https://preview.daytona.test/openclaw',
+          }),
+          id: 'run-no-network-block',
+          process: {
+            async executeCommand(command: string) {
+              if (command.includes('cat /tmp/agent-roster/status.json')) {
+                return {
+                  exitCode: 0,
+                  result: JSON.stringify({
+                    completedAt: null,
+                    resultSummary: 'Managed runtime is ready for bundle order-test-1. Open Control UI to continue.',
+                    startedAt: new Date().toISOString(),
+                    status: 'running',
+                    updatedAt: new Date().toISOString(),
+                  }),
+                }
+              }
+
+              return { exitCode: 0, result: '' }
+            },
+          },
+          state: SandboxState.STARTED,
+          stop: async () => {},
+        }
+      },
+      async get() {
+        throw new Error('not used')
+      },
+    }),
+  })
+
+  await provider.createRun(
+    {
+      ...order,
+      items: order.items.map((item) => ({
+        ...item,
+        agentVersion: {
+          ...item.agentVersion,
+          riskProfile: {
+            ...item.agentVersion.riskProfile,
+            network: false,
+          },
+        },
+      })),
+    },
+    'run-no-network-block',
+  )
+
+  assert.equal(Object.prototype.hasOwnProperty.call(createParams ?? {}, 'networkBlockAll'), false)
+})
+
 test('daytona run provider stages DB-sourced local agent assets into the sandbox workspace', async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), 'daytona-local-agent-'))
   tempDirs.push(rootDir)
