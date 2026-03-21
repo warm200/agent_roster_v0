@@ -286,3 +286,56 @@ test('telegram webhook route records runtime activity for paired inbound message
   assert.equal(payload.outcome, 'runtime_activity')
   assert.equal(payload.wake.outcome, 'already_live')
 })
+
+test('telegram webhook route sends a paired notice when wake is blocked by exhausted credits', async () => {
+  let pairedNotice:
+    | { orderId: string; text: string }
+    | undefined
+
+  setTelegramServiceForTesting({
+    async handleWebhook(): Promise<TelegramWebhookResult> {
+      return {
+        chatId: '77',
+        outcome: 'runtime_activity',
+      }
+    },
+    async sendPairedMessage(args: { orderId: string; text: string }) {
+      pairedNotice = args
+      return {
+        chatId: '77',
+        orderId: args.orderId,
+      }
+    },
+  } as never)
+
+  setRunServiceForTesting({
+    async wakeStoppedRunForOrder() {
+      throw new HttpError(409, 'No credits remaining on the current subscription.')
+    },
+  } as unknown as RunService)
+
+  const response = await telegramWebhook(
+    new NextRequest('http://localhost/api/webhooks/telegram?orderId=order-test-1', {
+      body: JSON.stringify({
+        message: {
+          chat: { id: 77 },
+          text: 'wake up',
+        },
+      }),
+      headers: {
+        'x-telegram-bot-api-secret-token': 'secret-token',
+      },
+      method: 'POST',
+    }),
+  )
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.deepEqual(pairedNotice, {
+    orderId: 'order-test-1',
+    text: 'Unable to wake your sandbox because no runtime credits remain on the current subscription. Add credits or upgrade, then send another message to retry.',
+  })
+  assert.equal(payload.outcome, 'runtime_activity')
+  assert.equal(payload.wake.outcome, 'blocked')
+  assert.equal(payload.wake.reason, 'credits_exhausted')
+})

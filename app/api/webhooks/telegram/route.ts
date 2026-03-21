@@ -1,8 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-import { HttpError } from '@/server/lib/http'
+import { HttpError, logServerError } from '@/server/lib/http'
 import { getRunService } from '@/server/services/run.service'
 import { getTelegramService, type TelegramUpdate } from '@/server/services/telegram.service'
+
+const CREDITS_EXHAUSTED_FRAGMENT = 'no credits remaining'
+
+function isCreditsExhaustedWakeError(error: unknown) {
+  return (
+    error instanceof HttpError &&
+    error.status === 409 &&
+    error.message.toLowerCase().includes(CREDITS_EXHAUSTED_FRAGMENT)
+  )
+}
+
+function buildCreditsExhaustedWakeNotice() {
+  return 'Unable to wake your sandbox because no runtime credits remain on the current subscription. Add credits or upgrade, then send another message to retry.'
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -21,11 +35,39 @@ export async function POST(request: NextRequest) {
     })
 
     if (result.outcome === 'runtime_activity') {
-      const wake = await getRunService().wakeStoppedRunForOrder(orderId)
-      return NextResponse.json({
-        ...result,
-        wake,
-      })
+      try {
+        const wake = await getRunService().wakeStoppedRunForOrder(orderId)
+        return NextResponse.json({
+          ...result,
+          wake,
+        })
+      } catch (error) {
+        if (isCreditsExhaustedWakeError(error)) {
+          try {
+            await getTelegramService().sendPairedMessage?.({
+              orderId,
+              text: buildCreditsExhaustedWakeNotice(),
+            })
+          } catch (sendError) {
+            logServerError('api/webhooks/telegram:wake:credits_notice', sendError, {
+              orderId,
+            })
+          }
+
+          return NextResponse.json({
+            ...result,
+            wake: {
+              occurredAt: new Date().toISOString(),
+              orderId,
+              outcome: 'blocked',
+              reason: 'credits_exhausted',
+              runId: null,
+            },
+          })
+        }
+
+        throw error
+      }
     }
 
     return NextResponse.json(result)

@@ -74,6 +74,7 @@ read_when:
 - auto-wake is intentionally conservative:
   - if the order already has a live run, it only records activity
   - if the order has multiple stopped recoverable Warm candidates, it does not guess
+- if a paired Telegram wake is blocked because the subscription has no runtime credits left, the webhook now sends a paired "credits exhausted" notice instead of surfacing only a generic webhook failure
 - internal trigger route exists at `POST /api/internal/runtime-maintenance/reconcile`
 - cron-compatible GET trigger exists at `GET /api/internal/runtime-maintenance/reconcile`
 - CLI/cron entrypoint exists:
@@ -90,14 +91,15 @@ read_when:
 ### Meaningful activity clock
 
 - `run_usage.lastMeaningfulActivityAt` now exists
+- `run_usage.lastOpenClawSessionActivityAt`, `lastOpenClawSessionProbeAt`, and `openClawSessionCount` now exist
 - repository access is backward-compatible with pre-`0006` dev databases that do not have the column yet
-- launch/restart/reconcile initialize it when runtime becomes active
 - internal activity touch route exists at:
   - `POST /api/internal/runs/[runId]/activity`
 - page reads do not update the activity clock
 - first real producer is wired:
   - inbound Telegram messages for already-paired orders touch active unreleased runs on that order
-- provider-side progress timestamps now advance meaningful activity when a synced run reports newer runtime progress
+- maintenance now probes OpenClaw session stores directly and uses the max session `updatedAt` as the real sandbox idle clock
+- provider-side progress timestamps no longer advance meaningful activity
 
 ### Plan-aware stop behavior
 
