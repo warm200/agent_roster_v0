@@ -14,6 +14,8 @@ import {
   orders,
   runChannelConfigs,
   runUsage,
+  runtimeInstances,
+  runtimeIntervals,
   userSubscriptions,
   users,
 } from '../db/schema'
@@ -36,6 +38,7 @@ import {
   startOfUtcDay,
   sum,
 } from './admin-usage.helpers'
+import { buildRuntimeMeaningMetrics } from './admin-usage-runtime-metrics'
 
 function getAdminBlockerTone(reason: string): AdminSignal {
   if (reason === 'telegram_not_ready') {
@@ -81,6 +84,8 @@ export async function getAdminUsageSnapshot(input?: {
       db.select().from(creditLedger).orderBy(desc(creditLedger.createdAt)),
       db.select().from(runUsage).orderBy(desc(runUsage.createdAt)),
     ])
+    let runtimeInstanceRows: Array<typeof runtimeInstances.$inferSelect> | null = null
+    let runtimeIntervalRows: Array<typeof runtimeIntervals.$inferSelect> | null = null
     let billingAlertRows: Array<typeof billingAlerts.$inferSelect> | null = null
     let launchAttemptRows: Array<typeof launchAttempts.$inferSelect> | null = null
 
@@ -88,6 +93,18 @@ export async function getAdminUsageSnapshot(input?: {
       launchAttemptRows = await db.select().from(launchAttempts).orderBy(desc(launchAttempts.attemptedAt))
     } catch {
       launchAttemptRows = null
+    }
+
+    try {
+      runtimeInstanceRows = await db.select().from(runtimeInstances).orderBy(desc(runtimeInstances.createdAt))
+    } catch {
+      runtimeInstanceRows = null
+    }
+
+    try {
+      runtimeIntervalRows = await db.select().from(runtimeIntervals).orderBy(desc(runtimeIntervals.startedAt))
+    } catch {
+      runtimeIntervalRows = null
     }
     await syncDerivedBillingAlertsSafely()
 
@@ -140,6 +157,14 @@ export async function getAdminUsageSnapshot(input?: {
       windowStart,
     })
     const alwaysOnRanks = buildAlwaysOnRanks(userDrilldownRows)
+    const meaningMetrics = buildRuntimeMeaningMetrics({
+      now,
+      runtimeInstanceRows: runtimeInstanceRows ?? [],
+      runtimeIntervalRows: runtimeIntervalRows ?? [],
+      usageRows,
+      windowEnd,
+      windowStart,
+    })
 
     liveSnapshot.generatedAt = now.toISOString()
     liveSnapshot.environment = 'live-db'
@@ -338,6 +363,7 @@ export async function getAdminUsageSnapshot(input?: {
       }),
       peakConcurrentRuns: buildPeakConcurrentSeries(usageRows, now, windowConfig),
     }
+    liveSnapshot.meaningMetrics = meaningMetrics
     liveSnapshot.billingHealth = {
       anomalies:
         persistedBillingAnomalies ??

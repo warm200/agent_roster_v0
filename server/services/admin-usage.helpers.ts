@@ -165,6 +165,10 @@ export function getAdminWindowConfig(
 }
 
 export function resolvePostgresConnectionString() {
+  if (process.env.ADMIN_USAGE_FORCE_FALLBACK === '1') {
+    return undefined
+  }
+
   if (process.env.DATABASE_URL?.startsWith('postgres')) {
     return process.env.DATABASE_URL
   }

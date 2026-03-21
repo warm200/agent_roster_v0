@@ -31,6 +31,7 @@ import {
 import type { AdminUsageSnapshot, AdminUserRecord } from '@/lib/admin-usage-data'
 import { formatDate, formatDateTime } from '@/lib/utils'
 
+import { UsageMeaningBoard } from './usage-meaning-board'
 import {
   MiniStat,
   Panel,
@@ -49,10 +50,6 @@ const launchConfig = {
   failedBeforeAccept: { color: 'var(--chart-4)', label: 'Failed before accept' },
   refunded: { color: 'var(--chart-3)', label: 'Refunded' },
   completed: { color: 'var(--chart-1)', label: 'Completed' },
-}
-
-const planConfig = {
-  launches: { color: 'var(--chart-2)', label: 'Launches' },
 }
 
 const peakConfig = {
@@ -74,8 +71,8 @@ export function FunnelRuntimeSection({ snapshot }: { snapshot: AdminUsageSnapsho
     <section className="space-y-4" id="funnel">
       <SectionHeading
         eyebrow="Funnel + Runtime"
-        title="Where launches break and how usage shifts by plan"
-        description="Tracks the operational gap between payment, Telegram readiness, provider acceptance, and completion."
+        title="Where launches break and which TTL metrics matter"
+        description="Tracks funnel breakage, session-length distribution, idle and hard-TTL exits, failed runs, heavy users, and plan-level cost."
       />
       <div className="grid gap-4 2xl:grid-cols-[1.15fr_0.85fr]">
         <Panel className="p-5">
@@ -125,7 +122,9 @@ export function FunnelRuntimeSection({ snapshot }: { snapshot: AdminUsageSnapsho
         </Panel>
       </div>
 
-      <div className="grid gap-4 2xl:grid-cols-[1.2fr_0.8fr_0.8fr]">
+      <UsageMeaningBoard snapshot={snapshot} />
+
+      <div className="grid gap-4 xl:grid-cols-[1.25fr_0.75fr]">
         <Panel className="p-5">
           <div className="mb-6">
             <p className="text-[11px] tracking-[0.2em] uppercase text-zinc-500">Launches per day</p>
@@ -149,64 +148,24 @@ export function FunnelRuntimeSection({ snapshot }: { snapshot: AdminUsageSnapsho
             </AreaChart>
           </ChartContainer>
         </Panel>
-
         <Panel className="p-5">
           <div className="mb-6">
-            <p className="text-[11px] tracking-[0.2em] uppercase text-zinc-500">Launches by plan</p>
-            <h3 className="mt-2 text-lg font-semibold text-white">Mix across entitlement types</h3>
+            <p className="text-[11px] tracking-[0.2em] uppercase text-zinc-500">Peak concurrent runs</p>
+            <h3 className="mt-2 text-lg font-semibold text-white">Concurrency pressure by plan</h3>
           </div>
-          <ChartContainer className="h-[300px] w-full" config={planConfig}>
-            <BarChart accessibilityLayer data={snapshot.runtimeUsage.launchesByPlan}>
+          <ChartContainer className="h-[300px] w-full" config={peakConfig}>
+            <LineChart accessibilityLayer data={snapshot.runtimeUsage.peakConcurrentRuns}>
               <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
-              <XAxis axisLine={false} dataKey="plan" tick={{ fill: '#a1a1aa', fontSize: 12 }} tickLine={false} />
+              <XAxis axisLine={false} dataKey="day" tick={{ fill: '#a1a1aa', fontSize: 12 }} tickLine={false} />
               <YAxis axisLine={false} tick={{ fill: '#71717a', fontSize: 12 }} tickLine={false} />
               <ChartTooltip content={<ChartTooltipContent />} cursor={false} />
-              <Bar dataKey="launches" fill="var(--color-launches)" radius={8} />
-            </BarChart>
+              <Line dataKey="run" dot={false} stroke="var(--color-run)" strokeWidth={2} type="monotone" />
+              <Line dataKey="warmStandby" dot={false} stroke="var(--color-warmStandby)" strokeWidth={2} type="monotone" />
+              <Line dataKey="alwaysOn" dot={false} stroke="var(--color-alwaysOn)" strokeWidth={2} type="monotone" />
+            </LineChart>
           </ChartContainer>
         </Panel>
-
-        <Panel className="p-5">
-          <div className="mb-6">
-            <p className="text-[11px] tracking-[0.2em] uppercase text-zinc-500">Avg workspace minutes</p>
-            <h3 className="mt-2 text-lg font-semibold text-white">Shadow pricing signal</h3>
-          </div>
-          <div className="space-y-4">
-            {snapshot.runtimeUsage.launchesByPlan.map((plan) => (
-              <div key={plan.plan}>
-                <div className="mb-2 flex items-center justify-between text-sm">
-                  <span className="text-zinc-300">{plan.plan}</span>
-                  <span className="text-white">{formatMinutes(plan.avgWorkspaceMinutes)}</span>
-                </div>
-                <div className="h-2 overflow-hidden rounded-full bg-white/6">
-                  <div
-                    className="h-full rounded-full bg-[linear-gradient(90deg,rgba(251,191,36,0.85),rgba(244,63,94,0.75))]"
-                    style={{ width: `${Math.min(plan.avgWorkspaceMinutes / 2.4, 100)}%` }}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-        </Panel>
       </div>
-
-      <Panel className="p-5">
-        <div className="mb-6">
-          <p className="text-[11px] tracking-[0.2em] uppercase text-zinc-500">Peak concurrent runs</p>
-          <h3 className="mt-2 text-lg font-semibold text-white">Concurrency pressure by plan</h3>
-        </div>
-        <ChartContainer className="h-[280px] w-full" config={peakConfig}>
-          <LineChart accessibilityLayer data={snapshot.runtimeUsage.peakConcurrentRuns}>
-            <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
-            <XAxis axisLine={false} dataKey="day" tick={{ fill: '#a1a1aa', fontSize: 12 }} tickLine={false} />
-            <YAxis axisLine={false} tick={{ fill: '#71717a', fontSize: 12 }} tickLine={false} />
-            <ChartTooltip content={<ChartTooltipContent />} cursor={false} />
-            <Line dataKey="run" dot={false} stroke="var(--color-run)" strokeWidth={2} type="monotone" />
-            <Line dataKey="warmStandby" dot={false} stroke="var(--color-warmStandby)" strokeWidth={2} type="monotone" />
-            <Line dataKey="alwaysOn" dot={false} stroke="var(--color-alwaysOn)" strokeWidth={2} type="monotone" />
-          </LineChart>
-        </ChartContainer>
-      </Panel>
     </section>
   )
 }

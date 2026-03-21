@@ -9,6 +9,8 @@ import { GET as getAdminOverview } from '@/app/api/admin/usage/overview/route'
 import { GET as getAdminUser } from '@/app/api/admin/usage/users/[userId]/route'
 import { GET as getAdminUsers } from '@/app/api/admin/usage/users/route'
 
+process.env.ADMIN_USAGE_FORCE_FALLBACK = '1'
+
 test('admin usage api returns a no-store snapshot response', async () => {
   const response = await getAdminUsage(new NextRequest('http://localhost/api/admin/usage?range=30d'))
   const payload = await response.json()
@@ -17,6 +19,8 @@ test('admin usage api returns a no-store snapshot response', async () => {
   assert.equal(response.headers.get('cache-control'), 'no-store')
   assert.equal(payload.selectedRange, '30d')
   assert.ok(Array.isArray(payload.overviewMetrics))
+  assert.ok(Array.isArray(payload.meaningMetrics.summary))
+  assert.ok(Array.isArray(payload.meaningMetrics.byPlan))
 })
 
 test('admin overview api returns the overview slice with selected range metadata', async () => {

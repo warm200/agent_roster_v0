@@ -21,6 +21,8 @@ export function formatMetricValue(value: number, format: AdminMetricFormat) {
         minimumFractionDigits: 0,
         maximumFractionDigits: 2,
       })}`
+    case 'minutes':
+      return `${Math.round(value).toLocaleString('en-US')} min`
     default:
       return value.toLocaleString('en-US')
   }

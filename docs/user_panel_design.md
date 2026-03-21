@@ -138,6 +138,33 @@ Browser (only you)
 
 **它是观察面，不是业务主通路。**
 
+### Runtime meaning metrics
+
+TTL / cleanup 相关的 admin 看板，优先盯这些“有意义指标”，不要堆 vanity metrics：
+
+* 每个 plan 的平均 launch / wake 次数
+* 每次 run 的平均 workspace minutes
+* P50 / P90 session minutes
+* idle stop 占比
+* hard TTL hit 占比
+* failed run 占比
+* top 5% 重度用户资源占用
+* 每个 plan 的 estimated internal cost
+
+当前实现口径：
+
+* `run_usage`:
+  * 平均 workspace minutes / run
+  * failed run 占比
+  * 每个 plan 的 estimated internal cost
+* `runtime_intervals` + `runtime_instances`:
+  * session minutes 分布
+  * idle stop / hard TTL hit 占比
+  * Warm Standby 的 wake 次数
+  * top 5% 用户 runtime minute 占比
+
+不要为了看板再加新字段；优先用现有 `run_usage` / `runtime_instances` / `runtime_intervals` 推导。
+
 ---
 
 ## 5. 数据访问设计

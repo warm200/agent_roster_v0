@@ -1,5 +1,5 @@
 export type AdminDateRange = '24h' | '7d' | '30d' | 'custom'
-export type AdminMetricFormat = 'count' | 'percent' | 'credits' | 'currency'
+export type AdminMetricFormat = 'count' | 'percent' | 'credits' | 'currency' | 'minutes'
 export type AdminSignal = 'stable' | 'info' | 'warning' | 'critical'
 export type AdminUserHealth = 'stable' | 'watch' | 'blocked'
 
@@ -37,6 +37,15 @@ export type PlanMixPoint = {
   plan: string
   launches: number
   avgWorkspaceMinutes: number
+}
+
+export type RuntimeMeaningPlanRow = {
+  plan: string
+  sessionCount: number
+  activeUsers: number
+  avgLaunchWakeCount: number
+  avgWorkspaceMinutesPerRun: number
+  estimatedInternalCostCents: number
 }
 
 export type PeakConcurrentPoint = {
@@ -148,6 +157,11 @@ export type AdminUsageSnapshot = {
     launchesPerDay: LaunchDailyPoint[]
     launchesByPlan: PlanMixPoint[]
     peakConcurrentRuns: PeakConcurrentPoint[]
+  }
+  meaningMetrics: {
+    summary: OverviewMetric[]
+    byPlan: RuntimeMeaningPlanRow[]
+    topHeavyUsers: RankRow[]
   }
   billingHealth: {
     summary: BillingHealthStat[]
@@ -290,6 +304,103 @@ export const adminUsageSnapshot: AdminUsageSnapshot = {
       { day: 'Mar 13', run: 4, warmStandby: 5, alwaysOn: 4 },
       { day: 'Mar 14', run: 5, warmStandby: 6, alwaysOn: 4 },
       { day: 'Mar 15', run: 4, warmStandby: 4, alwaysOn: 5 },
+    ],
+  },
+  meaningMetrics: {
+    summary: [
+      {
+        key: 'avg-workspace-minutes-per-run',
+        label: 'Avg Workspace Minutes / Run',
+        value: 43,
+        format: 'minutes',
+        delta: '108 tracked runs',
+        detail: 'Average `run_usage.workspace_minutes` across runs in the current window.',
+        tone: 'info',
+      },
+      {
+        key: 'p50-session-minutes',
+        label: 'P50 Session Minutes',
+        value: 19,
+        format: 'minutes',
+        delta: '142 ended sessions',
+        detail: 'Median runtime interval length from `runtime_intervals`.',
+        tone: 'stable',
+      },
+      {
+        key: 'p90-session-minutes',
+        label: 'P90 Session Minutes',
+        value: 171,
+        format: 'minutes',
+        delta: 'Same session set',
+        detail: '90th percentile runtime interval length to expose heavy tails.',
+        tone: 'warning',
+      },
+      {
+        key: 'idle-stop-share',
+        label: 'Idle Stop Share',
+        value: 0.38,
+        format: 'percent',
+        delta: '54 idle closes',
+        detail: 'Share of ended sessions closed with `idle_timeout`.',
+        tone: 'warning',
+      },
+      {
+        key: 'hard-ttl-hit-share',
+        label: 'Hard TTL Hit Share',
+        value: 0.08,
+        format: 'percent',
+        delta: '11 ttl closes',
+        detail: 'Share of ended sessions closed with `ttl_expired`.',
+        tone: 'warning',
+      },
+      {
+        key: 'failed-run-share',
+        label: 'Failed Run Share',
+        value: 0.12,
+        format: 'percent',
+        delta: '13 failed rows',
+        detail: 'Share of `run_usage` rows that ended in `failed`.',
+        tone: 'warning',
+      },
+      {
+        key: 'top-heavy-user-share',
+        label: 'Top 5% User Resource Share',
+        value: 0.47,
+        format: 'percent',
+        delta: '2 of 31 active users',
+        detail: 'Share of overlapping session minutes consumed by the heaviest users.',
+        tone: 'critical',
+      },
+    ],
+    byPlan: [
+      {
+        plan: 'Run',
+        sessionCount: 64,
+        activeUsers: 46,
+        avgLaunchWakeCount: 1.39,
+        avgWorkspaceMinutesPerRun: 28,
+        estimatedInternalCostCents: 14680,
+      },
+      {
+        plan: 'Warm Standby',
+        sessionCount: 49,
+        activeUsers: 21,
+        avgLaunchWakeCount: 2.33,
+        avgWorkspaceMinutesPerRun: 53,
+        estimatedInternalCostCents: 17140,
+      },
+      {
+        plan: 'Always On',
+        sessionCount: 18,
+        activeUsers: 12,
+        avgLaunchWakeCount: 1.5,
+        avgWorkspaceMinutesPerRun: 214,
+        estimatedInternalCostCents: 16450,
+      },
+    ],
+    topHeavyUsers: [
+      { user: 'Ava Morgan', value: '1,120 min', context: '27% of tracked runtime · $183.20 estimated internal cost' },
+      { user: 'Jon Reyes', value: '824 min', context: '20% of tracked runtime · $154.80 estimated internal cost' },
     ],
   },
   billingHealth: {
