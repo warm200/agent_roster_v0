@@ -123,7 +123,11 @@ export function buildAgentSnapshot(row: SaleRow): Agent {
     id: row.agent.id,
     slug: row.agent.slug,
     title: row.agent.title,
-    thumbnailUrl: buildLocalAgentThumbnailUrl(row.version.runConfigSnapshot, row.agent.slug),
+    thumbnailUrl: buildLocalAgentThumbnailUrl(
+      row.version.runConfigSnapshot,
+      row.agent.slug,
+      row.agent.updatedAt.toISOString(),
+    ),
     category: row.agent.category,
     summary: row.agent.summary,
     descriptionMarkdown: row.agent.descriptionMarkdown,

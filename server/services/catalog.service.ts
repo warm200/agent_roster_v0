@@ -268,6 +268,7 @@ function toAgent(record: DbAgentRecord, riskReview: Agent['riskReview'] = null):
     thumbnailUrl: buildLocalAgentThumbnailUrl(
       currentVersionRow.version.runConfigSnapshot,
       record.agent.slug,
+      toIsoString(record.agent.updatedAt),
     ),
     category: record.agent.category,
     summary: record.agent.summary,

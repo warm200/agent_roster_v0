@@ -19,6 +19,7 @@ export type LocalAgentRuntimeSource = {
   slug: string
   sourceRootRelativePath: string
   stagingRelativePath: string
+  thumbnailRelativePath: string | null
 }
 
 type LocalAgentDefinition = {
@@ -294,6 +295,7 @@ async function buildLocalAgentDefinition(agentDir: string): Promise<LocalAgentDe
   const avatarRelativePath = normalizeOptionalRelativePath(
     extractIdentityField(identityContents, 'Avatar'),
   )
+  const thumbnailGifRelativePath = await resolveExistingRelativePath(agentDir, 'thumbnail/avatar.gif')
   const name =
     extractYamlField(soulContents, 'name') ??
     extractIdentityField(identityContents, 'Name') ??
@@ -324,6 +326,7 @@ async function buildLocalAgentDefinition(agentDir: string): Promise<LocalAgentDe
     slug,
     sourceRootRelativePath: relativePathFromRepoRoot(agentDir),
     stagingRelativePath: slug,
+    thumbnailRelativePath: thumbnailGifRelativePath ?? avatarRelativePath,
   }
   const riskLevel = inferRiskLevel(profile)
   const agentId = `agent-local-${slug}`
@@ -459,20 +462,31 @@ export function parseLocalAgentRuntimeSource(snapshot: string): LocalAgentRuntim
       slug: parsed.source.slug ?? '',
       sourceRootRelativePath: parsed.source.sourceRootRelativePath,
       stagingRelativePath: parsed.source.stagingRelativePath ?? `agents/${parsed.source.slug ?? 'agent'}`,
+      thumbnailRelativePath: parsed.source.thumbnailRelativePath ?? parsed.source.avatarRelativePath ?? null,
     }
   } catch {
     return null
   }
 }
 
-export function buildLocalAgentThumbnailUrl(snapshot: string, slug: string) {
+export function buildLocalAgentThumbnailUrl(
+  snapshot: string,
+  slug: string,
+  cacheKey?: string | null,
+) {
   const source = parseLocalAgentRuntimeSource(snapshot)
 
-  if (!source?.avatarRelativePath) {
+  if (!source?.thumbnailRelativePath) {
     return null
   }
 
-  return `/api/agents/${slug}/thumbnail`
+  const params = new URLSearchParams()
+  if (cacheKey) {
+    params.set('v', cacheKey)
+  }
+  const suffix = params.toString()
+
+  return suffix ? `/api/agents/${slug}/thumbnail?${suffix}` : `/api/agents/${slug}/thumbnail`
 }
 
 export async function loadLocalAgentDefinitions(rootDir = LOCAL_AGENTS_ROOT) {
@@ -584,13 +598,13 @@ export async function getLocalAgentRuntimeSourceBySlug(slug: string, db = getDb(
 }
 
 export async function readLocalAgentThumbnailFromSource(source: LocalAgentRuntimeSource | null) {
-  if (!source?.avatarRelativePath) {
+  if (!source?.thumbnailRelativePath) {
     return null
   }
 
   const absolutePath = path.resolve(
     resolveTrustedSourceRoot(source.sourceRootRelativePath),
-    source.avatarRelativePath,
+    source.thumbnailRelativePath,
   )
   let contents: Buffer
 
@@ -716,5 +730,14 @@ export async function loadRuntimeAssetsFromSnapshot(
   return {
     config,
     workspaceFiles,
+  }
+}
+
+async function resolveExistingRelativePath(rootDir: string, relativePath: string) {
+  try {
+    await fs.access(path.join(rootDir, relativePath))
+    return relativePath
+  } catch {
+    return null
   }
 }

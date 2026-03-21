@@ -5,6 +5,7 @@ import { NextResponse } from 'next/server'
 import { getLocalAgentThumbnail } from '@/server/services/local-agent-files'
 
 const CONTENT_TYPES: Record<string, string> = {
+  '.gif': 'image/gif',
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
   '.png': 'image/png',

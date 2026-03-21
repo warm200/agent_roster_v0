@@ -68,7 +68,49 @@ test('loadLocalAgentDefinitions builds DB-ready metadata from a local agent fold
   assert.ok(source)
   assert.equal(source.slug, 'test-writer')
   assert.equal(source.avatarRelativePath, 'avatars/avatar.png')
-  assert.equal(buildLocalAgentThumbnailUrl(definitions[0].versionRow.runConfigSnapshot, 'test-writer'), '/api/agents/test-writer/thumbnail')
+  assert.equal(source.thumbnailRelativePath, 'avatars/avatar.png')
+  assert.equal(
+    buildLocalAgentThumbnailUrl(definitions[0].versionRow.runConfigSnapshot, 'test-writer'),
+    '/api/agents/test-writer/thumbnail',
+  )
+  assert.equal(
+    buildLocalAgentThumbnailUrl(
+      definitions[0].versionRow.runConfigSnapshot,
+      'test-writer',
+      '2026-03-21T00:00:00.000Z',
+    ),
+    '/api/agents/test-writer/thumbnail?v=2026-03-21T00%3A00%3A00.000Z',
+  )
+})
+
+test('loadLocalAgentDefinitions prefers thumbnail avatar gif for catalog thumbnails', async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), 'local-agent-gif-thumb-'))
+  tempDirs.push(rootDir)
+
+  const agentDir = path.join(rootDir, 'animated-helper')
+  await mkdir(path.join(agentDir, 'avatars'), { recursive: true })
+  await mkdir(path.join(agentDir, 'thumbnail'), { recursive: true })
+
+  await writeFile(
+    path.join(agentDir, 'IDENTITY.md'),
+    ['# IDENTITY', '', '- **Name:** Animated Helper', '- **Avatar:** avatars/avatar.png'].join('\n'),
+  )
+  await writeFile(
+    path.join(agentDir, 'SOUL.md'),
+    ['# SOUL', '', '## Identity', 'name: "Animated Helper"', 'version: "1.0.0"'].join('\n'),
+  )
+  await writeFile(path.join(agentDir, 'avatars', 'avatar.png'), 'png')
+  await writeFile(path.join(agentDir, 'thumbnail', 'avatar.gif'), 'gif')
+
+  const [definition] = await loadLocalAgentDefinitions(rootDir)
+  const source = parseLocalAgentRuntimeSource(definition.versionRow.runConfigSnapshot)
+
+  assert.equal(source?.avatarRelativePath, 'avatars/avatar.png')
+  assert.equal(source?.thumbnailRelativePath, 'thumbnail/avatar.gif')
+  assert.equal(
+    buildLocalAgentThumbnailUrl(definition.versionRow.runConfigSnapshot, 'animated-helper'),
+    '/api/agents/animated-helper/thumbnail',
+  )
 })
 
 test('loadLocalAgentDefinitions ignores placeholder avatar paths', async () => {
@@ -124,6 +166,7 @@ test('loadRuntimeAssetsFromSnapshot reads optional config and workspace files fr
       openClawConfigRelativePath: 'openclaw.json',
       stagingRelativePath: 'agents/test-writer',
       avatarRelativePath: null,
+      thumbnailRelativePath: null,
     },
   })
 
@@ -177,6 +220,7 @@ test('buildLocalAgentArchiveFromSnapshot packages the whole agent folder', async
       openClawConfigRelativePath: null,
       stagingRelativePath: 'agents/test-writer',
       avatarRelativePath: null,
+      thumbnailRelativePath: null,
     },
   })
 
@@ -210,9 +254,37 @@ test('readLocalAgentThumbnailFromSource returns null when the avatar file is mis
     slug: 'rapid-prototyper',
     sourceRootRelativePath: path.relative(process.cwd(), agentDir).split(path.sep).join('/'),
     stagingRelativePath: 'rapid-prototyper',
+    thumbnailRelativePath: 'avatars/missing.png',
   })
 
   assert.equal(thumbnail, null)
+})
+
+test('readLocalAgentThumbnailFromSource prefers thumbnail gif without changing sandbox avatar', async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), 'local-agent-read-gif-thumb-'))
+  tempDirs.push(rootDir)
+  setLocalAgentsRootForTesting(rootDir)
+
+  const agentDir = path.join(rootDir, 'animated-helper')
+  await mkdir(path.join(agentDir, 'avatars'), { recursive: true })
+  await mkdir(path.join(agentDir, 'thumbnail'), { recursive: true })
+  await writeFile(path.join(agentDir, 'IDENTITY.md'), '# identity')
+  await writeFile(path.join(agentDir, 'SOUL.md'), '# soul')
+  await writeFile(path.join(agentDir, 'avatars', 'avatar.png'), 'png')
+  await writeFile(path.join(agentDir, 'thumbnail', 'avatar.gif'), 'gif')
+
+  const thumbnail = await readLocalAgentThumbnailFromSource({
+    avatarRelativePath: 'avatars/avatar.png',
+    kind: 'local-folder',
+    openClawConfigRelativePath: null,
+    slug: 'animated-helper',
+    sourceRootRelativePath: path.relative(process.cwd(), agentDir).split(path.sep).join('/'),
+    stagingRelativePath: 'animated-helper',
+    thumbnailRelativePath: 'thumbnail/avatar.gif',
+  })
+
+  assert.equal(thumbnail?.absolutePath.endsWith('thumbnail/avatar.gif'), true)
+  assert.equal(thumbnail?.contents.toString('utf8'), 'gif')
 })
 
 test('buildLocalAgentArchiveFromSnapshot rejects source roots outside agents_file', async () => {
@@ -234,6 +306,7 @@ test('buildLocalAgentArchiveFromSnapshot rejects source roots outside agents_fil
       openClawConfigRelativePath: null,
       stagingRelativePath: 'agents/test-writer',
       avatarRelativePath: null,
+      thumbnailRelativePath: null,
     },
   })
 
