@@ -1179,7 +1179,9 @@ export class RunService {
           if (runtime) {
             const existingRuntime = await this.findRuntimeRecordSafe(run.id)
             await this.updateRuntimeRecordSafe(run.id, {
-              ...this.mergeRuntimeUpdate(existingRuntime, runtime),
+              ...this.mergeRuntimeUpdate(existingRuntime, runtime, {
+                resetStartedAt: recoverableResume,
+              }),
               lastReconciledAt: runtime.lastReconciledAt ?? nowIso(),
               state: runtime.state,
               stopReason: null,
@@ -1274,12 +1276,16 @@ export class RunService {
       await this.updateRunningUsageSafe(run.id, {
         activityAt: null,
         providerAcceptedAt: restarted.startedAt ?? nowIso(),
+        resetSessionClock: recoverableResume,
         runningStartedAt: restarted.startedAt ?? nowIso(),
         statusSnapshot: restarted.status,
         updatedAt: nowIso(),
       })
       await this.repository.updateRunUsage?.(run.id, {
         completedAt: null,
+        provisioningStartedAt: recoverableResume
+          ? restarted.startedAt ?? restarted.updatedAt ?? nowIso()
+          : undefined,
         terminationReason: null,
         updatedAt: nowIso(),
       })
@@ -1416,6 +1422,7 @@ export class RunService {
     input: {
       activityAt?: string | null
       providerAcceptedAt: string | null
+      resetSessionClock?: boolean
       runningStartedAt: string | null
       statusSnapshot: Run['status']
       updatedAt?: string
@@ -1424,8 +1431,12 @@ export class RunService {
     const existingUsage = await this.repository.findRunUsage?.(runId)
     return this.repository.updateRunUsage?.(runId, {
       lastMeaningfulActivityAt: input.activityAt,
-      providerAcceptedAt: chooseEarlierTimestamp(existingUsage?.providerAcceptedAt, input.providerAcceptedAt),
-      runningStartedAt: chooseEarlierTimestamp(existingUsage?.runningStartedAt, input.runningStartedAt),
+      providerAcceptedAt: input.resetSessionClock
+        ? input.providerAcceptedAt
+        : chooseEarlierTimestamp(existingUsage?.providerAcceptedAt, input.providerAcceptedAt),
+      runningStartedAt: input.resetSessionClock
+        ? input.runningStartedAt
+        : chooseEarlierTimestamp(existingUsage?.runningStartedAt, input.runningStartedAt),
       statusSnapshot: input.statusSnapshot,
       updatedAt: input.updatedAt ?? nowIso(),
       workspaceReleasedAt: null,
@@ -1435,6 +1446,9 @@ export class RunService {
   private mergeRuntimeUpdate(
     existingRuntime: RuntimeInstance | null,
     input: Partial<RuntimeInstance>,
+    options?: {
+      resetStartedAt?: boolean
+    },
   ): Partial<RuntimeInstance> {
     if (!existingRuntime) {
       return input
@@ -1442,7 +1456,9 @@ export class RunService {
 
     return {
       ...input,
-      startedAt: chooseEarlierTimestamp(existingRuntime.startedAt, input.startedAt),
+      startedAt: options?.resetStartedAt
+        ? input.startedAt
+        : chooseEarlierTimestamp(existingRuntime.startedAt, input.startedAt),
     }
   }
 

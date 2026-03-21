@@ -684,6 +684,8 @@ test('run service marks runtime deleted when provider stop falls back to a termi
 test('run service resumes recoverable stopped runtime state from completed status', async () => {
   const resumedAt = new Date().toISOString()
   const calls: string[] = []
+  const runtimeUpdates: Array<Partial<RuntimeInstance>> = []
+  const usageUpdates: Array<Record<string, unknown>> = []
   const completedRun: Run = {
     ...baseRun,
     completedAt: new Date().toISOString(),
@@ -700,8 +702,9 @@ test('run service resumes recoverable stopped runtime state from completed statu
         calls.push('repository.updateRun')
         return { ...completedRun, ...nextRun }
       },
-      async updateRunUsage() {
+      async updateRunUsage(_runId: string, input: Record<string, unknown>) {
         calls.push('repository.updateRunUsage')
+        usageUpdates.push(input)
         return null
       },
     } as never,
@@ -717,8 +720,9 @@ test('run service resumes recoverable stopped runtime state from completed statu
           preservedStateAvailable: true,
         }
       },
-      async updateRuntimeInstance(_runId: string, _input: Partial<RuntimeInstance>) {
+      async updateRuntimeInstance(_runId: string, input: Partial<RuntimeInstance>) {
         calls.push('runtime.updateRuntimeInstance')
+        runtimeUpdates.push(input)
         return {
           ...baseRuntimeRecord,
           persistenceMode: 'recoverable',
@@ -829,6 +833,18 @@ test('run service resumes recoverable stopped runtime state from completed statu
   assert.equal(resumed.status, 'running')
   assert.equal(resumed.runtimeState, 'running')
   assert.equal(resumed.preservedStateAvailable, true)
+  assert.equal(runtimeUpdates[0]?.startedAt, resumedAt)
+  assert.equal(
+    usageUpdates.some(
+      (update) =>
+        update.providerAcceptedAt === resumedAt && update.runningStartedAt === resumedAt,
+    ),
+    true,
+  )
+  assert.equal(
+    usageUpdates.some((update) => update.provisioningStartedAt === resumedAt),
+    true,
+  )
   assert.deepEqual(calls, [
     'subscription.reserveLaunchCredit',
     'provider.restartRuntimeInstance',
@@ -847,6 +863,7 @@ test('run service resumes recoverable stopped runtime state from completed statu
 test('run service keeps a restarted warm standby run in restarting state when immediate status read still reports stopped sandbox', async () => {
   const resumedAt = new Date(Date.now() + 60_000).toISOString()
   const calls: string[] = []
+  const usageUpdates: Array<Record<string, unknown>> = []
   const completedRun: Run = {
     ...baseRun,
     completedAt: new Date().toISOString(),
@@ -867,8 +884,9 @@ test('run service keeps a restarted warm standby run in restarting state when im
           ...input,
         }
       },
-      async updateRunUsage() {
+      async updateRunUsage(_runId: string, input: Record<string, unknown>) {
         calls.push('repository.updateRunUsage')
+        usageUpdates.push(input)
         return null
       },
     } as never,
@@ -1024,6 +1042,17 @@ test('run service keeps a restarted warm standby run in restarting state when im
   assert.equal(
     resumed.resultSummary?.includes('sleeping and can be resumed later') ?? false,
     false,
+  )
+  assert.equal(
+    usageUpdates.some(
+      (update) =>
+        update.providerAcceptedAt === resumedAt && update.runningStartedAt === resumedAt,
+    ),
+    true,
+  )
+  assert.equal(
+    usageUpdates.some((update) => update.provisioningStartedAt === resumedAt),
+    true,
   )
   assert.deepEqual(calls, [
     'subscription.reserveLaunchCredit',

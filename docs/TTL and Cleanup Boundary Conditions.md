@@ -60,6 +60,7 @@ Recommended Defaults:
     idle_timeout_minutes: 45
     cleanup_grace_minutes: 10
     rule: each wake creates a bounded active session; no indefinite persistent occupancy is allowed
+    ttl_reset_rule: a successful resume/wake starts a new active-session TTL window instead of inheriting the previous stopped window's start time
     wake_behavior_during_grace:
       if_new_trigger_arrives_before_cleanup_finishes: cancel_cleanup_and_continue_same_session
       if_cleanup_already_completed: create_or_require_a_new_wake_session
@@ -115,14 +116,20 @@ Current MVP Backend Notes:
   timeout_enforcement:
     - provisioning timeout can now be enforced by the maintenance service
     - max session TTL can now be enforced by the maintenance service
-    - idle timeout can now be enforced when `lastMeaningfulActivityAt` is available
+    - idle timeout can now be enforced from the freshest real activity source:
+      - `run_usage.lastOpenClawSessionActivityAt`
+      - `run_usage.lastMeaningfulActivityAt`
+      - `runningStartedAt` / `providerAcceptedAt` fallback when no later activity exists
     - timeout enforcement is no longer blocked by active page polling or fresh reconcile timestamps
     - passive reads still do not count as meaningful activity
   activity_clock:
     - `run_usage.lastMeaningfulActivityAt` stores the last meaningful activity timestamp
+    - `run_usage.lastOpenClawSessionActivityAt` stores the latest OpenClaw session `updatedAt`
+    - `run_usage.lastOpenClawSessionProbeAt` stores when maintenance last probed the sandbox
+    - `run_usage.openClawSessionCount` stores how many OpenClaw sessions were present during the last probe
     - an internal route can advance it without relying on UI polling
     - paired Telegram inbound messages can now advance it for active runs on the order
-    - provider-synced runtime progress timestamps can also advance it when newer than the stored activity clock
+    - provider-synced runtime progress timestamps must not advance the meaningful activity clock
   runtime_instance_states:
     - provisioning
     - running
@@ -150,6 +157,7 @@ Current MVP Backend Notes:
 Do Not Do:
   - do not let Run remain alive indefinitely after one launch credit
   - do not let passive UI polling reset idle timeout
+  - do not let provider reconciliation or sandbox heartbeat fake real activity
   - do not let Always On silently inherit Run TTL
   - do not treat static completed state as active usage forever after cleanup
   - do not hide termination reason from backend logs/audit metadata
