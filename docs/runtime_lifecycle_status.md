@@ -71,6 +71,8 @@ read_when:
   - Control UI link creation uses the same readiness gate on the server
 - runs can now send one paired Telegram notice when they transition from not-ready to Control-UI-ready
   - message tells the user the sandbox is ready and the bot can receive messages again
+- paired Telegram auto-wake now sends an immediate waiting notice while a stopped Warm sandbox is resuming
+  - message tells the user OpenClaw is waking and that the agent will reply after it is back
 - auto-wake is intentionally conservative:
   - if the order already has a live run, it only records activity
   - if the order has multiple stopped recoverable Warm candidates, it does not guess

@@ -15,7 +15,11 @@ function isCreditsExhaustedWakeError(error: unknown) {
 }
 
 function buildCreditsExhaustedWakeNotice() {
-  return 'Unable to wake your sandbox because no runtime credits remain on the current subscription. Add credits or upgrade, then send another message to retry.'
+  return '[OpenRoster] Unable to wake your sandbox because no runtime credits remain on the current subscription. Add credits or upgrade, then send another message to retry.'
+}
+
+function buildWakeInProgressNotice() {
+  return "[OpenRoster] Your OpenClaw is having coffee and coming back for your message. The agent will reply once it's back at its desk."
 }
 
 export async function POST(request: NextRequest) {
@@ -37,6 +41,21 @@ export async function POST(request: NextRequest) {
     if (result.outcome === 'runtime_activity') {
       try {
         const wake = await getRunService().wakeStoppedRunForOrder(orderId)
+
+        if (wake.outcome === 'resumed') {
+          try {
+            await getTelegramService().sendPairedMessage?.({
+              orderId,
+              text: buildWakeInProgressNotice(),
+            })
+          } catch (sendError) {
+            logServerError('api/webhooks/telegram:wake:resume_notice', sendError, {
+              orderId,
+              runId: wake.runId,
+            })
+          }
+        }
+
         return NextResponse.json({
           ...result,
           wake,
