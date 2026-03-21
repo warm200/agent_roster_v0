@@ -4,6 +4,7 @@ import type {
   RankRow,
   RuntimeMeaningPlanRow,
 } from '@/lib/admin-usage-data'
+import { resolveEstimatedInternalCostCents } from '@/lib/runtime-cost'
 
 import {
   runUsage,
@@ -265,7 +266,10 @@ export function buildRuntimeMeaningMetrics(input: {
       minutes: 0,
       plans: new Set<string>(),
     }
-    current.costCents += row.estimatedInternalCostCents ?? 0
+    current.costCents += resolveEstimatedInternalCostCents({
+      estimatedInternalCostCents: row.estimatedInternalCostCents,
+      workspaceMinutes: row.workspaceMinutes,
+    })
     current.plans.add(getPlanLabel(normalizePlanId(row.planId)))
     activeUserMinutes.set(row.userId, current)
   }
@@ -314,7 +318,14 @@ export function buildRuntimeMeaningMetrics(input: {
       hardTtlHitShare: planHardTtlHitShare,
       idleStopShare: planIdleStopShare,
       launchUsers,
-      estimatedInternalCostCents: sum(planUsage.map((row) => row.estimatedInternalCostCents ?? 0)),
+      estimatedInternalCostCents: sum(
+        planUsage.map((row) =>
+          resolveEstimatedInternalCostCents({
+            estimatedInternalCostCents: row.estimatedInternalCostCents,
+            workspaceMinutes: row.workspaceMinutes,
+          }),
+        ),
+      ),
       p50SessionMinutes: Math.round(percentile(endedPlanSessionDurations, 0.5)),
       p90SessionMinutes: Math.round(percentile(endedPlanSessionDurations, 0.9)),
       plan: getPlanLabel(planId),

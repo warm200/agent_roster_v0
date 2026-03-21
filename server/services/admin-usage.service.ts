@@ -5,6 +5,7 @@ import {
   type AdminSignal,
   type AdminUsageSnapshot,
 } from '@/lib/admin-usage-data'
+import { resolveEstimatedInternalCostCents } from '@/lib/runtime-cost'
 
 import { createDb } from '../db'
 import {
@@ -256,10 +257,17 @@ export async function getAdminUsageSnapshot(input?: {
       {
         key: 'estimated-cost-today',
         label: 'Estimated Cost Today',
-        value: sum(usageToday.map((row) => row.estimatedInternalCostCents ?? 0)),
+        value: sum(
+          usageToday.map((row) =>
+            resolveEstimatedInternalCostCents({
+              estimatedInternalCostCents: row.estimatedInternalCostCents,
+              workspaceMinutes: row.workspaceMinutes,
+            }),
+          ),
+        ),
         format: 'currency',
         delta: `${usageToday.length} launch attempts`,
-        detail: 'Summed from today’s `run_usage.estimated_internal_cost_cents`.',
+        detail: 'Summed from stored `run_usage.estimated_internal_cost_cents`, with workspace-minute fallback at the provider minute rate.',
         tone: 'warning',
       },
     ]

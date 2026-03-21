@@ -5,6 +5,7 @@ import {
   type AdminRunRecord,
   type AdminRunsPage,
 } from '@/lib/admin-runs-data'
+import { resolveEstimatedInternalCostCents } from '@/lib/runtime-cost'
 import type { TriggerMode } from '@/lib/types'
 
 import { createDb } from '../db'
@@ -206,7 +207,13 @@ export async function getAdminRunsPage(input?: {
           cleanupGraceMinutes: getNumberFromSnapshot(ttlPolicy, 'cleanupGraceMinutes'),
           completedAt: toIso(row.run.completedAt),
           createdAt: row.run.createdAt.toISOString(),
-          estimatedInternalCostCents: usage?.estimatedInternalCostCents ?? null,
+          estimatedInternalCostCents:
+            usage == null
+              ? null
+              : resolveEstimatedInternalCostCents({
+                  estimatedInternalCostCents: usage.estimatedInternalCostCents,
+                  workspaceMinutes: usage.workspaceMinutes,
+                }),
           heartbeatMissingMinutes: getNumberFromSnapshot(ttlPolicy, 'heartbeatMissingMinutes'),
           id: row.run.id,
           idleTimeoutMinutes: getNumberFromSnapshot(ttlPolicy, 'idleTimeoutMinutes'),

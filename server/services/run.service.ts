@@ -1,5 +1,6 @@
 import { riskProfileSchema, runLogSchema, runResultSchema } from '@/lib/schemas'
 import { canOpenRunControlUi, getRunControlUiBlockedReason } from '@/lib/run-control-ui'
+import { resolveEstimatedInternalCostCents } from '@/lib/runtime-cost'
 import { getSubscriptionPlan } from '@/lib/subscription-plans'
 import type {
   AgentVersion,
@@ -1920,9 +1921,14 @@ export class RunService {
 
       if (minutes !== null) {
         const usage = await this.repository.findRunUsage(closedInterval.runId)
+        const totalWorkspaceMinutes = (usage?.workspaceMinutes ?? 0) + minutes
         await this.repository.updateRunUsage?.(closedInterval.runId, {
+          estimatedInternalCostCents: resolveEstimatedInternalCostCents({
+            estimatedInternalCostCents: usage?.estimatedInternalCostCents,
+            workspaceMinutes: totalWorkspaceMinutes,
+          }),
           updatedAt: nowIso(),
-          workspaceMinutes: (usage?.workspaceMinutes ?? 0) + minutes,
+          workspaceMinutes: totalWorkspaceMinutes,
         })
       }
 

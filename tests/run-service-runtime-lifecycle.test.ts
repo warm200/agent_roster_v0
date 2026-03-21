@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { canOpenRunControlUi } from '@/lib/run-control-ui'
+import { estimateInternalCostCentsFromWorkspaceMinutes } from '@/lib/runtime-cost'
 import { getSubscriptionPlan } from '@/lib/subscription-plans'
 import type { Order, Run, RuntimeInstance } from '@/lib/types'
 import { RunService, setRunServiceDepsForTesting } from '@/server/services/run.service'
@@ -317,6 +318,10 @@ test('run service preserves recoverable runtime state after stop', async () => {
   assert.equal(stopped.status, 'completed')
   assert.equal(runtimeUpdates.some((update) => update.state === 'deleted'), false)
   assert.equal(usagePatches.some((patch) => patch.workspaceMinutes === 10), true)
+  assert.equal(
+    usagePatches.some((patch) => patch.estimatedInternalCostCents === estimateInternalCostCentsFromWorkspaceMinutes(10)),
+    true,
+  )
 
   setRunServiceDepsForTesting(null)
 })

@@ -14,6 +14,7 @@ import type {
   UserRunEvent,
 } from '@/lib/admin-usage-data'
 import { adminUsageSnapshot as fallbackSnapshot } from '@/lib/admin-usage-data'
+import { resolveEstimatedInternalCostCents } from '@/lib/runtime-cost'
 
 import {
   creditLedger,
@@ -475,7 +476,14 @@ export function buildUserRows(input: {
         currentPeriodEnd: subscription?.currentPeriodEnd?.toISOString() ?? now.toISOString(),
         currentPlan,
         email: user?.email ?? `${userId}@unknown.local`,
-        estCostThisPeriodCents: sum(usageThisPeriod.map((row) => row.estimatedInternalCostCents ?? 0)),
+        estCostThisPeriodCents: sum(
+          usageThisPeriod.map((row) =>
+            resolveEstimatedInternalCostCents({
+              estimatedInternalCostCents: row.estimatedInternalCostCents,
+              workspaceMinutes: row.workspaceMinutes,
+            }),
+          ),
+        ),
         health,
         id: userId,
         lastLaunchAt: latestUsage?.createdAt.toISOString() ?? subscription?.updatedAt.toISOString() ?? now.toISOString(),

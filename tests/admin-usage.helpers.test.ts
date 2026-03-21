@@ -159,3 +159,43 @@ test('buildUserRows uses the selected admin window for activity metrics', () => 
   assert.equal(rows[0]?.estCostThisPeriodCents, 1200)
   assert.equal(rows[0]?.avgWorkspaceMinutes, 20)
 })
+
+test('buildUserRows derives estimated cost from workspace minutes when stored cost is missing', () => {
+  const rows = buildUserRows({
+    channelRows: [],
+    ledgerRows: [],
+    orderRows: [
+      {
+        createdAt: new Date('2026-03-01T00:00:00.000Z'),
+        id: 'order-1',
+        status: 'paid',
+        userId: 'user-1',
+      } as never,
+    ],
+    subscriptionRows: [],
+    usageRows: [
+      {
+        createdAt: new Date('2026-03-05T12:00:00.000Z'),
+        estimatedInternalCostCents: 0,
+        planId: 'run',
+        providerAcceptedAt: new Date('2026-03-05T12:01:00.000Z'),
+        runId: 'run-in-window',
+        statusSnapshot: 'completed',
+        terminationReason: 'completed',
+        userId: 'user-1',
+        workspaceMinutes: 20,
+      } as never,
+    ],
+    userRows: [
+      {
+        email: 'user@example.com',
+        id: 'user-1',
+        name: 'User One',
+      } as never,
+    ],
+    windowEnd: new Date('2026-03-08T00:00:00.000Z'),
+    windowStart: new Date('2026-03-01T00:00:00.000Z'),
+  })
+
+  assert.equal(rows[0]?.estCostThisPeriodCents, 553)
+})
