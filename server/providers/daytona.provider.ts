@@ -26,6 +26,7 @@ import type {
   CreateRuntimeInstanceInput,
   RunControlUiLink,
   RunProvider,
+  RuntimeActivitySnapshot,
   RunProviderRuntimeConfig,
   RuntimeProviderInstance,
 } from './run-provider.interface'
@@ -366,6 +367,10 @@ function normalizeTerminalSandboxReadError(
   }
 
   return error
+}
+
+function isStoppedSandboxReadError(error: unknown) {
+  return error instanceof Error && /sandbox is stopped/i.test(error.message)
 }
 
 function mapRunStatusToRuntimeState(status: RunStatus): RuntimeInstanceState {
@@ -806,6 +811,86 @@ async function refreshGatewayStatus(
   await appendStructuredLog(sandbox, 'error', 'runtime', 'Managed runtime stopped unexpectedly.')
 
   return nextStatus
+}
+
+function buildOpenClawSessionProbeScript() {
+  return `
+const fs = require('node:fs');
+const path = require('node:path');
+const os = require('node:os');
+
+const root = path.join(os.homedir(), '.openclaw', 'agents');
+let lastUpdatedAtMs = null;
+let openClawSessionCount = 0;
+
+if (fs.existsSync(root)) {
+  for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
+    if (!entry.isDirectory()) {
+      continue;
+    }
+
+    const sessionsPath = path.join(root, entry.name, 'sessions', 'sessions.json');
+    if (!fs.existsSync(sessionsPath)) {
+      continue;
+    }
+
+    let parsed;
+    try {
+      parsed = JSON.parse(fs.readFileSync(sessionsPath, 'utf8'));
+    } catch {
+      continue;
+    }
+
+    for (const session of Object.values(parsed ?? {})) {
+      const updatedAt = session && typeof session === 'object' ? session.updatedAt : undefined;
+      if (!Number.isFinite(updatedAt)) {
+        continue;
+      }
+
+      openClawSessionCount += 1;
+      if (lastUpdatedAtMs == null || updatedAt > lastUpdatedAtMs) {
+        lastUpdatedAtMs = updatedAt;
+      }
+    }
+  }
+}
+
+process.stdout.write(JSON.stringify({
+  lastOpenClawSessionActivityAt: lastUpdatedAtMs == null ? null : new Date(lastUpdatedAtMs).toISOString(),
+  lastOpenClawSessionProbeAt: new Date().toISOString(),
+  openClawSessionCount,
+}));
+`.trim()
+}
+
+async function probeOpenClawSessionActivity(
+  sandbox: DaytonaSandboxLike,
+): Promise<RuntimeActivitySnapshot | null> {
+  const response = await sandbox.process.executeCommand(
+    `bash -lc ${shellQuote(`node -e ${shellQuote(buildOpenClawSessionProbeScript())}`)}`,
+    undefined,
+    undefined,
+    20,
+  )
+
+  if (response.exitCode !== 0) {
+    throw new HttpError(502, response.result.trim() || 'Managed runtime activity probe failed.')
+  }
+
+  const parsed = JSON.parse(response.result) as Partial<RuntimeActivitySnapshot> | null
+
+  return {
+    lastOpenClawSessionActivityAt:
+      typeof parsed?.lastOpenClawSessionActivityAt === 'string' ? parsed.lastOpenClawSessionActivityAt : null,
+    lastOpenClawSessionProbeAt:
+      typeof parsed?.lastOpenClawSessionProbeAt === 'string'
+        ? parsed.lastOpenClawSessionProbeAt
+        : nowIso(),
+    openClawSessionCount:
+      typeof parsed?.openClawSessionCount === 'number' && Number.isFinite(parsed.openClawSessionCount)
+        ? Math.max(0, Math.trunc(parsed.openClawSessionCount))
+        : 0,
+  }
 }
 
 function buildControlUiUrl(previewUrl: string, openClawToken: string) {
@@ -1249,6 +1334,19 @@ export class DaytonaRunProvider implements RunProvider {
     }
   }
 
+  async getRuntimeActivitySnapshot(runId: string): Promise<RuntimeActivitySnapshot | null> {
+    const sandbox = await this.getSandbox(runId)
+    if (!sandbox) {
+      return null
+    }
+
+    try {
+      return await probeOpenClawSessionActivity(sandbox)
+    } catch (error) {
+      throw normalizeTerminalSandboxReadError(sandbox, error)
+    }
+  }
+
   async stopRuntimeInstance(
     runId: string,
     reason: RunTerminationReason = 'manual_stop',
@@ -1312,6 +1410,7 @@ export class DaytonaRunProvider implements RunProvider {
     if (!sandbox) {
       return null
     }
+    const manifest = await downloadJsonFile<DaytonaRunManifest>(sandbox, MANIFEST_PATH).catch(() => null)
     if ((sandbox.state === SandboxState.ARCHIVED || sandbox.state === SandboxState.ARCHIVING) && sandbox.start) {
       await sandbox.start(60)
     }
@@ -1319,7 +1418,13 @@ export class DaytonaRunProvider implements RunProvider {
     if (!runtime) {
       return null
     }
-    const instance = await this.getRuntimeInstance(runId)
+    let instance: RuntimeProviderInstance | null = null
+    try {
+      instance = await this.getRuntimeInstance(runId)
+    } catch {
+      // Restart already succeeded; immediate readback can still fail while Daytona/OpenClaw
+      // is transitioning or the toolbox is briefly unavailable. Fall back to provisioning state.
+    }
     if (instance) {
       return instance
     }
@@ -1329,11 +1434,11 @@ export class DaytonaRunProvider implements RunProvider {
       lastReconciledAt: runtime.updatedAt,
       metadataJson: {},
       persistenceMode: lifecyclePolicy.persistenceMode,
-      planId: 'run',
+      planId: manifest?.planId ?? 'run',
       preservedStateAvailable: lifecyclePolicy.preserveStateOnStop,
-      providerInstanceRef: runId,
+      providerInstanceRef: manifest?.providerInstanceRef ?? runId,
       providerName: this.name,
-      recoverableUntilAt: null,
+      recoverableUntilAt: manifest?.planId ? getRecoverableUntilAt(getSubscriptionPlan(manifest.planId), null) : null,
       runId,
       runtimeMode: lifecyclePolicy.runtimeMode,
       startedAt: runtime.startedAt,

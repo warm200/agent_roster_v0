@@ -57,6 +57,13 @@
       "when": 1774044000000,
       "tag": "0007_subscription_credit_topups",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1774059300000,
+      "tag": "0008_openclaw_idle_activity",
+      "breakpoints": true
     }
   ]
 }

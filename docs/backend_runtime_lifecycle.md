@@ -361,22 +361,26 @@ Current default intent:
 The backend now tracks:
 
 - `run_usage.lastMeaningfulActivityAt`
+- `run_usage.lastOpenClawSessionActivityAt`
 
 This is used for idle-time enforcement.
 
 Current producers:
 
 - paired Telegram inbound messages for active runs on an order
-- provider-synced runtime progress timestamps during reconciliation
-- launch/restart/provider-accept transitions
 - explicit internal activity route:
   - `POST /api/internal/runs/[runId]/activity`
+- OpenClaw session probes during maintenance
+  - sourced from `~/.openclaw/agents/*/sessions/sessions.json`
+  - uses the max session `updatedAt`
 
 Non-producers by design:
 
 - dashboard polling
 - viewing logs
 - viewing results
+- provider-synced runtime progress timestamps during reconciliation
+- launch/restart/provider-accept transitions
 
 This keeps idle timeout tied to actual runtime work rather than passive UI traffic.
 

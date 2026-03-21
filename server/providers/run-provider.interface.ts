@@ -42,6 +42,12 @@ export type RuntimeProviderInstance = {
   workspaceReleasedAt: string | null
 }
 
+export type RuntimeActivitySnapshot = {
+  lastOpenClawSessionActivityAt: string | null
+  lastOpenClawSessionProbeAt: string
+  openClawSessionCount: number
+}
+
 export type CreateRuntimeInstanceInput = {
   lifecyclePolicy: RuntimeLifecyclePolicy
   order: Order
@@ -53,6 +59,7 @@ export type CreateRuntimeInstanceInput = {
 export interface RunProvider {
   readonly name: string
   createRuntimeInstance?(input: CreateRuntimeInstanceInput): Promise<RuntimeProviderInstance>
+  getRuntimeActivitySnapshot?(runId: string): Promise<RuntimeActivitySnapshot | null>
   getRuntimeInstance?(runId: string): Promise<RuntimeProviderInstance | null>
   archiveRuntimeInstance?(runId: string): Promise<RuntimeProviderInstance | null>
   recoverRuntimeInstance?(runId: string): Promise<RuntimeProviderInstance | null>

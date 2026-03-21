@@ -1764,6 +1764,105 @@ test('daytona run provider recovers archived sandboxes before restart', async ()
   assert.equal(started, true)
 })
 
+test('daytona run provider falls back to a provisioning runtime when post-restart read still reports stopped sandbox', async () => {
+  const runId = 'run-restart-stale-stopped-read'
+  const createdAt = new Date().toISOString()
+  let sandboxState: typeof SandboxState.STARTED | typeof SandboxState.STOPPED = SandboxState.STOPPED
+  let failReadback = false
+
+  const files: Record<string, string> = {
+    '/tmp/agent-roster/manifest.json': JSON.stringify({
+      agentTitles: ['Inbox Triage Agent'],
+      channelConfigId: 'channel-test-1',
+      combinedRiskLevel: 'low',
+      createdAt,
+      networkEnabled: true,
+      orderId: 'order-test-1',
+      persistenceMode: 'recoverable',
+      planId: 'warm_standby',
+      providerInstanceRef: runId,
+      recipientExternalId: '77',
+      runId,
+      runtimeMode: 'wakeable_recoverable',
+      userId: 'user-test-1',
+      usesTools: true,
+    }),
+    '/tmp/agent-roster/status.json': JSON.stringify({
+      completedAt: createdAt,
+      resultSummary: 'Managed runtime is sleeping and can be resumed later.',
+      startedAt: createdAt,
+      status: 'completed',
+      updatedAt: createdAt,
+    }),
+    '/tmp/agent-roster/result.json': JSON.stringify({
+      artifacts: [],
+      summary: 'Managed runtime is sleeping and can be resumed later.',
+    }),
+    '/tmp/agent-roster/bootstrap-openclaw.sh': '#!/usr/bin/env bash\necho restart\n',
+  }
+
+  const provider = new DaytonaRunProvider({
+    apiKey: 'daytona-test',
+    clientFactory: () => ({
+      async create() {
+        throw new Error('not used')
+      },
+      async get(id) {
+        assert.equal(id, runId)
+        return {
+          createdAt,
+          fs: {
+            async downloadFile(filePath: string) {
+              if (failReadback) {
+                throw new Error('toolbox unavailable after restart')
+              }
+              const value = files[filePath]
+              if (value === undefined) {
+                const error = new Error(`404 ${filePath}`)
+                ;(error as Error & { status: number }).status = 404
+                throw error
+              }
+              return Buffer.from(value, 'utf8')
+            },
+            async uploadFile(file: Buffer, filePath: string) {
+              files[filePath] = file.toString('utf8')
+            },
+          },
+          id,
+          process: {
+            async executeCommand(command: string) {
+              if (command.includes('nohup /tmp/agent-roster/bootstrap-openclaw.sh')) {
+                failReadback = true
+              }
+              return { exitCode: 0, result: '' }
+            },
+          },
+          start: async () => {
+            sandboxState = SandboxState.STARTED
+          },
+          state: sandboxState as typeof SandboxState.STARTED | typeof SandboxState.STOPPED,
+        }
+      },
+    }),
+  })
+
+  const restarted = await provider.restartRuntimeInstance(
+    runId,
+    order,
+    getRuntimeLifecyclePolicy({
+      id: 'warm_standby',
+      includedCredits: 0,
+      priceCents: 0,
+      triggerMode: 'auto_wake',
+    } as never),
+  )
+
+  assert.ok(restarted)
+  assert.equal(restarted?.state, 'provisioning')
+  assert.equal(restarted?.planId, 'warm_standby')
+  assert.equal(restarted?.providerInstanceRef, runId)
+})
+
 test('daytona run provider exposes recoverableUntilAt for stopped warm standby sandboxes', async () => {
   const runId = 'run-warm-stopped-runtime'
   const createdAt = new Date().toISOString()
@@ -1835,4 +1934,53 @@ test('daytona run provider exposes recoverableUntilAt for stopped warm standby s
   const runtime = await provider.getRuntimeInstance(runId)
 
   assert.ok(runtime?.recoverableUntilAt)
+})
+
+test('daytona run provider probes OpenClaw session activity from per-agent session stores', async () => {
+  const runId = 'run-openclaw-activity'
+  const createdAt = new Date().toISOString()
+
+  const provider = new DaytonaRunProvider({
+    apiKey: 'daytona-test',
+    clientFactory: () => ({
+      async create() {
+        throw new Error('not used')
+      },
+      async get(id) {
+        assert.equal(id, runId)
+        return {
+          createdAt,
+          fs: {
+            async downloadFile() {
+              throw new Error('not used')
+            },
+            async uploadFile() {},
+          },
+          id,
+          process: {
+            async executeCommand(command: string) {
+              assert.match(command, /sessions\.json/)
+              return {
+                exitCode: 0,
+                result: JSON.stringify({
+                  lastOpenClawSessionActivityAt: '2026-03-20T21:45:45.139Z',
+                  lastOpenClawSessionProbeAt: '2026-03-20T21:46:00.000Z',
+                  openClawSessionCount: 2,
+                }),
+              }
+            },
+          },
+          state: SandboxState.STARTED,
+        }
+      },
+    }),
+  })
+
+  const snapshot = await provider.getRuntimeActivitySnapshot?.(runId)
+
+  assert.deepEqual(snapshot, {
+    lastOpenClawSessionActivityAt: '2026-03-20T21:45:45.139Z',
+    lastOpenClawSessionProbeAt: '2026-03-20T21:46:00.000Z',
+    openClawSessionCount: 2,
+  })
 })

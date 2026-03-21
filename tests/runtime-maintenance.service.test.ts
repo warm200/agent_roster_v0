@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import type { RuntimeInstance } from '@/lib/types'
+import type { RunUsage, RuntimeInstance } from '@/lib/types'
 import { RuntimeMaintenanceService } from '@/server/services/runtime-maintenance.service'
 
 const baseRuntime: RuntimeInstance = {
@@ -27,6 +27,51 @@ const baseRuntime: RuntimeInstance = {
   metadataJson: {},
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
+}
+
+function buildUsage(overrides: Partial<RunUsage> = {}): RunUsage {
+  return {
+    id: 'usage-1',
+    runId: 'run-1',
+    userId: 'user-1',
+    orderId: 'order-1',
+    planId: 'run',
+    planVersion: 'v1',
+    triggerModeSnapshot: 'manual',
+    agentCount: 1,
+    usesRealWorkspace: true,
+    usesTools: true,
+    networkEnabled: true,
+    provisioningStartedAt: new Date(Date.now() - 20 * 60 * 1000).toISOString(),
+    providerAcceptedAt: new Date(Date.now() - 20 * 60 * 1000).toISOString(),
+    runningStartedAt: new Date(Date.now() - 20 * 60 * 1000).toISOString(),
+    lastMeaningfulActivityAt: null,
+    lastOpenClawSessionActivityAt: null,
+    lastOpenClawSessionProbeAt: null,
+    openClawSessionCount: null,
+    completedAt: null,
+    workspaceReleasedAt: null,
+    terminationReason: null,
+    workspaceMinutes: null,
+    toolCallsCount: null,
+    inputTokensEst: null,
+    outputTokensEst: null,
+    estimatedInternalCostCents: null,
+    statusSnapshot: 'running',
+    ttlPolicySnapshot: {
+      cleanupGraceMinutes: 5,
+      heartbeatMissingMinutes: null,
+      idleTimeoutMinutes: 20,
+      maxSessionTtlMinutes: 120,
+      openClawIdleTimeoutMinutes: 20,
+      provisioningTimeoutMinutes: 15,
+      triggerMode: 'manual',
+      unhealthyProviderTimeoutMinutes: null,
+    },
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    ...overrides,
+  }
 }
 
 test('runtime maintenance reconciles stale runtime instances in batch', async () => {
@@ -615,4 +660,175 @@ test('runtime maintenance heals released usage rows that still have stale runnin
   assert.equal(result.reconciled, 1)
   assert.equal(runtimeUpdates.some((update) => update.state === 'deleted'), true)
   assert.deepEqual(closedIntervals, [{ runtimeInstanceId: baseRuntime.id, reason: 'idle_timeout' }])
+})
+
+test('runtime maintenance records recent OpenClaw session activity and skips idle stop', async () => {
+  const usageUpdates: Array<Partial<RunUsage>> = []
+  const stopped: Array<{ runId: string; reason: string }> = []
+  const recentSessionAt = new Date(Date.now() - 30 * 1000).toISOString()
+
+  const service = new RuntimeMaintenanceService(
+    {
+      async closeRuntimeInterval() {
+        return null
+      },
+      async listRuntimeInstancesByStates() {
+        return [{ ...baseRuntime, state: 'running' }]
+      },
+      async listRuntimeInstancesNeedingReconcile() {
+        return []
+      },
+      async findRuntimeInstanceByRunId() {
+        return { ...baseRuntime, state: 'running' }
+      },
+      async updateRuntimeInstance() {
+        return null
+      },
+    },
+    {
+      async findRunUsage() {
+        return buildUsage({
+          lastMeaningfulActivityAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+        })
+      },
+      async updateRunUsage(_runId: string, patch: Partial<RunUsage>) {
+        usageUpdates.push(patch)
+        return buildUsage({
+          lastMeaningfulActivityAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+          ...patch,
+        })
+      },
+    },
+    {
+      async getRun() {
+        throw new Error('stale reconciliation should not run for fresh active runtimes')
+      },
+      async stopRunForReason(userId: string, runId: string, reason: string) {
+        stopped.push({ reason, runId: `${userId}:${runId}` })
+        return {} as never
+      },
+    } as never,
+    () =>
+      ({
+        name: 'daytona',
+        async createRun() {
+          throw new Error('not used')
+        },
+        async getLogs() {
+          return []
+        },
+        async getResult() {
+          return null
+        },
+        async getRuntimeActivitySnapshot() {
+          return {
+            lastOpenClawSessionActivityAt: recentSessionAt,
+            lastOpenClawSessionProbeAt: new Date().toISOString(),
+            openClawSessionCount: 1,
+          }
+        },
+        async getStatus() {
+          return null
+        },
+        async stopRun() {
+          return null
+        },
+      }),
+  )
+
+  const result = await service.reconcileStaleRuntimes({ limit: 10, staleMinutes: 5 })
+
+  assert.equal(result.reconciled, 0)
+  assert.deepEqual(stopped, [])
+  assert.equal(usageUpdates.some((patch) => patch.lastOpenClawSessionActivityAt === recentSessionAt), true)
+})
+
+test('runtime maintenance uses the OpenClaw idle timeout override when session activity is stale', async () => {
+  const stopped: Array<{ runId: string; reason: string }> = []
+  const staleSessionAt = new Date(Date.now() - 10 * 60 * 1000).toISOString()
+
+  const service = new RuntimeMaintenanceService(
+    {
+      async closeRuntimeInterval() {
+        return null
+      },
+      async listRuntimeInstancesByStates() {
+        return [{ ...baseRuntime, state: 'running' }]
+      },
+      async listRuntimeInstancesNeedingReconcile() {
+        return []
+      },
+      async findRuntimeInstanceByRunId() {
+        return { ...baseRuntime, state: 'running' }
+      },
+      async updateRuntimeInstance() {
+        return null
+      },
+    },
+    {
+      async findRunUsage() {
+        return buildUsage({
+          lastMeaningfulActivityAt: null,
+          ttlPolicySnapshot: {
+            ...buildUsage().ttlPolicySnapshot,
+            idleTimeoutMinutes: 60,
+            openClawIdleTimeoutMinutes: 5,
+          },
+        })
+      },
+      async updateRunUsage(_runId: string, patch: Partial<RunUsage>) {
+        return buildUsage({
+          lastMeaningfulActivityAt: null,
+          lastOpenClawSessionActivityAt: patch.lastOpenClawSessionActivityAt ?? null,
+          lastOpenClawSessionProbeAt: patch.lastOpenClawSessionProbeAt ?? null,
+          openClawSessionCount: patch.openClawSessionCount ?? null,
+          ttlPolicySnapshot: {
+            ...buildUsage().ttlPolicySnapshot,
+            idleTimeoutMinutes: 60,
+            openClawIdleTimeoutMinutes: 5,
+          },
+        })
+      },
+    },
+    {
+      async getRun() {
+        throw new Error('stale reconciliation should not run for active policy enforcement')
+      },
+      async stopRunForReason(userId: string, runId: string, reason: string) {
+        stopped.push({ reason, runId: `${userId}:${runId}` })
+        return {} as never
+      },
+    } as never,
+    () =>
+      ({
+        name: 'daytona',
+        async createRun() {
+          throw new Error('not used')
+        },
+        async getLogs() {
+          return []
+        },
+        async getResult() {
+          return null
+        },
+        async getRuntimeActivitySnapshot() {
+          return {
+            lastOpenClawSessionActivityAt: staleSessionAt,
+            lastOpenClawSessionProbeAt: new Date().toISOString(),
+            openClawSessionCount: 1,
+          }
+        },
+        async getStatus() {
+          return null
+        },
+        async stopRun() {
+          return null
+        },
+      }),
+  )
+
+  const result = await service.reconcileStaleRuntimes({ limit: 10, staleMinutes: 5 })
+
+  assert.equal(result.reconciled, 1)
+  assert.deepEqual(stopped, [{ reason: 'idle_timeout', runId: 'user-1:run-1' }])
 })

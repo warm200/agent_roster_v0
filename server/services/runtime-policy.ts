@@ -15,6 +15,7 @@ export type TtlPolicySnapshot = {
   heartbeatMissingMinutes: number | null
   idleTimeoutMinutes: number | null
   maxSessionTtlMinutes: number | null
+  openClawIdleTimeoutMinutes?: number | null
   provisioningTimeoutMinutes: number
   triggerMode: TriggerMode
   unhealthyProviderTimeoutMinutes: number | null
@@ -49,6 +50,10 @@ export function getTtlPolicySnapshot(plan: SubscriptionPlan): TtlPolicySnapshot 
         heartbeatMissingMinutes: null,
         idleTimeoutMinutes: readPositiveIntEnv('RUN_IDLE_TIMEOUT_MINUTES', 20),
         maxSessionTtlMinutes: readPositiveIntEnv('RUN_MAX_SESSION_TTL_MINUTES', 120),
+        openClawIdleTimeoutMinutes: readPositiveIntEnv(
+          'RUN_OPENCLAW_IDLE_TIMEOUT_MINUTES',
+          readPositiveIntEnv('RUN_IDLE_TIMEOUT_MINUTES', 20),
+        ),
         provisioningTimeoutMinutes: readPositiveIntEnv('RUNTIME_PROVISIONING_TIMEOUT_MINUTES', 15) ?? 15,
         triggerMode: plan.triggerMode,
         unhealthyProviderTimeoutMinutes: null,
@@ -59,6 +64,10 @@ export function getTtlPolicySnapshot(plan: SubscriptionPlan): TtlPolicySnapshot 
         heartbeatMissingMinutes: null,
         idleTimeoutMinutes: readPositiveIntEnv('WARM_STANDBY_IDLE_TIMEOUT_MINUTES', 45),
         maxSessionTtlMinutes: readPositiveIntEnv('WARM_STANDBY_MAX_SESSION_TTL_MINUTES', 360),
+        openClawIdleTimeoutMinutes: readPositiveIntEnv(
+          'WARM_STANDBY_OPENCLAW_IDLE_TIMEOUT_MINUTES',
+          readPositiveIntEnv('WARM_STANDBY_IDLE_TIMEOUT_MINUTES', 45),
+        ),
         provisioningTimeoutMinutes: readPositiveIntEnv('RUNTIME_PROVISIONING_TIMEOUT_MINUTES', 15) ?? 15,
         triggerMode: plan.triggerMode,
         unhealthyProviderTimeoutMinutes: null,
@@ -69,6 +78,7 @@ export function getTtlPolicySnapshot(plan: SubscriptionPlan): TtlPolicySnapshot 
         heartbeatMissingMinutes: readPositiveIntEnv('ALWAYS_ON_HEARTBEAT_MISSING_MINUTES', 15),
         idleTimeoutMinutes: null,
         maxSessionTtlMinutes: null,
+        openClawIdleTimeoutMinutes: null,
         provisioningTimeoutMinutes: readPositiveIntEnv('RUNTIME_PROVISIONING_TIMEOUT_MINUTES', 15) ?? 15,
         triggerMode: plan.triggerMode,
         unhealthyProviderTimeoutMinutes: readPositiveIntEnv('ALWAYS_ON_UNHEALTHY_PROVIDER_TIMEOUT_MINUTES', 10),
@@ -79,6 +89,7 @@ export function getTtlPolicySnapshot(plan: SubscriptionPlan): TtlPolicySnapshot 
         heartbeatMissingMinutes: null,
         idleTimeoutMinutes: null,
         maxSessionTtlMinutes: null,
+        openClawIdleTimeoutMinutes: null,
         provisioningTimeoutMinutes: readPositiveIntEnv('RUNTIME_PROVISIONING_TIMEOUT_MINUTES', 15) ?? 15,
         triggerMode: plan.triggerMode,
         unhealthyProviderTimeoutMinutes: null,

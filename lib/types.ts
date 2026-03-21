@@ -363,6 +363,9 @@ export interface RunUsage {
   providerAcceptedAt: string | null
   runningStartedAt: string | null
   lastMeaningfulActivityAt: string | null
+  lastOpenClawSessionActivityAt?: string | null
+  lastOpenClawSessionProbeAt?: string | null
+  openClawSessionCount?: number | null
   completedAt: string | null
   workspaceReleasedAt: string | null
   terminationReason: RunTerminationReason | null
@@ -377,6 +380,7 @@ export interface RunUsage {
     heartbeatMissingMinutes: number | null
     idleTimeoutMinutes: number | null
     maxSessionTtlMinutes: number | null
+    openClawIdleTimeoutMinutes?: number | null
     provisioningTimeoutMinutes: number
     triggerMode: TriggerMode
     unhealthyProviderTimeoutMinutes: number | null

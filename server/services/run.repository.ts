@@ -8,8 +8,14 @@ import { runUsage, runs } from '../db/schema'
 
 let dbClient: DbClient | null = null
 
-type LegacyRunUsageRow = Omit<typeof runUsage.$inferSelect, 'lastMeaningfulActivityAt'> & {
+type LegacyRunUsageRow = Omit<
+  typeof runUsage.$inferSelect,
+  'lastMeaningfulActivityAt' | 'lastOpenClawSessionActivityAt' | 'lastOpenClawSessionProbeAt' | 'openClawSessionCount'
+> & {
   lastMeaningfulActivityAt?: Date | null
+  lastOpenClawSessionActivityAt?: Date | null
+  lastOpenClawSessionProbeAt?: Date | null
+  openClawSessionCount?: number | null
 }
 
 function getDb() {
@@ -85,6 +91,9 @@ function toPublicRunUsage(row: typeof runUsage.$inferSelect): RunUsage {
     providerAcceptedAt: row.providerAcceptedAt?.toISOString() ?? null,
     runningStartedAt: row.runningStartedAt?.toISOString() ?? null,
     lastMeaningfulActivityAt: row.lastMeaningfulActivityAt?.toISOString() ?? null,
+    lastOpenClawSessionActivityAt: row.lastOpenClawSessionActivityAt?.toISOString() ?? null,
+    lastOpenClawSessionProbeAt: row.lastOpenClawSessionProbeAt?.toISOString() ?? null,
+    openClawSessionCount: row.openClawSessionCount ?? null,
     completedAt: row.completedAt?.toISOString() ?? null,
     workspaceReleasedAt: row.workspaceReleasedAt?.toISOString() ?? null,
     terminationReason: row.terminationReason,
@@ -117,6 +126,9 @@ function toPublicLegacyRunUsage(row: LegacyRunUsageRow): RunUsage {
     providerAcceptedAt: row.providerAcceptedAt?.toISOString() ?? null,
     runningStartedAt: row.runningStartedAt?.toISOString() ?? null,
     lastMeaningfulActivityAt: row.lastMeaningfulActivityAt?.toISOString() ?? null,
+    lastOpenClawSessionActivityAt: row.lastOpenClawSessionActivityAt?.toISOString() ?? null,
+    lastOpenClawSessionProbeAt: row.lastOpenClawSessionProbeAt?.toISOString() ?? null,
+    openClawSessionCount: row.openClawSessionCount ?? null,
     completedAt: row.completedAt?.toISOString() ?? null,
     workspaceReleasedAt: row.workspaceReleasedAt?.toISOString() ?? null,
     terminationReason: row.terminationReason,
@@ -169,6 +181,11 @@ function toRunUsageInsertValues(usage: RunUsage): typeof runUsage.$inferInsert {
     providerAcceptedAt: usage.providerAcceptedAt ? new Date(usage.providerAcceptedAt) : null,
     runningStartedAt: usage.runningStartedAt ? new Date(usage.runningStartedAt) : null,
     lastMeaningfulActivityAt: usage.lastMeaningfulActivityAt ? new Date(usage.lastMeaningfulActivityAt) : null,
+    lastOpenClawSessionActivityAt: usage.lastOpenClawSessionActivityAt
+      ? new Date(usage.lastOpenClawSessionActivityAt)
+      : null,
+    lastOpenClawSessionProbeAt: usage.lastOpenClawSessionProbeAt ? new Date(usage.lastOpenClawSessionProbeAt) : null,
+    openClawSessionCount: usage.openClawSessionCount ?? null,
     completedAt: usage.completedAt ? new Date(usage.completedAt) : null,
     workspaceReleasedAt: usage.workspaceReleasedAt ? new Date(usage.workspaceReleasedAt) : null,
     terminationReason: usage.terminationReason,
@@ -184,7 +201,7 @@ function toRunUsageInsertValues(usage: RunUsage): typeof runUsage.$inferInsert {
   }
 }
 
-function isMissingLastMeaningfulActivityColumn(error: unknown) {
+function isMissingLegacyRunUsageColumn(error: unknown) {
   const message = error instanceof Error ? error.message.toLowerCase() : ''
   const code = typeof error === 'object' && error !== null && 'code' in error ? String(error.code) : ''
   const cause =
@@ -195,7 +212,12 @@ function isMissingLastMeaningfulActivityColumn(error: unknown) {
 
   return (
     (code === '42703' || causeCode === '42703') &&
-    (message.includes('last_meaningful_activity_at') || causeMessage.includes('last_meaningful_activity_at'))
+    [
+      'last_meaningful_activity_at',
+      'last_openclaw_session_activity_at',
+      'last_openclaw_session_probe_at',
+      'openclaw_session_count',
+    ].some((column) => message.includes(column) || causeMessage.includes(column))
   )
 }
 
@@ -224,6 +246,10 @@ function legacyRunUsageInsertSql(usage: RunUsage) {
       provisioning_started_at,
       provider_accepted_at,
       running_started_at,
+      last_meaningful_activity_at,
+      last_openclaw_session_activity_at,
+      last_openclaw_session_probe_at,
+      openclaw_session_count,
       completed_at,
       workspace_released_at,
       termination_reason,
@@ -251,6 +277,10 @@ function legacyRunUsageInsertSql(usage: RunUsage) {
       ${usage.provisioningStartedAt ? new Date(usage.provisioningStartedAt) : null},
       ${usage.providerAcceptedAt ? new Date(usage.providerAcceptedAt) : null},
       ${usage.runningStartedAt ? new Date(usage.runningStartedAt) : null},
+      ${usage.lastMeaningfulActivityAt ? new Date(usage.lastMeaningfulActivityAt) : null},
+      ${usage.lastOpenClawSessionActivityAt ? new Date(usage.lastOpenClawSessionActivityAt) : null},
+      ${usage.lastOpenClawSessionProbeAt ? new Date(usage.lastOpenClawSessionProbeAt) : null},
+      ${usage.openClawSessionCount ?? null},
       ${usage.completedAt ? new Date(usage.completedAt) : null},
       ${usage.workspaceReleasedAt ? new Date(usage.workspaceReleasedAt) : null},
       ${usage.terminationReason},
@@ -279,6 +309,10 @@ function legacyRunUsageInsertSql(usage: RunUsage) {
       provisioning_started_at as "provisioningStartedAt",
       provider_accepted_at as "providerAcceptedAt",
       running_started_at as "runningStartedAt",
+      last_meaningful_activity_at as "lastMeaningfulActivityAt",
+      last_openclaw_session_activity_at as "lastOpenClawSessionActivityAt",
+      last_openclaw_session_probe_at as "lastOpenClawSessionProbeAt",
+      openclaw_session_count as "openClawSessionCount",
       completed_at as "completedAt",
       workspace_released_at as "workspaceReleasedAt",
       termination_reason as "terminationReason",
@@ -311,6 +345,10 @@ function legacyRunUsageSelectSql(runId: string) {
       provisioning_started_at as "provisioningStartedAt",
       provider_accepted_at as "providerAcceptedAt",
       running_started_at as "runningStartedAt",
+      null::timestamptz as "lastMeaningfulActivityAt",
+      null::timestamptz as "lastOpenClawSessionActivityAt",
+      null::timestamptz as "lastOpenClawSessionProbeAt",
+      null::integer as "openClawSessionCount",
       completed_at as "completedAt",
       workspace_released_at as "workspaceReleasedAt",
       termination_reason as "terminationReason",
@@ -371,6 +409,10 @@ function legacyRunUsageUpdateSql(runId: string, input: Partial<RunUsage>) {
       provisioning_started_at as "provisioningStartedAt",
       provider_accepted_at as "providerAcceptedAt",
       running_started_at as "runningStartedAt",
+      null::timestamptz as "lastMeaningfulActivityAt",
+      null::timestamptz as "lastOpenClawSessionActivityAt",
+      null::timestamptz as "lastOpenClawSessionProbeAt",
+      null::integer as "openClawSessionCount",
       completed_at as "completedAt",
       workspace_released_at as "workspaceReleasedAt",
       termination_reason as "terminationReason",
@@ -407,7 +449,7 @@ export class RunRepository {
 
       return created
     } catch (error) {
-      if (!isMissingLastMeaningfulActivityColumn(error)) {
+      if (!isMissingLegacyRunUsageColumn(error)) {
         throw error
       }
 
@@ -493,7 +535,7 @@ export class RunRepository {
       const [row] = await db.select().from(runUsage).where(eq(runUsage.runId, runId)).limit(1)
       return row ? toPublicRunUsage(row) : null
     } catch (error) {
-      if (!isMissingLastMeaningfulActivityColumn(error)) {
+      if (!isMissingLegacyRunUsageColumn(error)) {
         throw error
       }
 
@@ -517,6 +559,20 @@ export class RunRepository {
               : input.lastMeaningfulActivityAt === null
                 ? null
                 : undefined,
+          lastOpenClawSessionActivityAt:
+            input.lastOpenClawSessionActivityAt
+              ? new Date(input.lastOpenClawSessionActivityAt)
+              : input.lastOpenClawSessionActivityAt === null
+                ? null
+                : undefined,
+          lastOpenClawSessionProbeAt:
+            input.lastOpenClawSessionProbeAt
+              ? new Date(input.lastOpenClawSessionProbeAt)
+              : input.lastOpenClawSessionProbeAt === null
+                ? null
+                : undefined,
+          openClawSessionCount:
+            Object.hasOwn(input, 'openClawSessionCount') ? (input.openClawSessionCount ?? null) : undefined,
           completedAt: input.completedAt ? new Date(input.completedAt) : input.completedAt === null ? null : undefined,
           workspaceReleasedAt:
             input.workspaceReleasedAt ? new Date(input.workspaceReleasedAt) : input.workspaceReleasedAt === null ? null : undefined,
@@ -535,7 +591,7 @@ export class RunRepository {
 
       return updated ? toPublicRunUsage(updated) : null
     } catch (error) {
-      if (!isMissingLastMeaningfulActivityColumn(error)) {
+      if (!isMissingLegacyRunUsageColumn(error)) {
         throw error
       }
 

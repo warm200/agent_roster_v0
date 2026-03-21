@@ -1,5 +1,6 @@
 import type { RunTerminationReason, RuntimeInstance, RunUsage } from '@/lib/types'
 
+import { getRunProvider } from '../providers'
 import { RunRepository } from './run.repository'
 import { getRunService, type RunService } from './run.service'
 import { RuntimeInstanceRepository } from './runtime-instance.repository'
@@ -27,6 +28,38 @@ function hasElapsed(since: string | null, minutes: number | null) {
   return Date.now() - sinceMs >= minutes * 60 * 1000
 }
 
+function pickLatestTimestamp(...timestamps: Array<string | null | undefined>) {
+  let latest: string | null = null
+  let latestMs = Number.NEGATIVE_INFINITY
+
+  for (const candidate of timestamps) {
+    if (!candidate) {
+      continue
+    }
+    const candidateMs = new Date(candidate).getTime()
+    if (Number.isNaN(candidateMs) || candidateMs <= latestMs) {
+      continue
+    }
+    latest = candidate
+    latestMs = candidateMs
+  }
+
+  return latest
+}
+
+function resolveIdleSince(usage: RunUsage) {
+  return pickLatestTimestamp(
+    usage.lastOpenClawSessionActivityAt,
+    usage.lastMeaningfulActivityAt,
+    usage.runningStartedAt,
+    usage.providerAcceptedAt,
+  )
+}
+
+function resolveIdleTimeoutMinutes(usage: RunUsage) {
+  return usage.ttlPolicySnapshot.openClawIdleTimeoutMinutes ?? usage.ttlPolicySnapshot.idleTimeoutMinutes
+}
+
 function determineMaintenanceStopReason(
   runtime: RuntimeInstance,
   usage: RunUsage | null,
@@ -44,10 +77,7 @@ function determineMaintenanceStopReason(
 
   if (
     runtime.state === 'running' &&
-    hasElapsed(
-      usage.lastMeaningfulActivityAt ?? usage.runningStartedAt ?? usage.providerAcceptedAt,
-      usage.ttlPolicySnapshot.idleTimeoutMinutes,
-    )
+    hasElapsed(resolveIdleSince(usage), resolveIdleTimeoutMinutes(usage))
   ) {
     return 'idle_timeout'
   }
@@ -79,8 +109,10 @@ export class RuntimeMaintenanceService {
       | 'listRuntimeInstancesNeedingReconcile'
       | 'updateRuntimeInstance'
     > = new RuntimeInstanceRepository(),
-    private readonly runRepository: Pick<RunRepository, 'findRunUsage'> = new RunRepository(),
+    private readonly runRepository: Pick<RunRepository, 'findRunUsage'> &
+      Partial<Pick<RunRepository, 'updateRunUsage'>> = new RunRepository(),
     private readonly runService: Pick<RunService, 'getRun' | 'stopRunForReason'> = getRunService(),
+    private readonly providerFactory: typeof getRunProvider = getRunProvider,
   ) {}
 
   async reconcileStaleRuntimes(input?: {
@@ -107,7 +139,10 @@ export class RuntimeMaintenanceService {
 
     for (const runtime of activePolicyRuntimes) {
       try {
-        const usage = await this.runRepository.findRunUsage(runtime.runId)
+        const usage = await this.refreshRuntimeActivityUsage(
+          runtime,
+          await this.runRepository.findRunUsage(runtime.runId),
+        )
         if (usage?.workspaceReleasedAt) {
           await this.runtimeRepository.updateRuntimeInstance(runtime.runId, {
             deletedAt: usage.workspaceReleasedAt,
@@ -152,7 +187,10 @@ export class RuntimeMaintenanceService {
         touchedRunIds.push(run.id)
         reconciled += 1
         const latestRuntime = (await this.runtimeRepository.findRuntimeInstanceByRunId(runtime.runId)) ?? runtime
-        const usage = await this.runRepository.findRunUsage(runtime.runId)
+        const usage = await this.refreshRuntimeActivityUsage(
+          latestRuntime,
+          await this.runRepository.findRunUsage(runtime.runId),
+        )
         const stopReason = determineMaintenanceStopReason(latestRuntime, usage)
         if (stopReason) {
           await this.runService.stopRunForReason(runtime.userId, runtime.runId, stopReason)
@@ -169,6 +207,47 @@ export class RuntimeMaintenanceService {
       touchedRunIds,
     }
   }
+
+  private async refreshRuntimeActivityUsage(runtime: RuntimeInstance, usage: RunUsage | null) {
+    if (!usage || runtime.state !== 'running') {
+      return usage
+    }
+
+    try {
+      const provider = this.providerFactory(runtime.providerName)
+      if (!provider.getRuntimeActivitySnapshot) {
+        return usage
+      }
+
+      const snapshot = await provider.getRuntimeActivitySnapshot(runtime.runId)
+      if (!snapshot) {
+        return usage
+      }
+
+      const patch = {
+        lastOpenClawSessionActivityAt: snapshot.lastOpenClawSessionActivityAt,
+        lastOpenClawSessionProbeAt: snapshot.lastOpenClawSessionProbeAt,
+        openClawSessionCount: snapshot.openClawSessionCount,
+        updatedAt: nowIso(),
+      } satisfies Partial<RunUsage>
+
+      const updatedUsage = await this.runRepository.updateRunUsage?.(runtime.runId, patch)
+      if (updatedUsage) {
+        return updatedUsage
+      }
+
+      return {
+        ...usage,
+        ...patch,
+      }
+    } catch {
+      return usage
+    }
+  }
+}
+
+function nowIso() {
+  return new Date().toISOString()
 }
 
 let runtimeMaintenanceServiceOverride: RuntimeMaintenanceService | null = null

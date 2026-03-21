@@ -181,4 +181,6 @@ If you use this path:
 - no Daytona webhook ingestion
 - no Daytona audit-log reconciliation
 - no volume lifecycle management
-- idle cleanup is only as trustworthy as the activity producers feeding `lastMeaningfulActivityAt`
+- idle cleanup still depends on maintenance cadence
+- Daytona/OpenClaw idle now prefers direct session activity from `~/.openclaw/agents/*/sessions/sessions.json`
+- provider reconcile timestamps are intentionally excluded from the meaningful activity clock
