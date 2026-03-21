@@ -3,10 +3,11 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
-import { Bot, LayoutDashboard, Package, Play, LogIn, LogOut } from 'lucide-react'
+import { LayoutDashboard, Package, Play, LogIn, LogOut } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { useAuth } from '@/lib/auth-context'
+import { BrandLogo } from '@/components/brand-logo'
 
 const sidebarLinks = [
   { href: '/app', label: 'Dashboard', icon: LayoutDashboard },
@@ -37,9 +38,7 @@ export default function AppLayout({
         {/* Logo */}
         <div className="h-16 flex items-center px-6 border-b border-sidebar-border">
           <Link href="/" className="flex items-center gap-2 font-semibold">
-            <div className="w-8 h-8 rounded-lg bg-sidebar-foreground flex items-center justify-center">
-              <Bot className="w-5 h-5 text-sidebar" />
-            </div>
+            <BrandLogo />
             <span>OpenRoster</span>
           </Link>
         </div>
@@ -102,9 +101,7 @@ export default function AppLayout({
         {/* Top bar (mobile) */}
         <header className="lg:hidden h-16 flex items-center justify-between px-4 border-b border-border">
           <Link href="/" className="flex items-center gap-2 font-semibold">
-            <div className="w-8 h-8 rounded-lg bg-foreground flex items-center justify-center">
-              <Bot className="w-5 h-5 text-background" />
-            </div>
+            <BrandLogo />
             <span>OpenRoster</span>
           </Link>
           <nav className="flex items-center gap-1">

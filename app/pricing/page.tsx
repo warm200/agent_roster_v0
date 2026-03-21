@@ -3,6 +3,8 @@ import Link from 'next/link'
 import { Header } from '@/components/header'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { formatAgentsPerBundleLabel, listSubscriptionPlans } from '@/lib/subscription-plans'
+import type { SubscriptionPlanId } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import {
   ArrowRight,
@@ -17,132 +19,164 @@ import {
   Zap,
 } from 'lucide-react'
 
-const plans = [
-  {
-    name: 'Free',
-    price: '$0',
-    budgetBadge: 'No runtime budget',
-    budgetDetail: 'Browse and preview only.',
-    bestFor: 'Browse and preview',
-    runtimeBehavior: 'No runtime. Collect agents, preview personas, and decide what is worth running later.',
-    whyExists: 'This exists so catalog discovery stays frictionless. You should not pay to understand what an agent is.',
-    whoItsFor: 'People still exploring the catalog or evaluating how an agent thinks.',
-    activeBundles: '0',
-    agentsPerBundle: '0',
-    triggerMode: 'None',
-    alwaysOnBundles: '0',
+const planPresentation = {
+  free: {
     accent: 'border-white/12 bg-white/[0.03]',
     accentText: 'text-zinc-200',
+    bestFor: 'Browse and preview',
+    budgetBadge: 'No runtime budget',
+    budgetDetail: 'Browse and preview only.',
     cta: 'Browse Free Agents',
     href: '/agents',
-    icon: Snowflake,
-    tone: 'Discovery',
-    highlight: undefined,
     hideBudget: undefined,
-    includes: ['Free agents purchase', 'Free persona preview chat'],
+    highlight: undefined,
+    icon: Snowflake,
     metrics: [
       { label: 'Runtime behavior', value: 'No runtime', icon: Zap },
       { label: 'Agents in bundle', value: '0', icon: Bot },
       { label: 'Trigger mode', value: 'None', icon: Snowflake },
     ],
     persistence: 'No runtime',
-    stopBehavior: 'Not applicable',
     recoveryModel: 'Not applicable',
+    runtimeBehavior: 'No runtime. Collect agents, preview personas, and decide what is worth running later.',
+    stopBehavior: 'Not applicable',
+    tone: 'Discovery',
+    whoItsFor: 'People still exploring the catalog or evaluating how an agent thinks.',
+    whyExists: 'This exists so catalog discovery stays frictionless. You should not pay to understand what an agent is.',
   },
-  {
-    name: 'Run',
-    price: '$5',
-    budgetBadge: 'Usage budget included',
-    budgetDetail: 'Includes 15 runtime credits.',
-    bestFor: 'Test one workflow manually',
-    runtimeBehavior: 'Manual bounded session. Start it yourself, test the workflow, and let the session end automatically after 30 minutes.',
-    whyExists: 'This is the first paid step after preview when you want one real managed run without parallel operating complexity.',
-    whoItsFor: 'Solo operators validating a workflow end to end before they commit to repeat use.',
-    activeBundles: '1',
-    agentsPerBundle: '3',
-    triggerMode: 'Manual only',
-    alwaysOnBundles: '0',
+  run: {
     accent: 'border-amber-300/20 bg-amber-300/[0.06]',
     accentText: 'text-amber-200',
+    bestFor: 'Test one workflow manually',
+    budgetBadge: 'Usage budget included',
+    budgetDetail: '',
     cta: 'Start with Run',
     href: '/app/bundles',
-    icon: Play,
-    tone: 'Starting point',
-    highlight: undefined,
     hideBudget: undefined,
-    includes: ['Usage budget included', 'Manual bounded session', 'Session ends automatically after 30 minutes'],
+    highlight: undefined,
+    icon: Play,
     metrics: [
       { label: 'Runtime behavior', value: 'Bounded manual session', icon: Zap },
-      { label: 'Agents in bundle', value: '3', icon: Bot },
+      { label: 'Agents in bundle', value: '', icon: Bot },
       { label: 'Trigger mode', value: 'Manual only', icon: Play },
     ],
     persistence: 'Ephemeral session',
-    stopBehavior: 'Session ends automatically after 30 minutes and may be fully cleaned up.',
     recoveryModel: 'New launch',
+    runtimeBehavior: 'Manual bounded session. Start it yourself, test the workflow, and let the session end automatically after inactivity.',
+    stopBehavior: 'Session ends automatically after inactivity and may be fully cleaned up.',
+    tone: 'Starting point',
+    whoItsFor: 'Solo operators validating a workflow end to end before they commit to repeat use.',
+    whyExists: 'This is the first paid step after preview when you want one real managed run without parallel operating complexity.',
   },
-  {
-    name: 'Warm Standby',
-    price: '$19/mo',
-    budgetBadge: 'Fair-use runtime budget included',
-    budgetDetail: 'Includes 10 runtime credits per month.',
-    bestFor: 'Repeat Telegram-triggered workflows',
-    runtimeBehavior: 'Wake on message. Each wake session lasts up to 60 minutes, then state is preserved for later resume without self-hosting.',
-    whyExists: 'This exists for workflows that should wake repeatedly from Telegram without behaving like a permanent live workspace.',
-    whoItsFor: 'Operators running recurring Telegram-triggered workflows who want wake-on-demand behavior with recoverable state.',
-    activeBundles: '3',
-    agentsPerBundle: 'Unlimited',
-    triggerMode: 'Wake on Telegram',
-    alwaysOnBundles: '0',
+  warm_standby: {
     accent: 'border-orange-300/25 bg-orange-300/[0.07]',
     accentText: 'text-orange-200',
+    bestFor: 'Repeat Telegram-triggered workflows',
+    budgetBadge: 'Fair-use runtime budget included',
+    budgetDetail: '',
     cta: 'Use for repeat workflows',
     href: '/app/bundles',
-    icon: TimerReset,
-    tone: 'Wake on demand',
-    highlight: 'Wake on demand',
     hideBudget: undefined,
-    includes: ['Fair-use runtime budget included', 'Wake on message', 'State is preserved for later resume'],
+    highlight: 'Wake on demand',
+    icon: TimerReset,
     metrics: [
       { label: 'Runtime behavior', value: 'Wake on message', icon: Zap },
-      { label: 'Agents in bundle', value: 'Unlimited', icon: Bot },
+      { label: 'Agents in bundle', value: '', icon: Bot },
       { label: 'Trigger mode', value: 'Telegram wake', icon: TimerReset },
     ],
     persistence: 'Recoverable state',
-    stopBehavior: 'Wake session lasts up to 60 minutes, then state is preserved for later resume.',
     recoveryModel: 'Sleep and restore',
+    runtimeBehavior: 'Wake on message. State is preserved for later resume without self-hosting.',
+    stopBehavior: 'Auto-sleeps when idle, then preserves recoverable state for later resume.',
+    tone: 'Wake on demand',
+    whoItsFor: 'Operators running recurring Telegram-triggered workflows who want wake-on-demand behavior with recoverable state.',
+    whyExists: 'This exists for workflows that should wake repeatedly from Telegram without behaving like a permanent live workspace.',
   },
-  {
-    name: 'Always On',
-    price: '$149/mo',
-    budgetBadge: 'Persistent managed runtime',
-    budgetDetail: 'Long-running workspace support.',
-    bestFor: 'One core workspace running full time',
-    runtimeBehavior: 'Persistent workspace for the setups that should stay live instead of waking from zero.',
-    whyExists: 'This plan exists when sleeping and waking becomes the wrong operating model.',
-    whoItsFor: 'Teams or operators who need a long-running managed setup with a core workspace kept alive.',
-    activeBundles: '3',
-    agentsPerBundle: 'Unlimited',
-    triggerMode: 'Persistent workspace',
-    alwaysOnBundles: '10',
+  always_on: {
     accent: 'border-rose-300/25 bg-rose-300/[0.07]',
     accentText: 'text-rose-200',
+    bestFor: 'One core workspace running full time',
+    budgetBadge: 'Persistent managed runtime',
+    budgetDetail: 'Long-running workspace support.',
     cta: 'Use for dedicated runtime',
+    hideBudget: true,
     href: '/app/bundles',
-    icon: Flame,
-    tone: 'Persistent',
     highlight: undefined,
-    includes: ['Persistent managed runtime', 'Long-running workspace support', 'Persistent workspace'],
+    icon: Flame,
     metrics: [
       { label: 'Runtime behavior', value: 'Persistent workspace', icon: Zap },
-      { label: 'Agents in bundle', value: 'Unlimited', icon: Bot },
+      { label: 'Agents in bundle', value: '', icon: Bot },
       { label: 'Runtime shape', value: 'Long-running setup', icon: Flame },
     ],
-    hideBudget: true,
     persistence: 'Live persistence',
-    stopBehavior: 'Stopping is not the normal model. This plan is meant to keep a core workspace alive.',
     recoveryModel: 'Already live',
+    runtimeBehavior: 'Persistent workspace for the setups that should stay live instead of waking from zero.',
+    stopBehavior: 'Stopping is not the normal model. This plan is meant to keep a core workspace alive.',
+    tone: 'Persistent',
+    whoItsFor: 'Teams or operators who need a long-running managed setup with a core workspace kept alive.',
+    whyExists: 'This plan exists when sleeping and waking becomes the wrong operating model.',
   },
-] as const
+} as const satisfies Record<SubscriptionPlanId, {
+  accent: string
+  accentText: string
+  bestFor: string
+  budgetBadge: string
+  budgetDetail: string
+  cta: string
+  hideBudget?: boolean
+  highlight?: string
+  href: string
+  icon: typeof Bot
+  metrics: readonly { icon: typeof Bot; label: string; value: string }[]
+  persistence: string
+  recoveryModel: string
+  runtimeBehavior: string
+  stopBehavior: string
+  tone: string
+  whoItsFor: string
+  whyExists: string
+}>
+
+function formatTriggerModeLabel(planId: SubscriptionPlanId) {
+  switch (planId) {
+    case 'free':
+      return 'None'
+    case 'run':
+      return 'Manual only'
+    case 'warm_standby':
+      return 'Wake on Telegram'
+    case 'always_on':
+      return 'Persistent workspace'
+  }
+}
+
+const plans = listSubscriptionPlans().map((plan) => {
+  const presentation = planPresentation[plan.id]
+  const agentsPerBundle = formatAgentsPerBundleLabel(plan.agentsPerBundle)
+  const budgetDetail =
+    plan.id === 'run'
+      ? `Includes ${plan.includedCredits} runtime credits.`
+      : plan.id === 'warm_standby'
+        ? `Includes ${plan.includedCredits} runtime credits per month.`
+        : presentation.budgetDetail
+
+  return {
+    ...presentation,
+    activeBundles: String(plan.activeBundles),
+    agentsPerBundle,
+    alwaysOnBundles: String(plan.alwaysOnBundles),
+    budgetDetail,
+    hideBudget: presentation.hideBudget ?? undefined,
+    highlight: presentation.highlight ?? undefined,
+    includes: plan.planIncludes,
+    metrics: presentation.metrics.map((metric) =>
+      metric.label === 'Agents in bundle' ? { ...metric, value: agentsPerBundle } : metric
+    ),
+    name: plan.name,
+    price: plan.priceLabel,
+    triggerMode: formatTriggerModeLabel(plan.id),
+  }
+})
 
 const comparisonRows = [
   { label: 'Price', values: plans.map((plan) => plan.price) },
@@ -165,7 +199,7 @@ const workflowChoices = [
   {
     title: 'Test manually',
     plan: 'Run',
-    description: 'Use this when you want one real managed run, expect a bounded 30-minute session, and do not need recoverable warm state.',
+    description: 'Use this when you want one real managed run, expect a bounded manual session, and do not need recoverable warm state.',
   },
   {
     title: 'Wake on Telegram',
@@ -216,7 +250,7 @@ const decisionFaqs = [
   {
     question: 'What is the difference between Run and Warm Standby after a session stops?',
     answer:
-      'Run is the bounded test-session tier: once it stops, you should think in terms of a fresh launch. Warm Standby is the wake-and-recover tier: each wake session lasts up to 60 minutes and then resumes later from preserved state instead of acting like a brand-new environment every time.',
+      'Run is the bounded test-session tier: once it stops, you should think in terms of a fresh launch. Warm Standby is the wake-and-recover tier: it resumes later from preserved state instead of acting like a brand-new environment every time.',
   },
   {
     question: 'Why would I pay for Warm Standby instead of just buying Run again?',
@@ -231,7 +265,7 @@ const decisionFaqs = [
   {
     question: 'Do plans auto-stop?',
     answer:
-      'Yes. Run is designed as a bounded 30-minute session, Warm Standby wakes for sessions up to 60 minutes and preserves state for resume, and Always On is for a persistent workspace instead of a session-first model.',
+      'Yes. Run is designed as a bounded manual session, Warm Standby wakes and preserves state for resume, and Always On is for a persistent workspace instead of a session-first model.',
   },
   {
     question: 'Why not just self-host OpenClaw?',

@@ -5,11 +5,12 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { ShoppingCart, User, Menu, Bot, LogIn, LogOut } from 'lucide-react'
+import { ShoppingCart, User, Menu, LogIn, LogOut } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useCart } from '@/lib/cart-context'
 import { useAuth } from '@/lib/auth-context'
 import { getCurrentSubscription } from '@/services/subscription.api'
+import { BrandLogo } from '@/components/brand-logo'
 import {
   Sheet,
   SheetContent,
@@ -75,9 +76,7 @@ export function Header() {
         <div className="grid h-16 grid-cols-[auto_1fr] items-center md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2 text-lg font-semibold md:justify-self-start">
-            <div className="w-8 h-8 rounded-lg bg-foreground flex items-center justify-center">
-              <Bot className="w-5 h-5 text-background" />
-            </div>
+            <BrandLogo priority />
             <span className="hidden sm:inline">OpenRoster</span>
           </Link>
 
