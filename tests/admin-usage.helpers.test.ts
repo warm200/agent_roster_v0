@@ -197,5 +197,5 @@ test('buildUserRows derives estimated cost from workspace minutes when stored co
     windowStart: new Date('2026-03-01T00:00:00.000Z'),
   })
 
-  assert.equal(rows[0]?.estCostThisPeriodCents, 553)
+  assert.equal(rows[0]?.estCostThisPeriodCents, 6)
 })

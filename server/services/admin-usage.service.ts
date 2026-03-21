@@ -267,7 +267,7 @@ export async function getAdminUsageSnapshot(input?: {
         ),
         format: 'currency',
         delta: `${usageToday.length} launch attempts`,
-        detail: 'Summed from stored `run_usage.estimated_internal_cost_cents`, with workspace-minute fallback at the provider minute rate.',
+        detail: 'Summed from stored `run_usage.estimated_internal_cost_cents`, with workspace-minute fallback at the provider cents-per-minute rate.',
         tone: 'warning',
       },
     ]

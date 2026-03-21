@@ -117,7 +117,7 @@ test('buildRuntimeMeaningMetrics derives warm wakes, session percentiles, and he
   assert.equal(warmStandby?.failedRunShare, 0)
   assert.equal(run?.avgLaunchWakeCount, 1)
   assert.equal(run?.launchUsers, 2)
-  assert.equal(run?.estimatedInternalCostCents, 1383)
+  assert.equal(run?.estimatedInternalCostCents, 300)
   assert.equal(run?.p50SessionMinutes, 25)
   assert.equal(run?.p90SessionMinutes, 29)
   assert.equal(run?.idleStopShare, 0)
@@ -222,7 +222,7 @@ test('buildRuntimeMeaningMetrics keeps runs without runtime intervals, separates
   assert.equal(run?.sessionCount, 2)
   assert.equal(run?.avgLaunchWakeCount, 1)
   assert.equal(run?.failedRunShare, 0.5)
-  assert.equal(run?.estimatedInternalCostCents, 1797)
+  assert.equal(run?.estimatedInternalCostCents, 1000)
   assert.equal(run?.avgWorkspaceMinutesPerRun, 33)
   assert.equal(failedRunShare?.value, 0.5)
   assert.equal(avgWorkspace?.value, 33)
@@ -253,6 +253,6 @@ test('buildRuntimeMeaningMetrics derives plan cost from workspace minutes when s
 
   const run = metrics.byPlan.find((row) => row.plan === 'Run')
 
-  assert.equal(run?.estimatedInternalCostCents, 553)
-  assert.match(metrics.topHeavyUsers[0]?.context ?? '', /\$5\.53 est\. cost/)
+  assert.equal(run?.estimatedInternalCostCents, 6)
+  assert.match(metrics.topHeavyUsers[0]?.context ?? '', /\$0\.06 est\. cost/)
 })

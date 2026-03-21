@@ -1,5 +1,5 @@
-export const PROVIDER_COST_PER_MINUTE_USD = 0.27654
-export const PROVIDER_COST_PER_MINUTE_CENTS = PROVIDER_COST_PER_MINUTE_USD * 100
+export const PROVIDER_COST_PER_MINUTE_CENTS = 0.27654
+export const PROVIDER_COST_PER_MINUTE_USD = PROVIDER_COST_PER_MINUTE_CENTS / 100
 
 export function estimateInternalCostCentsFromWorkspaceMinutes(workspaceMinutes: number | null | undefined) {
   if (workspaceMinutes == null || workspaceMinutes <= 0) {
