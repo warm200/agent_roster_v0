@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { canOpenRunControlUi } from '@/lib/run-control-ui'
+import { getSubscriptionPlan } from '@/lib/subscription-plans'
 import type { Order, Run, RuntimeInstance } from '@/lib/types'
 import { RunService, setRunServiceDepsForTesting } from '@/server/services/run.service'
 
@@ -828,6 +829,202 @@ test('run service resumes recoverable stopped runtime state from completed statu
   assert.equal(resumed.status, 'running')
   assert.equal(resumed.runtimeState, 'running')
   assert.equal(resumed.preservedStateAvailable, true)
+  assert.deepEqual(calls, [
+    'subscription.reserveLaunchCredit',
+    'provider.restartRuntimeInstance',
+    'runtime.updateRuntimeInstance',
+    'runtime.createRuntimeInterval',
+    'subscription.commitReservedLaunchCredit',
+    'telegram.releaseWebhookToRuntimePolling',
+    'repository.updateRunUsage',
+    'repository.updateRunUsage',
+    'repository.updateRun',
+  ])
+
+  setRunServiceDepsForTesting(null)
+})
+
+test('run service keeps a restarted warm standby run in restarting state when immediate status read still reports stopped sandbox', async () => {
+  const resumedAt = new Date(Date.now() + 60_000).toISOString()
+  const calls: string[] = []
+  const completedRun: Run = {
+    ...baseRun,
+    completedAt: new Date().toISOString(),
+    resultSummary: 'Managed runtime is sleeping and can be resumed later.',
+    runtimeState: 'stopped',
+    status: 'completed',
+  }
+
+  const service = new RunService(
+    {
+      async findRunForUser() {
+        return completedRun
+      },
+      async updateRun(_runId: string, input: Partial<Run>) {
+        calls.push('repository.updateRun')
+        return {
+          ...completedRun,
+          ...input,
+        }
+      },
+      async updateRunUsage() {
+        calls.push('repository.updateRunUsage')
+        return null
+      },
+    } as never,
+    {
+      async findRuntimeInstanceByRunId() {
+        return {
+          ...baseRuntimeRecord,
+          persistenceMode: 'recoverable',
+          planId: 'warm_standby',
+          preservedStateAvailable: true,
+          providerName: 'daytona',
+          providerInstanceRef: 'sandbox-1',
+          runId: completedRun.id,
+          runtimeMode: 'wakeable_recoverable',
+          startedAt: completedRun.startedAt,
+          state: 'stopped',
+          stoppedAt: completedRun.completedAt,
+          stopReason: 'ttl_expired',
+          workspaceReleasedAt: null,
+        }
+      },
+      async updateRuntimeInstance() {
+        calls.push('runtime.updateRuntimeInstance')
+        return {
+          ...baseRuntimeRecord,
+          persistenceMode: 'recoverable',
+          planId: 'warm_standby',
+          preservedStateAvailable: true,
+          providerName: 'daytona',
+          providerInstanceRef: 'sandbox-1',
+          recoverableUntilAt: null,
+          runId: completedRun.id,
+          runtimeMode: 'wakeable_recoverable',
+          startedAt: resumedAt,
+          state: 'provisioning',
+          stoppedAt: null,
+          stopReason: null,
+          workspaceReleasedAt: null,
+        }
+      },
+      async findOpenRuntimeInterval() {
+        return null
+      },
+      async createRuntimeInterval() {
+        calls.push('runtime.createRuntimeInterval')
+        return null
+      },
+    } as never,
+  )
+
+  setRunServiceDepsForTesting({
+    getOrderByIdForUser: async () => ({
+      ...baseOrder,
+      id: completedRun.orderId,
+      userId: completedRun.userId,
+    }),
+    getOrderProviderApiKeysForUser: async () => ({}),
+    getSubscriptionService: () =>
+      ({
+        getLaunchPolicy: async () => ({
+          allowed: true,
+          blockers: [],
+          plan: getSubscriptionPlan('warm_standby'),
+          subscription: {
+            id: 'sub-1',
+            userId: completedRun.userId,
+            planId: 'warm_standby',
+            planVersion: 'v1',
+            status: 'active',
+            billingInterval: 'month',
+            includedCredits: 10,
+            remainingCredits: 9,
+            priceCents: 1900,
+            currency: 'USD',
+            stripeCustomerId: null,
+            stripePriceId: null,
+            stripeSubscriptionId: null,
+            stripeCheckoutSessionId: null,
+            currentPeriodStart: null,
+            currentPeriodEnd: null,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          },
+          usage: {
+            activeBundles: 0,
+            activeRunIds: [completedRun.id],
+            concurrentRuns: 1,
+          },
+        }),
+        reserveLaunchCredit: async () => {
+          calls.push('subscription.reserveLaunchCredit')
+          return null
+        },
+        commitReservedLaunchCredit: async () => {
+          calls.push('subscription.commitReservedLaunchCredit')
+          return null
+        },
+      }) as never,
+    getRunProvider: () => ({
+      name: 'daytona',
+      async createRun() {
+        return completedRun
+      },
+      async getLogs() {
+        return []
+      },
+      async getResult() {
+        return null
+      },
+      async getStatus() {
+        throw new Error('Sandbox is stopped')
+      },
+      async restartRuntimeInstance() {
+        calls.push('provider.restartRuntimeInstance')
+        return {
+          ...baseRuntimeRecord,
+          persistenceMode: 'recoverable',
+          planId: 'warm_standby',
+          preservedStateAvailable: true,
+          providerName: 'daytona',
+          providerInstanceRef: 'sandbox-1',
+          recoverableUntilAt: null,
+          runId: completedRun.id,
+          runtimeMode: 'wakeable_recoverable',
+          startedAt: resumedAt,
+          state: 'provisioning',
+          stoppedAt: null,
+          stopReason: null,
+          workspaceReleasedAt: null,
+        }
+      },
+      async stopRun() {
+        return null
+      },
+    }),
+    getTelegramService: () =>
+      ({
+        releaseWebhookToRuntimePolling: async () => {
+          calls.push('telegram.releaseWebhookToRuntimePolling')
+          return { orderId: completedRun.orderId }
+        },
+      }) as never,
+  })
+
+  const resumed = await service.retryRun(completedRun.userId, completedRun.id)
+
+  assert.equal(resumed.status, 'provisioning')
+  assert.equal(resumed.runtimeState, 'provisioning')
+  assert.match(
+    resumed.resultSummary ?? '',
+    /Managed runtime is restarting for bundle order-test-1/i,
+  )
+  assert.equal(
+    resumed.resultSummary?.includes('sleeping and can be resumed later') ?? false,
+    false,
+  )
   assert.deepEqual(calls, [
     'subscription.reserveLaunchCredit',
     'provider.restartRuntimeInstance',
@@ -1809,7 +2006,7 @@ test('run service backfills missing runtime records from provider state on read'
   setRunServiceDepsForTesting(null)
 })
 
-test('run service records provider progress time as meaningful activity on read', async () => {
+test('run service keeps provider progress reads out of the meaningful activity clock', async () => {
   const progressedAt = new Date(Date.now() + 60_000).toISOString()
   const originalStartedAt = baseRun.startedAt!
   const usageUpdates: Array<Record<string, unknown>> = []
@@ -1917,7 +2114,7 @@ test('run service records provider progress time as meaningful activity on read'
   assert.equal(run.updatedAt, progressedAt)
   assert.equal(
     usageUpdates.some((update) => update.lastMeaningfulActivityAt === progressedAt),
-    true,
+    false,
   )
   assert.equal(
     usageUpdates.some(

@@ -169,16 +169,6 @@ function buildTerminalRuntimeFromRecord(
   }
 }
 
-function resolveProviderActivityTimestamp(run: Pick<Run, 'startedAt' | 'updatedAt' | 'status'>) {
-  if (run.updatedAt) {
-    return run.updatedAt
-  }
-  if (run.startedAt) {
-    return run.startedAt
-  }
-  return run.status === 'running' ? nowIso() : null
-}
-
 function isLiveRuntimeRun(run: Pick<Run, 'runtimeState' | 'status'>) {
   if (run.runtimeState) {
     return run.runtimeState === 'provisioning' || run.runtimeState === 'running'
@@ -199,6 +189,10 @@ function canTerminateRecoverableRuntime(runtime: RuntimeInstance | null) {
 
 function buildReadyRuntimeTelegramNotice() {
   return 'Your sandbox is ready. You can open Control UI now, or send a Telegram message here to start.'
+}
+
+function buildRestartingRuntimeSummary(orderId: string) {
+  return `Managed runtime is restarting for bundle ${orderId}. Status will update automatically.`
 }
 
 function filterLaunchBlockersForRetry(input: {
@@ -820,7 +814,7 @@ export class RunService {
           id: runId,
         })
         await this.updateRunningUsageSafe(runId, {
-          activityAt: resolveProviderActivityTimestamp(providerRun),
+          activityAt: null,
           providerAcceptedAt: providerRun.startedAt ?? nowIso(),
           runningStartedAt: providerRun.startedAt ?? (providerRun.status === 'running' ? nowIso() : null),
           statusSnapshot: providerRun.status,
@@ -1206,10 +1200,25 @@ export class RunService {
               })
             }
 
+            let providerStatus: Run | null = null
+            try {
+              providerStatus = await provider.getStatus(run.id)
+            } catch (error) {
+              logServerError('run-service:retry:post_restart_status', error, {
+                orderId: order.id,
+                runId: run.id,
+              })
+            }
+
             restarted = applyRuntimeStateToRun(
-              (await provider.getStatus(run.id)) ?? {
+              providerStatus ?? {
                 ...run,
                 ...buildRunPatchFromRuntime(run, runtime),
+                completedAt: null,
+                resultSummary: buildRestartingRuntimeSummary(order.id),
+                startedAt: runtime.startedAt ?? run.startedAt,
+                status: mapRuntimeStateToRunStatus(runtime.state),
+                updatedAt: runtime.lastReconciledAt ?? nowIso(),
               },
               runtime,
             )
@@ -1263,7 +1272,7 @@ export class RunService {
       })
       await this.releaseTelegramWebhookToRuntimePolling(order)
       await this.updateRunningUsageSafe(run.id, {
-        activityAt: resolveProviderActivityTimestamp(restarted),
+        activityAt: null,
         providerAcceptedAt: restarted.startedAt ?? nowIso(),
         runningStartedAt: restarted.startedAt ?? nowIso(),
         statusSnapshot: restarted.status,
@@ -1405,7 +1414,7 @@ export class RunService {
   private async updateRunningUsageSafe(
     runId: string,
     input: {
-      activityAt: string | null
+      activityAt?: string | null
       providerAcceptedAt: string | null
       runningStartedAt: string | null
       statusSnapshot: Run['status']
@@ -1627,7 +1636,7 @@ export class RunService {
       }
       if (persistedRuntime?.state === 'running') {
         await this.updateRunningUsageSafe(run.id, {
-          activityAt: persistedRuntime.startedAt ?? nowIso(),
+          activityAt: undefined,
           providerAcceptedAt: persistedRuntime.startedAt ?? nowIso(),
           runningStartedAt: persistedRuntime.startedAt ?? nowIso(),
           statusSnapshot: persistedRun.status,
@@ -1797,7 +1806,7 @@ export class RunService {
     }
     if (persistedRuntime?.state === 'running') {
       await this.updateRunningUsageSafe(run.id, {
-        activityAt: resolveProviderActivityTimestamp(persistedRun),
+        activityAt: undefined,
         providerAcceptedAt: persistedRuntime.startedAt ?? nowIso(),
         runningStartedAt: persistedRuntime.startedAt ?? nowIso(),
         statusSnapshot: persistedRun.status,
