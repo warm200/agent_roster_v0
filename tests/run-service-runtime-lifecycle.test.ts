@@ -312,10 +312,7 @@ test('run service preserves recoverable runtime state after stop', async () => {
 
   assert.equal(deleteCalled, false)
   assert.equal(claimCalled, true)
-  assert.equal(
-    stoppedNotice,
-    'Your sandbox was stopped. Send any message here to wake it up again.',
-  )
+  assert.equal(stoppedNotice, null)
   assert.equal(stopped.status, 'completed')
   assert.equal(runtimeUpdates.some((update) => update.state === 'deleted'), false)
   assert.equal(usagePatches.some((patch) => patch.workspaceMinutes === 10), true)
@@ -521,10 +518,7 @@ test('run service honors already stopped recoverable sandboxes when provider sto
 
   assert.equal(stopped.status, 'completed')
   assert.equal(claimCalled, true)
-  assert.equal(
-    stoppedNotice,
-    'Your sandbox was stopped. Send any message here to wake it up again.',
-  )
+  assert.equal(stoppedNotice, null)
   assert.equal(stopped.runtimeState, 'stopped')
   assert.equal(stopped.preservedStateAvailable, true)
   assert.equal(runtimeUpdates.some((update) => update.state === 'stopped'), true)

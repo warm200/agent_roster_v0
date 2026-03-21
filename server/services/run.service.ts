@@ -197,19 +197,6 @@ function canTerminateRecoverableRuntime(runtime: RuntimeInstance | null) {
   )
 }
 
-function buildStoppedWarmTelegramNotice(reason: RunTerminationReason) {
-  switch (reason) {
-    case 'idle_timeout':
-      return 'Your sandbox stopped due to inactivity. Send any message here to wake it up.'
-    case 'ttl_expired':
-      return 'Your sandbox stopped because this wake session reached its time limit. Send any message here to wake it up again.'
-    case 'manual_stop':
-      return 'Your sandbox was stopped. Send any message here to wake it up again.'
-    default:
-      return 'Your sandbox stopped. Send any message here to wake it up again.'
-  }
-}
-
 function buildReadyRuntimeTelegramNotice() {
   return 'Your sandbox is ready. You can open Control UI now, or send a Telegram message here to start.'
 }
@@ -663,20 +650,6 @@ export class RunService {
     }
   }
 
-  private async notifyWarmStoppedRuntime(order: Pick<Order, 'id'>, reason: RunTerminationReason) {
-    try {
-      await runServiceDeps.getTelegramService().sendPairedMessage?.({
-        orderId: order.id,
-        text: buildStoppedWarmTelegramNotice(reason),
-      })
-    } catch (error) {
-      logServerError('run-service:telegram:send-stopped-notice', error, {
-        orderId: order.id,
-        reason,
-      })
-    }
-  }
-
   private async notifyRuntimeReady(order: Pick<Order, 'id'>) {
     try {
       await runServiceDeps.getTelegramService().sendPairedMessage?.({
@@ -1101,9 +1074,6 @@ export class RunService {
       }
       await this.repository.updateRunUsage?.(run.id, buildReleasedUsagePatch(nextRun, reason))
       await this.claimTelegramWebhookForApp(order)
-      if (runtime.state === 'stopped' && runtime.persistenceMode === 'recoverable' && runtimeRecord?.state !== 'stopped') {
-        await this.notifyWarmStoppedRuntime(order, reason)
-      }
       if (updatedRuntime?.id) {
         await this.closeRuntimeIntervalSafe(updatedRuntime.id, nowIso(), reason)
       }

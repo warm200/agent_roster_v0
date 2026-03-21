@@ -69,9 +69,6 @@ read_when:
 - Control UI is now gated on actual OpenClaw readiness rather than raw `runtimeState = running`
   - UI button stays disabled until the existing OpenClaw process probe flips the ready summary
   - Control UI link creation uses the same readiness gate on the server
-- stopped recoverable Warm runtimes now send a paired Telegram notice after reclaiming the webhook
-  - message includes the stop reason in plain language
-  - tells the user they can send any text to wake the sandbox again
 - runs can now send one paired Telegram notice when they transition from not-ready to Control-UI-ready
   - message tells the user the sandbox is ready and the bot can receive messages again
 - auto-wake is intentionally conservative:
