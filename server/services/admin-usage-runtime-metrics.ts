@@ -14,10 +14,11 @@ import {
 type UsageRow = typeof runUsage.$inferSelect
 type RuntimeInstanceRow = typeof runtimeInstances.$inferSelect
 type RuntimeIntervalRow = typeof runtimeIntervals.$inferSelect
+type NormalizedPlanId = 'run' | 'warm_standby' | 'always_on'
 type SessionRecord = {
   runId: string
   userId: string
-  planId: 'run' | 'warm_standby' | 'always_on'
+  planId: NormalizedPlanId
   startedAt: Date
   endedAt: Date | null
   closeReason: string | null
@@ -101,6 +102,26 @@ function sum(values: number[]) {
   return values.reduce((total, value) => total + value, 0)
 }
 
+function normalizePlanId(planId: UsageRow['planId'] | RuntimeInstanceRow['planId'] | SessionRecord['planId']): NormalizedPlanId {
+  return planId === 'free' ? 'run' : planId
+}
+
+function getTerminalAt(row: UsageRow) {
+  if (row.workspaceReleasedAt) {
+    return row.workspaceReleasedAt
+  }
+
+  if (row.completedAt) {
+    return row.completedAt
+  }
+
+  if (row.statusSnapshot === 'completed' || row.statusSnapshot === 'failed') {
+    return row.updatedAt
+  }
+
+  return null
+}
+
 function toSessionRecordFromUsage(row: UsageRow): SessionRecord | null {
   const startedAt =
     row.runningStartedAt ??
@@ -115,7 +136,7 @@ function toSessionRecordFromUsage(row: UsageRow): SessionRecord | null {
   return {
     closeReason: row.terminationReason ?? null,
     endedAt: row.workspaceReleasedAt ?? row.completedAt ?? null,
-    planId: row.planId === 'free' ? 'run' : row.planId,
+    planId: normalizePlanId(row.planId),
     runId: row.runId,
     startedAt,
     userId: row.userId,
@@ -138,14 +159,14 @@ function buildSessionRecords(input: {
       const planId = runtime?.planId ?? usage?.planId
       const userId = runtime?.userId ?? usage?.userId
 
-      if (!planId || planId === 'free' || !userId) {
+      if (!planId || !userId) {
         return null
       }
 
       return {
         closeReason: row.closeReason ?? runtime?.stopReason ?? usage?.terminationReason ?? null,
         endedAt: row.endedAt ?? null,
-        planId,
+        planId: normalizePlanId(planId),
         runId: row.runId,
         startedAt: row.startedAt,
         userId,
@@ -153,13 +174,13 @@ function buildSessionRecords(input: {
     })
     .filter((row): row is SessionRecord => Boolean(row))
 
-  if (intervalSessions.length > 0) {
-    return intervalSessions
-  }
-
-  return input.usageRows
+  const intervalRunIds = new Set(intervalSessions.map((row) => row.runId))
+  const usageFallbackSessions = input.usageRows
+    .filter((row) => !intervalRunIds.has(row.runId))
     .map((row) => toSessionRecordFromUsage(row))
     .filter((row): row is SessionRecord => Boolean(row))
+
+  return [...intervalSessions, ...usageFallbackSessions]
 }
 
 function overlapsWindow(startedAt: Date, endedAt: Date | null, windowStart: Date, windowEnd: Date, now: Date) {
@@ -179,7 +200,10 @@ export function buildRuntimeMeaningMetrics(input: {
   summary: OverviewMetric[]
   topHeavyUsers: RankRow[]
 } {
-  const usageInWindow = input.usageRows.filter((row) => row.createdAt >= input.windowStart && row.createdAt < input.windowEnd)
+  const terminalUsageInWindow = input.usageRows.filter((row) => {
+    const terminalAt = getTerminalAt(row)
+    return Boolean(terminalAt && terminalAt >= input.windowStart && terminalAt < input.windowEnd)
+  })
   const sessionRecords = buildSessionRecords(input)
   const sessionsStartedInWindow = sessionRecords.filter(
     (row) => row.startedAt >= input.windowStart && row.startedAt < input.windowEnd,
@@ -190,7 +214,7 @@ export function buildRuntimeMeaningMetrics(input: {
   const endedSessionDurations = sessionsEndedInWindow
     .map((row) => sessionMinutes(row.startedAt, row.endedAt!))
     .filter((row) => row > 0)
-  const usageWithWorkspaceMinutes = usageInWindow
+  const usageWithWorkspaceMinutes = terminalUsageInWindow
     .map((row) => row.workspaceMinutes ?? null)
     .filter((row): row is number => row != null && row > 0)
 
@@ -200,6 +224,15 @@ export function buildRuntimeMeaningMetrics(input: {
     ['warm_standby', new Set()],
     ['always_on', new Set()],
   ])
+  const launchUsersByPlan = new Map<'run' | 'warm_standby' | 'always_on', Set<string>>([
+    ['run', new Set()],
+    ['warm_standby', new Set()],
+    ['always_on', new Set()],
+  ])
+
+  for (const row of sessionsStartedInWindow) {
+    launchUsersByPlan.get(row.planId)?.add(row.userId)
+  }
 
   for (const row of sessionRecords) {
     if (!overlapsWindow(row.startedAt, row.endedAt, input.windowStart, input.windowEnd, input.now)) {
@@ -226,14 +259,14 @@ export function buildRuntimeMeaningMetrics(input: {
     activeUserMinutes.set(row.userId, current)
   }
 
-  for (const row of usageInWindow) {
+  for (const row of terminalUsageInWindow) {
     const current = activeUserMinutes.get(row.userId) ?? {
       costCents: 0,
       minutes: 0,
       plans: new Set<string>(),
     }
     current.costCents += row.estimatedInternalCostCents ?? 0
-    current.plans.add(getPlanLabel(row.planId === 'free' ? 'run' : row.planId))
+    current.plans.add(getPlanLabel(normalizePlanId(row.planId)))
     activeUserMinutes.set(row.userId, current)
   }
 
@@ -253,16 +286,37 @@ export function buildRuntimeMeaningMetrics(input: {
 
   const byPlan: RuntimeMeaningPlanRow[] = (['run', 'warm_standby', 'always_on'] as const).map((planId) => {
     const planSessions = sessionsStartedInWindow.filter((row) => row.planId === planId)
-    const planUsage = usageInWindow.filter((row) => row.planId === planId)
+    const endedPlanSessions = sessionsEndedInWindow.filter((row) => row.planId === planId)
+    const endedPlanSessionDurations = endedPlanSessions
+      .map((row) => sessionMinutes(row.startedAt, row.endedAt!))
+      .filter((row) => row > 0)
+    const planUsage = terminalUsageInWindow.filter((row) => normalizePlanId(row.planId) === planId)
     const activeUsers = activeUsersByPlan.get(planId)?.size ?? 0
+    const launchUsers = launchUsersByPlan.get(planId)?.size ?? 0
+    const planFailedRunShare =
+      planUsage.length > 0 ? planUsage.filter((row) => row.statusSnapshot === 'failed').length / planUsage.length : 0
+    const planIdleStopShare =
+      endedPlanSessions.length > 0
+        ? endedPlanSessions.filter((row) => row.closeReason === 'idle_timeout').length / endedPlanSessions.length
+        : 0
+    const planHardTtlHitShare =
+      endedPlanSessions.length > 0
+        ? endedPlanSessions.filter((row) => row.closeReason === 'ttl_expired').length / endedPlanSessions.length
+        : 0
 
     return {
       activeUsers,
-      avgLaunchWakeCount: activeUsers > 0 ? roundMetric(planSessions.length / activeUsers, 2) : 0,
+      avgLaunchWakeCount: launchUsers > 0 ? roundMetric(planSessions.length / launchUsers, 2) : 0,
       avgWorkspaceMinutesPerRun: Math.round(
         average(planUsage.map((row) => row.workspaceMinutes ?? 0).filter((row) => row > 0)),
       ),
+      failedRunShare: planFailedRunShare,
+      hardTtlHitShare: planHardTtlHitShare,
+      idleStopShare: planIdleStopShare,
+      launchUsers,
       estimatedInternalCostCents: sum(planUsage.map((row) => row.estimatedInternalCostCents ?? 0)),
+      p50SessionMinutes: Math.round(percentile(endedPlanSessionDurations, 0.5)),
+      p90SessionMinutes: Math.round(percentile(endedPlanSessionDurations, 0.9)),
       plan: getPlanLabel(planId),
       sessionCount: planSessions.length,
     }
@@ -277,7 +331,9 @@ export function buildRuntimeMeaningMetrics(input: {
       ? sessionsEndedInWindow.filter((row) => row.closeReason === 'ttl_expired').length / sessionsEndedInWindow.length
       : 0
   const failedRunShare =
-    usageInWindow.length > 0 ? usageInWindow.filter((row) => row.statusSnapshot === 'failed').length / usageInWindow.length : 0
+    terminalUsageInWindow.length > 0
+      ? terminalUsageInWindow.filter((row) => row.statusSnapshot === 'failed').length / terminalUsageInWindow.length
+      : 0
 
   const summary: OverviewMetric[] = [
     {
@@ -285,8 +341,8 @@ export function buildRuntimeMeaningMetrics(input: {
       label: 'Avg Workspace Minutes / Run',
       value: Math.round(average(usageWithWorkspaceMinutes)),
       format: 'minutes',
-      delta: `${usageWithWorkspaceMinutes.length} tracked runs`,
-      detail: 'Average `run_usage.workspace_minutes` for runs with recorded workspace time.',
+      delta: `${usageWithWorkspaceMinutes.length} finished tracked runs`,
+      detail: 'Average `run_usage.workspace_minutes` for finished runs with recorded positive workspace time.',
       tone: getToneForMinutes(average(usageWithWorkspaceMinutes), 120),
     },
     {
@@ -330,8 +386,8 @@ export function buildRuntimeMeaningMetrics(input: {
       label: 'Failed Run Share',
       value: failedRunShare,
       format: 'percent',
-      delta: `${usageInWindow.filter((row) => row.statusSnapshot === 'failed').length} failed runs`,
-      detail: 'Share of `run_usage` rows in the window that ended in `failed`.',
+      delta: `${terminalUsageInWindow.filter((row) => row.statusSnapshot === 'failed').length} failed runs`,
+      detail: 'Share of finished `run_usage` rows in the window that ended in `failed`.',
       tone: getToneForShare(failedRunShare, 0.08, 0.18),
     },
     {

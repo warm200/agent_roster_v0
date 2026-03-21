@@ -43,8 +43,14 @@ export type RuntimeMeaningPlanRow = {
   plan: string
   sessionCount: number
   activeUsers: number
+  launchUsers: number
   avgLaunchWakeCount: number
   avgWorkspaceMinutesPerRun: number
+  p50SessionMinutes: number
+  p90SessionMinutes: number
+  idleStopShare: number
+  hardTtlHitShare: number
+  failedRunShare: number
   estimatedInternalCostCents: number
 }
 
@@ -377,24 +383,42 @@ export const adminUsageSnapshot: AdminUsageSnapshot = {
         plan: 'Run',
         sessionCount: 64,
         activeUsers: 46,
+        launchUsers: 46,
         avgLaunchWakeCount: 1.39,
         avgWorkspaceMinutesPerRun: 28,
+        p50SessionMinutes: 16,
+        p90SessionMinutes: 41,
+        idleStopShare: 0.22,
+        hardTtlHitShare: 0.03,
+        failedRunShare: 0.11,
         estimatedInternalCostCents: 14680,
       },
       {
         plan: 'Warm Standby',
         sessionCount: 49,
         activeUsers: 21,
+        launchUsers: 21,
         avgLaunchWakeCount: 2.33,
         avgWorkspaceMinutesPerRun: 53,
+        p50SessionMinutes: 31,
+        p90SessionMinutes: 176,
+        idleStopShare: 0.41,
+        hardTtlHitShare: 0.12,
+        failedRunShare: 0.13,
         estimatedInternalCostCents: 17140,
       },
       {
         plan: 'Always On',
         sessionCount: 18,
         activeUsers: 12,
+        launchUsers: 12,
         avgLaunchWakeCount: 1.5,
         avgWorkspaceMinutesPerRun: 214,
+        p50SessionMinutes: 233,
+        p90SessionMinutes: 1440,
+        idleStopShare: 0,
+        hardTtlHitShare: 0,
+        failedRunShare: 0.04,
         estimatedInternalCostCents: 16450,
       },
     ],

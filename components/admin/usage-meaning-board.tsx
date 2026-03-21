@@ -3,8 +3,12 @@
 import type { AdminUsageSnapshot } from '@/lib/admin-usage-data'
 
 import {
+  MiniStat,
   MetricCard,
   Panel,
+  SignalPill,
+  formatMetricValue,
+  formatMinutes,
 } from './usage-primitives'
 
 export function UsageMeaningBoard({ snapshot }: { snapshot: AdminUsageSnapshot }) {
@@ -38,7 +42,7 @@ export function UsageMeaningBoard({ snapshot }: { snapshot: AdminUsageSnapshot }
                     <td className="px-5 py-4">
                       <p className="font-medium text-white">{row.plan}</p>
                       <p className="mt-1 text-xs text-zinc-500">
-                        {row.sessionCount} sessions across {row.activeUsers} active users
+                        {row.sessionCount} sessions, {row.launchUsers} launched/woke users, {row.activeUsers} active users
                       </p>
                     </td>
                     <td className="px-5 py-4 text-white">{row.avgLaunchWakeCount.toFixed(2)}x</td>
@@ -72,6 +76,36 @@ export function UsageMeaningBoard({ snapshot }: { snapshot: AdminUsageSnapshot }
             ))}
           </div>
         </Panel>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-3">
+        {snapshot.meaningMetrics.byPlan.map((row) => (
+          <Panel key={row.plan} className="p-5">
+            <div className="mb-5 flex items-start justify-between gap-3">
+              <div>
+                <p className="text-[11px] tracking-[0.2em] uppercase text-zinc-500">Tier View</p>
+                <h3 className="mt-2 text-lg font-semibold text-white">{row.plan}</h3>
+                <p className="mt-1 text-sm text-zinc-400">
+                  {row.sessionCount} sessions, {row.launchUsers} launched/woke users, {row.activeUsers} active users
+                </p>
+              </div>
+              <SignalPill tone={row.activeUsers > 0 ? 'info' : 'stable'}>
+                {row.activeUsers > 0 ? 'active tier' : 'no activity'}
+              </SignalPill>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <MiniStat label="Avg launch / wake" value={`${row.avgLaunchWakeCount.toFixed(2)}x`} />
+              <MiniStat label="Avg workspace / run" value={formatMinutes(row.avgWorkspaceMinutesPerRun)} />
+              <MiniStat label="P50 session" value={formatMinutes(row.p50SessionMinutes)} />
+              <MiniStat label="P90 session" value={formatMinutes(row.p90SessionMinutes)} />
+              <MiniStat label="Idle stop share" value={formatMetricValue(row.idleStopShare, 'percent')} />
+              <MiniStat label="Hard TTL share" value={formatMetricValue(row.hardTtlHitShare, 'percent')} />
+              <MiniStat label="Failed run share" value={formatMetricValue(row.failedRunShare, 'percent')} />
+              <MiniStat label="Est internal cost" value={formatMetricValue(row.estimatedInternalCostCents, 'currency')} />
+            </div>
+          </Panel>
+        ))}
       </div>
     </div>
   )
