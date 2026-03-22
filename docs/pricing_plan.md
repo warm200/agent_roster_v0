@@ -122,19 +122,22 @@ Current term shown in UI:
 
 Current source of truth: `lib/subscription-plans.ts`
 
-Frontend positioning:
+Frontend positioning (current implementation):
 
-- pricing page should sell these plans as **runtime operating modes**
-- public pricing comparison should focus on the three paid runtime tiers: `Run`, `Warm Standby`, and `Always On`
-- `Free` can still be explained as discovery/browse access, but it should not dominate the pricing-grid comparison
+- pricing page sells these plans as **runtime operating modes**
+- public pricing comparison focuses on the three paid runtime tiers: `Run`, `Warm Standby`, and `Always On`
+- `Free` is explained as discovery/browse access in the hero but excluded from the plan card grid
+- `Warm Standby` is marked as **Recommended** on the pricing page
 - primary decision axis is:
   - when to use the plan
   - what runtime behavior it unlocks
-  - what happens to state when it stops
   - whether the next session starts fresh, wakes recoverably, or stays live
   - what workload it is meant for
 - credits are supporting information, not the main comparison surface
-- the detailed comparison section should compare:
+- credit model is surfaced prominently: **1 credit = 1 successful launch or wake**
+- top-up packs are mentioned in the "How pricing works" steps and in the decision FAQ
+- plan cards show: best for, runtime behavior, persistence, recovery model, budget, metrics, includes
+- the detailed comparison table compares:
   - runtime behavior
   - state after stop
   - recovery model
@@ -153,7 +156,7 @@ Frontend positioning:
 ### Run
 
 - Price: `$5`
-- Included Credits: `15`
+- Included Credits: `8`
 - Agents per Bundle: `3`
 - Trigger Mode: `manual`
 - Runtime Access: `true`
@@ -165,7 +168,7 @@ Frontend positioning:
 ### Warm Standby
 
 - Price: `$19/mo`
-- Included Credits: `10`
+- Included Credits: `24`
 - Agents per Bundle: `Unlimited`
 - Trigger Mode: `auto_wake`
 - Runtime Access: `true`
@@ -410,6 +413,29 @@ Current implication:
 - purchasing a new plan overwrites the current included/remaining credit state
 - there is not yet nuanced upgrade/downgrade proration logic
 
+### 6.3 Stripe Billing Portal
+
+Users with an active Stripe subscription (`Warm Standby` or `Always On`) can manage their subscription through Stripe's hosted Billing Portal.
+
+Current flow:
+
+1. user navigates to `/app/account`
+2. user clicks **Manage Subscription**
+3. backend creates a Stripe Billing Portal session using the stored `stripeCustomerId`
+4. user is redirected to Stripe's hosted portal
+5. user can cancel, update payment method, or view invoices
+6. after finishing, Stripe redirects back to `/app/account`
+
+API route: `POST /api/me/subscription/portal`
+
+Backend: `SubscriptionService.createBillingPortalSession()`
+
+Requirements:
+
+- Stripe Billing Portal must be configured in the Stripe Dashboard (Settings > Billing > Customer Portal)
+- cancellation behavior, proration, and branding are configured in the Stripe Dashboard, not in application code
+- webhook handling for `customer.subscription.deleted` is not yet implemented (Stripe portal changes are not yet automatically reflected in `user_subscriptions`)
+
 ---
 
 ## 7. UI Behavior
@@ -429,7 +455,22 @@ If blocked by plan:
 - user can open an in-place plan modal
 - user does not need to leave the bundle page
 
-### 7.2 Header
+### 7.2 Account Page
+
+Route: `/app/account`
+
+Account page shows:
+
+- user profile (name, email)
+- current plan name and price
+- remaining credits
+- **Manage Subscription** button (only for users with a Stripe subscription)
+- for Free users: guidance to purchase a plan from a bundle page
+- for one-time Run users: note that there is no recurring billing to manage
+
+Account is linked from the app sidebar navigation.
+
+### 7.3 Header
 
 Header shows:
 
@@ -476,8 +517,10 @@ Implemented now:
 4. inline upgrade UX on bundle detail
 5. reserve -> commit -> refund credit handling for `Run` and `Warm Standby`
 6. run-usage telemetry persistence separate from the billing ledger
- 7. partial trigger-mode behavior:
+7. partial trigger-mode behavior:
    - Warm Standby can now auto-wake from paired Telegram inbound traffic
+8. account page with profile and subscription overview
+9. subscription cancellation via Stripe Billing Portal (for Warm Standby and Always On)
 
 ### 8.3 What Is Not Yet Implemented
 
@@ -498,7 +541,7 @@ Not implemented yet:
    - automatic cleanup scheduling and retry are not fully implemented yet
 5. **plan lifecycle sophistication**
    - no proration logic
-   - no downgrade/cancel management flow
+   - cancellation is delegated to Stripe Billing Portal but webhook handling for `customer.subscription.deleted` is not yet implemented (cancelled subscriptions are not yet automatically downgraded to Free in `user_subscriptions`)
    - no credit carry-over policy
 
 ---
@@ -515,6 +558,8 @@ If another AI is evaluating whether the pricing model is good, it should underst
 - a separate runtime monetization layer
 - upgrade-in-context at the point of friction
 - Warm Standby now behaves more like a real wake/recover product instead of just a monthly price label
+- account page with subscription overview and Stripe Billing Portal for cancellation
+- streamlined pricing page that sells operating modes, highlights Warm Standby as recommended, and surfaces the credit model prominently
 
 ### What the system does not yet prove
 
@@ -532,7 +577,7 @@ If another AI is evaluating whether the pricing model is good, it should underst
 Another reasoning model should focus on questions like:
 
 1. Is the separation between **free agent ownership** and **paid runtime access** intuitive?
-2. Is a one-time `$5` `Run` plan with `15` credits coherent, or should it be a metered pack instead of a plan?
+2. Is a one-time `$5` `Run` plan with `8` credits coherent, or should it be a metered pack instead of a plan?
 3. Should `completed + managed workspace` count against concurrency and active bundles?
 4. Are `Warm Standby` and `Always On` distinct enough now that Warm can sleep and wake from Telegram, or do they still need a bigger operational gap?
 5. Should credits reset, roll over, or accumulate?
@@ -549,14 +594,18 @@ Current state:
 - the entitlement framework is real
 - the launch constraints are real
 - the UI and Stripe runtime-plan purchase flow are real
+- the pricing page is streamlined for MVP launch
+- subscription cancellation is available via Stripe Billing Portal
 - the pricing semantics are only partially realized
 
 In other words:
 
 - **plan gating exists**
+- **plan cancellation exists** (via Stripe portal, not yet webhook-reconciled)
 - **credit economics do not fully exist yet**
 
 Any evaluation of whether the current plan is “best for the world” should treat the current system as:
 
 1. a valid entitlement architecture
-2. an incomplete billing/consumption model
+2. a usable subscription lifecycle (purchase + cancel via Stripe)
+3. an incomplete billing/consumption model
