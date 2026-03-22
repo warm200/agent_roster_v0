@@ -292,9 +292,11 @@ async function buildLocalAgentDefinition(agentDir: string): Promise<LocalAgentDe
     openClawConfigRelativePath = 'openclaw.json'
   } catch {}
 
-  const avatarRelativePath = normalizeOptionalRelativePath(
+  const declaredAvatarRelativePath = normalizeOptionalRelativePath(
     extractIdentityField(identityContents, 'Avatar'),
   )
+  const fallbackAvatarRelativePath = await resolveExistingRelativePath(agentDir, 'avatars/avatar.png')
+  const avatarRelativePath = declaredAvatarRelativePath ?? fallbackAvatarRelativePath
   const thumbnailGifRelativePath = await resolveExistingRelativePath(agentDir, 'thumbnail/avatar.gif')
   const name =
     extractYamlField(soulContents, 'name') ??

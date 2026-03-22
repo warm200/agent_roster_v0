@@ -135,6 +135,33 @@ test('loadLocalAgentDefinitions ignores placeholder avatar paths', async () => {
   assert.equal(buildLocalAgentThumbnailUrl(definition.versionRow.runConfigSnapshot, 'rapid-prototyper'), null)
 })
 
+test('loadLocalAgentDefinitions falls back to avatars/avatar.png when IDENTITY avatar is omitted', async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), 'local-agent-avatar-fallback-'))
+  tempDirs.push(rootDir)
+
+  const agentDir = path.join(rootDir, 'design-ui-designer')
+  await mkdir(path.join(agentDir, 'avatars'), { recursive: true })
+  await writeFile(
+    path.join(agentDir, 'IDENTITY.md'),
+    ['# IDENTITY', '', '- **Name:** Design UI Designer'].join('\n'),
+  )
+  await writeFile(
+    path.join(agentDir, 'SOUL.md'),
+    ['# SOUL', '', '## Identity', 'name: "Design UI Designer"', 'version: "1.0.0"'].join('\n'),
+  )
+  await writeFile(path.join(agentDir, 'avatars', 'avatar.png'), 'png')
+
+  const [definition] = await loadLocalAgentDefinitions(rootDir)
+  const source = parseLocalAgentRuntimeSource(definition.versionRow.runConfigSnapshot)
+
+  assert.equal(source?.avatarRelativePath, 'avatars/avatar.png')
+  assert.equal(source?.thumbnailRelativePath, 'avatars/avatar.png')
+  assert.equal(
+    buildLocalAgentThumbnailUrl(definition.versionRow.runConfigSnapshot, 'design-ui-designer'),
+    '/api/agents/design-ui-designer/thumbnail',
+  )
+})
+
 test('loadRuntimeAssetsFromSnapshot reads optional config and workspace files from the stored source pointer', async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), 'local-agent-assets-'))
   tempDirs.push(rootDir)
