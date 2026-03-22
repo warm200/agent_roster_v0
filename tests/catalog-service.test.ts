@@ -130,3 +130,95 @@ test('catalog service featured filter uses real ordered catalog results', async 
     ['alpha', 'bravo', 'charlie'],
   )
 })
+
+test('catalog service prioritizes gif-backed local agent thumbnails', async () => {
+  const agents = [
+    buildAgent({
+      id: 'agent-1',
+      slug: 'still-image',
+      title: 'Still Image',
+      currentVersion: {
+        ...buildAgent().currentVersion,
+        id: 'version-1',
+        agentId: 'agent-1',
+        runConfigSnapshot: JSON.stringify({
+          source: {
+            kind: 'local-folder',
+            slug: 'still-image',
+            sourceRootRelativePath: 'agents_file/still-image',
+            stagingRelativePath: 'still-image',
+            openClawConfigRelativePath: null,
+            avatarRelativePath: 'avatars/avatar.png',
+            thumbnailRelativePath: 'avatars/avatar.png',
+          },
+        }),
+      },
+    }),
+    buildAgent({
+      id: 'agent-2',
+      slug: 'animated-helper',
+      title: 'Animated Helper',
+      currentVersion: {
+        ...buildAgent().currentVersion,
+        id: 'version-2',
+        agentId: 'agent-2',
+        runConfigSnapshot: JSON.stringify({
+          source: {
+            kind: 'local-folder',
+            slug: 'animated-helper',
+            sourceRootRelativePath: 'agents_file/animated-helper',
+            stagingRelativePath: 'animated-helper',
+            openClawConfigRelativePath: null,
+            avatarRelativePath: 'avatars/avatar.png',
+            thumbnailRelativePath: 'thumbnail/avatar.gif',
+          },
+        }),
+      },
+    }),
+  ]
+
+  const service = createCatalogService({
+    async generatePreviewReply() {
+      return 'unused'
+    },
+    async getAgentRecordBySlug() {
+      return null
+    },
+    async listAgentRecords() {
+      return agents.map((agent) => ({
+        agent: {
+          id: agent.id,
+          slug: agent.slug,
+          title: agent.title,
+          category: agent.category,
+          summary: agent.summary,
+          descriptionMarkdown: agent.descriptionMarkdown,
+          priceCents: agent.priceCents,
+          currency: agent.currency,
+          status: agent.status,
+          createdAt: new Date(agent.createdAt),
+          updatedAt: new Date(agent.updatedAt),
+        },
+        versions: [
+          {
+            riskProfile: {
+              ...agent.currentVersion.riskProfile,
+              createdAt: new Date(agent.currentVersion.riskProfile.createdAt),
+            },
+            version: {
+              ...agent.currentVersion,
+              createdAt: new Date(agent.currentVersion.createdAt),
+            },
+          },
+        ],
+      }))
+    },
+  })
+
+  const results = await service.listAgents()
+
+  assert.deepEqual(
+    results.map((agent) => agent.slug),
+    ['animated-helper', 'still-image'],
+  )
+})

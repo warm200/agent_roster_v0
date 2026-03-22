@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useCart } from '@/lib/cart-context'
-import { AGENT_FILTER_OPTIONS, matchesAgentCatalogFilter, sortAgentsForCatalog } from '@/lib/agent-risk'
+import { AGENT_FILTER_OPTIONS, matchesAgentCatalogFilter } from '@/lib/agent-risk'
 import { getAgents } from '@/services/catalog.api'
 import { toast } from 'sonner'
 import type { Agent, AgentCategory } from '@/lib/types'
@@ -90,9 +90,7 @@ export default function AgentsPage() {
   }, [categories])
 
   const visibleAgents = useMemo(() => {
-    return sortAgentsForCatalog(
-      agents.filter((agent) => matchesAgentCatalogFilter(agent, selectedFilter)),
-    )
+    return agents.filter((agent) => matchesAgentCatalogFilter(agent, selectedFilter))
   }, [agents, selectedFilter])
 
   const handleAddToCart = (agent: Agent) => {

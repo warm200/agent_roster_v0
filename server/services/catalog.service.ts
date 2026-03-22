@@ -7,7 +7,11 @@ import { createDb, type DbClient } from '../db'
 import { agents, agentVersions, riskProfiles } from '../db/schema'
 import { HttpError } from '../lib/http'
 import { buildFallbackAgentRiskReview, loadAgentRiskReviewMap } from './agent-risk-reports'
-import { buildLocalAgentThumbnailUrl, syncLocalAgentsToDb } from './local-agent-files'
+import {
+  buildLocalAgentThumbnailUrl,
+  parseLocalAgentRuntimeSource,
+  syncLocalAgentsToDb,
+} from './local-agent-files'
 
 type AgentRow = typeof agents.$inferSelect
 type AgentVersionRow = typeof agentVersions.$inferSelect
@@ -140,7 +144,20 @@ export function createCatalogService(
     async listAgents(filters = {}) {
       const records = await deps.listAgentRecords(filters)
       const riskReviews = await loadAgentRiskReviewMap()
-      return filterAgents(records.map((record) => toAgent(record, riskReviews.get(record.agent.slug))), filters)
+      const hydratedAgents = records.map((record) => ({
+        agent: toAgent(record, riskReviews.get(record.agent.slug)),
+        hasGifThumbnail: hasGifThumbnail(record),
+      }))
+      const orderedAgents = hydratedAgents
+        .sort((left, right) => {
+          if (left.hasGifThumbnail === right.hasGifThumbnail) {
+            return left.agent.title.localeCompare(right.agent.title)
+          }
+
+          return left.hasGifThumbnail ? -1 : 1
+        })
+        .map((entry) => entry.agent)
+      return filterAgents(orderedAgents, filters)
     },
 
     async getAgentBySlug(slug) {
@@ -311,6 +328,12 @@ function toAgent(record: DbAgentRecord, riskReview: Agent['riskReview'] = null):
     createdAt: toIsoString(record.agent.createdAt),
     updatedAt: toIsoString(record.agent.updatedAt),
   })
+}
+
+function hasGifThumbnail(record: DbAgentRecord) {
+  const source = parseLocalAgentRuntimeSource(record.versions[0]?.version.runConfigSnapshot ?? null)
+  const thumbnailPath = source?.thumbnailRelativePath?.toLowerCase() ?? ''
+  return thumbnailPath.endsWith('.gif')
 }
 
 function filterAgents(agentsToFilter: Agent[], filters: CatalogFilters): Agent[] {
