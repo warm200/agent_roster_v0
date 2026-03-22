@@ -434,7 +434,7 @@ Requirements:
 
 - Stripe Billing Portal must be configured in the Stripe Dashboard (Settings > Billing > Customer Portal)
 - cancellation behavior, proration, and branding are configured in the Stripe Dashboard, not in application code
-- webhook handling for `customer.subscription.deleted` is not yet implemented (Stripe portal changes are not yet automatically reflected in `user_subscriptions`)
+- when Stripe fires `customer.subscription.deleted`, the webhook handler sets the subscription status to `canceled`, zeroes remaining credits, clears the `stripeSubscriptionId`, and writes a `reset` credit ledger entry
 
 ---
 
@@ -541,7 +541,7 @@ Not implemented yet:
    - automatic cleanup scheduling and retry are not fully implemented yet
 5. **plan lifecycle sophistication**
    - no proration logic
-   - cancellation is delegated to Stripe Billing Portal but webhook handling for `customer.subscription.deleted` is not yet implemented (cancelled subscriptions are not yet automatically downgraded to Free in `user_subscriptions`)
+   - cancellation is handled via Stripe Billing Portal; the `customer.subscription.deleted` webhook automatically downgrades the subscription in `user_subscriptions`
    - no credit carry-over policy
 
 ---
@@ -601,7 +601,7 @@ Current state:
 In other words:
 
 - **plan gating exists**
-- **plan cancellation exists** (via Stripe portal, not yet webhook-reconciled)
+- **plan cancellation exists** (via Stripe portal, webhook-reconciled)
 - **credit economics do not fully exist yet**
 
 Any evaluation of whether the current plan is “best for the world” should treat the current system as:

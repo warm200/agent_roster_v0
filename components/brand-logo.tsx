@@ -14,7 +14,7 @@ export function BrandLogo({
   return (
     <Image
       alt="OpenRoster logo"
-      className={cn('shrink-0 object-contain', className)}
+      className={cn('shrink-0 object-contain dark:invert', className)}
       height={size}
       priority={priority}
       src="/logo.png"

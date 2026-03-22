@@ -20,7 +20,10 @@ export const metadata: Metadata = {
   generator: 'OpenRoster',
   icons: {
     apple: '/logo.png',
-    icon: '/logo.png',
+    icon: [
+      { url: '/logo.png', media: '(prefers-color-scheme: light)' },
+      { url: '/logo-light.png', media: '(prefers-color-scheme: dark)' },
+    ],
     shortcut: '/logo.png',
   },
 }
