@@ -125,6 +125,8 @@ Current source of truth: `lib/subscription-plans.ts`
 Frontend positioning:
 
 - pricing page should sell these plans as **runtime operating modes**
+- public pricing comparison should focus on the three paid runtime tiers: `Run`, `Warm Standby`, and `Always On`
+- `Free` can still be explained as discovery/browse access, but it should not dominate the pricing-grid comparison
 - primary decision axis is:
   - when to use the plan
   - what runtime behavior it unlocks

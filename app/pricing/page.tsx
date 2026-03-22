@@ -150,7 +150,7 @@ function formatTriggerModeLabel(planId: SubscriptionPlanId) {
   }
 }
 
-const plans = listSubscriptionPlans().map((plan) => {
+const plans = listSubscriptionPlans().filter((plan) => plan.id !== 'free').map((plan) => {
   const presentation = planPresentation[plan.id]
   const agentsPerBundle = formatAgentsPerBundleLabel(plan.agentsPerBundle)
   const budgetDetail =
@@ -180,10 +180,10 @@ const plans = listSubscriptionPlans().map((plan) => {
 
 const comparisonRows = [
   { label: 'Price', values: plans.map((plan) => plan.price) },
-  { label: 'Runtime behavior', values: ['No runtime', 'Manual bounded session', 'Wake on message', 'Persistent workspace'] },
+  { label: 'Runtime behavior', values: ['Manual bounded session', 'Wake on message', 'Persistent workspace'] },
   { label: 'Best for', values: plans.map((plan) => plan.bestFor) },
-  { label: 'State after stop', values: ['Not applicable', 'May be cleaned up', 'Sleeps with recoverable state', 'Normally stays live'] },
-  { label: 'Recovery model', values: ['Not applicable', 'Fresh launch', 'Wake and restore', 'Already live'] },
+  { label: 'State after stop', values: ['May be cleaned up', 'Sleeps with recoverable state', 'Normally stays live'] },
+  { label: 'Recovery model', values: ['Fresh launch', 'Wake and restore', 'Already live'] },
   { label: 'Agents per launched bundle', values: plans.map((plan) => plan.agentsPerBundle) },
   { label: 'Trigger mode', values: plans.map((plan) => plan.triggerMode) },
 ] as const
@@ -215,11 +215,6 @@ const workflowChoices = [
 
 const supportCallouts = [
   {
-    title: 'Free is for browsing and preview',
-    description:
-      'Use it to understand agent behavior and claim free agents. It is not a runtime tier.',
-  },
-  {
     title: 'Run is the default paid entry',
     description:
       'Best for testing one workflow manually in a bounded session.',
@@ -240,42 +235,17 @@ const decisionFaqs = [
   {
     question: 'Why are agents free, but runs paid?',
     answer:
-      'Agents are free to collect and evaluate. Paid plans cover managed runtime access when you want to actually launch a bundle.',
+      'Agents are free to browse and collect. Paid plans cover managed runtime when you actually launch a bundle.',
   },
   {
-    question: 'What is a runtime credit?',
+    question: 'What do I pay for?',
     answer:
-      'For Run and Warm Standby, a credit is used when a managed launch or wake successfully starts. It is an entry budget for managed runtime, not minute-by-minute billing.',
+      'You pay for managed runtime behavior: temporary run or wake-and-recover operation.',
   },
   {
-    question: 'What is the difference between Run and Warm Standby after a session stops?',
+    question: 'What happens if a run fails to start?',
     answer:
-      'Run is the bounded test-session tier: once it stops, you should think in terms of a fresh launch. Warm Standby is the wake-and-recover tier: it resumes later from preserved state instead of acting like a brand-new environment every time.',
-  },
-  {
-    question: 'Why would I pay for Warm Standby instead of just buying Run again?',
-    answer:
-      'Choose Warm Standby when the same workflow keeps coming back and you care about recoverable state after a bounded wake session. Choose Run when you only need a temporary test session and do not care about keeping warm recoverable context around between wakes.',
-  },
-  {
-    question: 'Does stopping always mean deleting everything?',
-    answer:
-      'No. In this product model, stopping can mean different things depending on the plan. Run is treated as ephemeral. Warm Standby is positioned as a sleep-and-recover mode. Always On is not meant to stop as part of normal operation.',
-  },
-  {
-    question: 'Do plans auto-stop?',
-    answer:
-      'Yes. Run is designed as a bounded manual session, Warm Standby wakes and preserves state for resume, and Always On is for a persistent workspace instead of a session-first model.',
-  },
-  {
-    question: 'Why not just self-host OpenClaw?',
-    answer:
-      'Self-hosting trades subscription cost for operational work: sandbox lifecycle, wake behavior, persistence handling, cleanup, and environment management. These plans are for people who want the managed runtime, not another piece of infrastructure to maintain.',
-  },
-  {
-    question: 'When do I actually need Always On?',
-    answer:
-      'Only when your core workspace should stay alive as an operating environment. If you are mostly testing or waking on demand, Run or Warm Standby is the better fit.',
+      'You’re charged only after a launch or wake successfully starts. Failed starts are refunded automatically.',
   },
 ] as const
 
@@ -352,7 +322,7 @@ export default function PricingPage() {
                       </h2>
                     </div>
                     <div className="rounded-full border border-orange-200/20 bg-orange-200/10 px-3 py-1 text-[11px] uppercase tracking-[0.18em] text-orange-100/75">
-                      3 runtime modes
+                      3 paid runtime modes
                     </div>
                   </div>
 
@@ -426,7 +396,7 @@ export default function PricingPage() {
               </p>
             </div>
 
-            <div className="grid gap-5 xl:grid-cols-4">
+            <div className="mx-auto grid max-w-6xl gap-5 lg:grid-cols-3">
               {plans.map((plan) => (
                 <PlanCard key={plan.name} plan={plan} />
               ))}
@@ -446,13 +416,13 @@ export default function PricingPage() {
         <section className="border-b border-border/60 bg-card/30">
           <div className="container mx-auto px-4 py-18 md:py-20">
             <div className="max-w-3xl">
-              <div className="text-xs uppercase tracking-[0.24em] text-muted-foreground">Plan meanings</div>
-              <h2 className="mt-3 text-3xl font-semibold tracking-[-0.03em] text-foreground md:text-4xl">
-                The four plan positions in plain language.
-              </h2>
-            </div>
+                <div className="text-xs uppercase tracking-[0.24em] text-muted-foreground">Plan meanings</div>
+                <h2 className="mt-3 text-3xl font-semibold tracking-[-0.03em] text-foreground md:text-4xl">
+                  The three paid plan positions in plain language.
+                </h2>
+              </div>
 
-            <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               {supportCallouts.map((item) => (
                 <DecisionCard
                   key={item.title}
@@ -527,14 +497,11 @@ export default function PricingPage() {
               </h2>
             </div>
 
-            <div className="mt-8 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-              {decisionFaqs.map((item, index) => (
+            <div className="mt-8 grid gap-5 md:grid-cols-3">
+              {decisionFaqs.map((item) => (
                 <Card
                   key={item.question}
-                  className={cn(
-                    'rounded-[1.6rem] border-border/60 bg-background/60',
-                    index === 4 && 'md:col-span-2 xl:col-span-1',
-                  )}
+                  className="rounded-[1.6rem] border-border/60 bg-background/60"
                 >
                   <CardContent className="p-6">
                     <h3 className="text-lg font-semibold tracking-[-0.02em] text-foreground">
