@@ -1,8 +1,8 @@
+import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
 import { Inter, JetBrains_Mono } from 'next/font/google'
-import { Analytics } from '@vercel/analytics/next'
-import { Providers } from './providers'
 import './globals.css'
+import { Providers } from './providers'
 
 const inter = Inter({
   subsets: ["latin"],
@@ -19,9 +19,9 @@ export const metadata: Metadata = {
   description: 'Discover, purchase, and run trusted Personal Ops AI agents. Browse agents for Inbox, Calendar, and Docs workflows.',
   generator: 'OpenRoster',
   icons: {
-    apple: '/favicon.png',
-    icon: '/favicon.svg',
-    shortcut: '/favicon.png',
+    apple: '/logo.png',
+    icon: '/logo.png',
+    shortcut: '/logo.png',
   },
 }
 

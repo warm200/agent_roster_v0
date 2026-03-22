@@ -17,7 +17,7 @@ export function BrandLogo({
       className={cn('shrink-0 object-contain', className)}
       height={size}
       priority={priority}
-      src="/favicon.svg"
+      src="/logo.png"
       width={size}
     />
   )
