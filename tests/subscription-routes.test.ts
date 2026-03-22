@@ -96,11 +96,15 @@ function createSubscriptionServiceStub(
     async handleStripeCheckoutCompletedSession() {
       throw new Error('not implemented')
     },
+    async handleStripeSubscriptionDeleted() {
+      throw new Error('not implemented')
+    },
     listPlans: () => [getFreeSubscriptionPlan(), getSubscriptionPlan('run')],
     listTopUpPacks: () => [],
     async reconcileCheckoutSession() {
       throw new Error('not implemented')
     },
+    async syncSubscriptionFromStripe() {},
     ...overrides,
   }
 }

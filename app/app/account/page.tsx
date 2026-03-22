@@ -113,6 +113,29 @@ export default function AccountPage() {
 
                 {subscription && (
                   <div>
+                    <p className="text-xs text-muted-foreground">Status</p>
+                    <div className="mt-1 flex items-center gap-2">
+                      <Badge variant={
+                        subscription.status === 'active' ? 'default'
+                          : subscription.status === 'past_due' ? 'destructive'
+                          : 'outline'
+                      }>
+                        {subscription.status === 'active' ? 'Active'
+                          : subscription.status === 'past_due' ? 'Past due'
+                          : subscription.status === 'canceled' ? 'Canceled'
+                          : 'Expired'}
+                      </Badge>
+                      {subscription.status === 'canceled' && subscription.currentPeriodEnd && (
+                        <span className="text-xs text-muted-foreground">
+                          Access until {new Date(subscription.currentPeriodEnd).toLocaleDateString()}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {subscription && (
+                  <div>
                     <p className="text-xs text-muted-foreground">Credits remaining</p>
                     <p className="text-sm font-medium text-foreground mt-1">{subscription.remainingCredits}</p>
                   </div>

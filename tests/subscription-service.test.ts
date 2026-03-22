@@ -1,9 +1,12 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-
 import { getSubscriptionPlan } from '@/lib/subscription-plans'
 import type { Order, UserSubscription } from '@/lib/types'
-import { buildLaunchPolicyCheck, isCountedActiveRun } from '@/server/services/subscription.service'
+import {
+  buildLaunchPolicyCheck,
+  getStripeSubscriptionCurrentPeriodEnd,
+  isCountedActiveRun,
+} from '@/server/services/subscription.service'
 
 function buildOrder(agentCount: number, orderId = 'order-test-1'): Order {
   return {
@@ -134,6 +137,16 @@ test('counted active runs stop counting once workspace is released', () => {
     isCountedActiveRun({ status: 'failed', usesRealWorkspace: true, workspaceReleasedAt: null }),
     false,
   )
+})
+
+test('getStripeSubscriptionCurrentPeriodEnd returns a date when Stripe includes current_period_end', () => {
+  const subscription = {
+    current_period_end: 1_774_051_200,
+  }
+
+  const periodEnd = getStripeSubscriptionCurrentPeriodEnd(subscription)
+
+  assert.equal(periodEnd?.toISOString(), '2026-03-21T00:00:00.000Z')
 })
 
 test('free plan blocks all launches', () => {

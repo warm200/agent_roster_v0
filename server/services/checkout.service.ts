@@ -201,6 +201,12 @@ export async function handleStripeWebhookEvent(input: {
     getStripeWebhookSecret(),
   )
 
+  if (event.type === 'customer.subscription.deleted') {
+    const subscription = event.data.object as Stripe.Subscription
+    await getSubscriptionService().handleStripeSubscriptionDeleted(subscription)
+    return { received: true, type: event.type }
+  }
+
   if (event.type !== 'checkout.session.completed') {
     return {
       received: true,

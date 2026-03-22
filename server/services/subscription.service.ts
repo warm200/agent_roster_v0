@@ -152,6 +152,15 @@ async function getStripePeriodBounds(stripe: Stripe, session: Stripe.Checkout.Se
   }
 }
 
+export function getStripeSubscriptionCurrentPeriodEnd(subscription: unknown) {
+  if (!subscription || typeof subscription !== 'object' || !('current_period_end' in subscription)) {
+    return null
+  }
+
+  const periodEnd = (subscription as { current_period_end?: unknown }).current_period_end
+  return typeof periodEnd === 'number' ? new Date(periodEnd * 1000) : null
+}
+
 export function isCountedActiveRun(run: {
   status: string
   usesRealWorkspace: boolean
@@ -1238,6 +1247,106 @@ export class SubscriptionService {
       return toUserSubscription(updatedSubscription)
     })
   }
+
+  async syncSubscriptionFromStripe(userId: string) {
+    const [record] = await this.db
+      .select()
+      .from(userSubscriptions)
+      .where(eq(userSubscriptions.userId, userId))
+      .limit(1)
+
+    if (!record?.stripeSubscriptionId) {
+      return
+    }
+
+    let stripe: Stripe
+    try {
+      stripe = getStripeCheckoutClient()
+    } catch {
+      return
+    }
+
+    let stripeSubscription: Stripe.Subscription
+    try {
+      stripeSubscription = await stripe.subscriptions.retrieve(record.stripeSubscriptionId)
+    } catch {
+      return
+    }
+
+    const stripeStatus = stripeSubscription.status
+
+    if (stripeStatus === 'canceled' || stripeStatus === 'incomplete_expired') {
+      await this.handleStripeSubscriptionDeleted(stripeSubscription)
+      return
+    }
+
+    const mappedStatus: 'active' | 'canceled' | 'past_due' =
+      stripeSubscription.cancel_at_period_end ? 'canceled'
+        : stripeStatus === 'past_due' ? 'past_due'
+        : 'active'
+
+    const periodEnd = getStripeSubscriptionCurrentPeriodEnd(stripeSubscription)
+
+    if (record.status === mappedStatus && (!periodEnd || record.currentPeriodEnd?.getTime() === periodEnd.getTime())) {
+      return
+    }
+
+    await this.db
+      .update(userSubscriptions)
+      .set({
+        status: mappedStatus,
+        ...(periodEnd ? { currentPeriodEnd: periodEnd } : {}),
+        updatedAt: new Date(),
+      })
+      .where(eq(userSubscriptions.id, record.id))
+  }
+
+  async handleStripeSubscriptionDeleted(subscription: Stripe.Subscription) {
+    const [row] = await this.db
+      .select()
+      .from(userSubscriptions)
+      .where(eq(userSubscriptions.stripeSubscriptionId, subscription.id))
+      .limit(1)
+
+    if (!row) {
+      return
+    }
+
+    const now = new Date()
+    const previousCredits = row.remainingCredits
+
+    await this.db
+      .update(userSubscriptions)
+      .set({
+        status: 'canceled',
+        remainingCredits: 0,
+        currentPeriodEnd: getStripeSubscriptionCurrentPeriodEnd(subscription) ?? row.currentPeriodEnd,
+        stripeSubscriptionId: null,
+        updatedAt: now,
+      })
+      .where(eq(userSubscriptions.id, row.id))
+
+    if (previousCredits > 0) {
+      await this.db.insert(creditLedger).values({
+        id: crypto.randomUUID(),
+        userId: row.userId,
+        subscriptionId: row.id,
+        orderId: null,
+        runId: null,
+        eventType: 'reset',
+        unitType: getPlanLedgerUnitType(row.planId as SubscriptionPlan['id']),
+        deltaCredits: -previousCredits,
+        resultingBalance: 0,
+        status: 'committed',
+        reasonCode: 'subscription_canceled',
+        idempotencyKey: `sub-canceled:${subscription.id}`,
+        metadataJson: {
+          stripeSubscriptionId: subscription.id,
+          previousCredits,
+        },
+      })
+    }
+  }
 }
 
 let subscriptionServiceOverride: SubscriptionServiceLike | null = null
@@ -1256,10 +1365,12 @@ export type SubscriptionServiceLike = Pick<
   | 'getCurrentSubscription'
   | 'getLaunchPolicy'
   | 'handleStripeCheckoutCompletedSession'
+  | 'handleStripeSubscriptionDeleted'
   | 'listPlans'
   | 'listTopUpPacks'
   | 'reserveLaunchCredit'
   | 'reconcileCheckoutSession'
+  | 'syncSubscriptionFromStripe'
 >
 
 export function setSubscriptionServiceForTesting(service: SubscriptionServiceLike | null) {

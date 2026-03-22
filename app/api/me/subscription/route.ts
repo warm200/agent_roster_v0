@@ -7,6 +7,7 @@ import { getSubscriptionService } from '@/server/services/subscription.service'
 export async function GET(request: NextRequest) {
   const userId = await getRequestUserId(request)
   const service = getSubscriptionService()
+  await service.syncSubscriptionFromStripe(userId)
   const subscription = await service.getCurrentSubscription(userId)
 
   return NextResponse.json(

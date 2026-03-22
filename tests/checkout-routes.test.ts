@@ -306,3 +306,49 @@ test('stripe webhook route forwards payload and preserves checkout errors', asyn
   assert.equal(failedResponse.status, 400)
   assert.equal(failedPayload.error, 'Signature verification failed.')
 })
+
+test('stripe webhook route dispatches customer.subscription.deleted to subscription service', async () => {
+  let received:
+    | {
+        payload: string
+        signature: string
+      }
+    | undefined
+
+  setCheckoutServiceForTesting({
+    async createCheckoutSession() {
+      return {
+        sessionId: 'unused',
+        sessionUrl: 'https://example.com',
+      }
+    },
+    async handleStripeWebhookEvent(input) {
+      received = input
+      return {
+        received: true,
+        type: 'customer.subscription.deleted',
+      }
+    },
+    async reconcileCheckoutSession() {
+      return order as never
+    },
+  } satisfies CheckoutService)
+
+  const request = new NextRequest('http://localhost/api/webhooks/stripe', {
+    body: JSON.stringify({ id: 'evt_sub_deleted_1' }),
+    headers: {
+      'stripe-signature': 'sig_test_sub_del',
+    },
+    method: 'POST',
+  })
+
+  const response = await stripeWebhook(request)
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.deepEqual(received, {
+    payload: JSON.stringify({ id: 'evt_sub_deleted_1' }),
+    signature: 'sig_test_sub_del',
+  })
+  assert.equal(payload.type, 'customer.subscription.deleted')
+})
