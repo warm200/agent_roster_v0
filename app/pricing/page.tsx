@@ -77,7 +77,7 @@ const planPresentation = {
     cta: 'Use for repeat workflows',
     href: '/app/bundles',
     hideBudget: undefined,
-    highlight: 'Wake on demand',
+    highlight: 'Recommended',
     icon: TimerReset,
     metrics: [
       { label: 'Runtime behavior', value: 'Wake on message', icon: Zap },
@@ -191,8 +191,8 @@ const comparisonRows = [
 const pricingSteps = [
   'Agents are free to collect.',
   'Preview chat is free.',
-  'You only pay when you want to run a bundle in a managed environment.',
-  'Plans unlock different runtime capabilities like bundle size, trigger behavior, and operating mode.',
+  'You only pay when you launch a bundle in a managed environment. Each launch or wake costs 1 credit.',
+  'Need more credits? Top-up packs are available anytime without changing your plan.',
 ] as const
 
 const workflowChoices = [
@@ -213,24 +213,6 @@ const workflowChoices = [
   },
 ] as const
 
-const supportCallouts = [
-  {
-    title: 'Run is the default paid entry',
-    description:
-      'Best for testing one workflow manually in a bounded session.',
-  },
-  {
-    title: 'Warm Standby is for wake-on-message use',
-    description:
-      'Best when you want Telegram-triggered repeat workflows with recoverable state that can resume later without self-hosting.',
-  },
-  {
-    title: 'Always On is for a persistent managed workspace',
-    description:
-      'Use it when you want a core workspace to stay alive, not wake from zero.',
-  },
-] as const
-
 const decisionFaqs = [
   {
     question: 'Why are agents free, but runs paid?',
@@ -238,14 +220,14 @@ const decisionFaqs = [
       'Agents are free to browse and collect. Paid plans cover managed runtime when you actually launch a bundle.',
   },
   {
-    question: 'What do I pay for?',
-    answer:
-      'You pay for managed runtime behavior: temporary run or wake-and-recover operation.',
-  },
-  {
     question: 'What happens if a run fails to start?',
     answer:
-      'You’re charged only after a launch or wake successfully starts. Failed starts are refunded automatically.',
+      'You are charged only after a launch or wake successfully starts. Failed starts are refunded automatically.',
+  },
+  {
+    question: 'What if I run out of credits?',
+    answer:
+      'Top-up packs let you add credits anytime without changing your plan. Top-up credits expire 90 days after purchase.',
   },
 ] as const
 
@@ -267,16 +249,16 @@ export default function PricingPage() {
               </div>
 
               <h1 className="mt-6 max-w-4xl text-4xl font-semibold leading-[0.94] tracking-[-0.04em] text-foreground md:text-6xl lg:text-7xl">
-                Run agents,
+                Operate agents,
                 <span className="text-muted-foreground"> not infrastructure.</span>
                 <br />
-                Buy agents for free.
-                <span className="text-muted-foreground"> Pay only when you want to run them.</span>
+                Collect for free.
+                <span className="text-muted-foreground"> Pay only for managed runtime.</span>
               </h1>
 
               <p className="mt-6 max-w-2xl text-base leading-8 text-muted-foreground md:text-lg">
-                Free agent discovery first. Paid managed runtime when you are ready to operate:
-                manual run, wake with recoverable state, or keep a persistent workspace live.
+                Browse and preview agents at no cost. When you are ready to launch,
+                pick the runtime mode that fits: manual session, wake-on-message, or persistent workspace.
               </p>
 
               <div className="mt-6 grid max-w-2xl gap-3 text-sm text-muted-foreground sm:grid-cols-3">
@@ -402,34 +384,12 @@ export default function PricingPage() {
               ))}
             </div>
 
-            <p className="mt-6 text-xs leading-6 text-muted-foreground">
-              For Run and Warm Standby, 1 credit is used when a managed launch or wake successfully
-              starts.
-            </p>
-            <p className="mt-1 text-xs leading-6 text-muted-foreground/80">
-              Credits are an entry budget for managed runtime, not a full minute-by-minute metering
-              model.
-            </p>
-          </div>
-        </section>
-
-        <section className="border-b border-border/60 bg-card/30">
-          <div className="container mx-auto px-4 py-18 md:py-20">
-            <div className="max-w-3xl">
-                <div className="text-xs uppercase tracking-[0.24em] text-muted-foreground">Plan meanings</div>
-                <h2 className="mt-3 text-3xl font-semibold tracking-[-0.03em] text-foreground md:text-4xl">
-                  The three paid plan positions in plain language.
-                </h2>
-              </div>
-
-            <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {supportCallouts.map((item) => (
-                <DecisionCard
-                  key={item.title}
-                  title={item.title}
-                  description={item.description}
-                />
-              ))}
+            <div className="mx-auto mt-8 max-w-2xl rounded-[1.35rem] border border-border/60 bg-card/45 px-5 py-4 text-center">
+              <p className="text-sm leading-7 text-muted-foreground">
+                <span className="font-medium text-foreground">1 credit = 1 successful launch or wake.</span>{' '}
+                Credits are an entry budget for managed runtime, not minute-by-minute metering.
+                Failed starts are refunded automatically.
+              </p>
             </div>
           </div>
         </section>
@@ -522,32 +482,13 @@ export default function PricingPage() {
               <CardContent className="relative p-6 md:p-8">
                 <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(255,255,255,0.04),transparent_55%)]" />
 
-                <div className="relative flex flex-col gap-8">
-                  <div className="max-w-2xl">
-                    <div className="text-xs uppercase tracking-[0.24em] text-muted-foreground">Start here</div>
-                    <h2 className="mt-3 text-3xl font-semibold tracking-[-0.03em] text-foreground md:text-4xl">
-                      Choose the runtime by how state should behave.
-                    </h2>
-                    <p className="mt-4 text-sm leading-7 text-muted-foreground">
-                      Run is for manual tests. Warm Standby is for wake with memory. Always On is for
-                      staying live.
-                    </p>
-                  </div>
-
-                  <div className="grid gap-4 md:grid-cols-3">
-                    <BottomChoice
-                      title="Run = test manually"
-                      description="Use it when a bounded session is enough and stopping can mean starting fresh later."
-                    />
-                    <BottomChoice
-                      title="Warm Standby = wake with memory"
-                      description="Use it when Telegram should wake the workflow and later recover state instead of restarting from zero."
-                    />
-                    <BottomChoice
-                      title="Always On = stay live"
-                      description="Use it when a core workspace should remain alive as an operating surface."
-                    />
-                  </div>
+                <div className="relative flex flex-col items-center gap-6 text-center">
+                  <h2 className="max-w-2xl text-3xl font-semibold tracking-[-0.03em] text-foreground md:text-4xl">
+                    Ready to launch? Pick a plan from any bundle page.
+                  </h2>
+                  <p className="max-w-xl text-sm leading-7 text-muted-foreground">
+                    Browse free agents first, then choose the runtime mode when you are ready to operate.
+                  </p>
 
                   <div className="flex flex-col gap-3 sm:flex-row">
                     <Button
@@ -566,7 +507,7 @@ export default function PricingPage() {
                       asChild
                       className="h-12 rounded-full border-border/70 bg-background/70 px-6 text-sm"
                     >
-                      <Link href="/app/bundles">Choose a Plan from Bundle Detail</Link>
+                      <Link href="/app/bundles">Go to My Bundles</Link>
                     </Button>
                   </div>
                 </div>
@@ -612,10 +553,7 @@ function PlanCard({
           <PlanSection label="Best for" value={plan.bestFor} />
           <PlanSection label="Runtime behavior" value={plan.runtimeBehavior} />
           <PlanSection label="Persistence" value={plan.persistence} />
-          <PlanSection label="What happens when it stops" value={plan.stopBehavior} />
           <PlanSection label="Recovery model" value={plan.recoveryModel} />
-          <PlanSection label="Why this exists" value={plan.whyExists} />
-          <PlanSection label="Who it is for" value={plan.whoItsFor} />
         </div>
 
         {!plan.hideBudget ? (
@@ -666,38 +604,6 @@ function PlanCard({
         <Button asChild className="mt-6 h-11 w-full rounded-full text-sm">
           <Link href={plan.href}>{plan.cta}</Link>
         </Button>
-      </CardContent>
-    </Card>
-  )
-}
-
-function BottomChoice({
-  title,
-  description,
-}: {
-  title: string
-  description: string
-}) {
-  return (
-    <div className="rounded-[1.35rem] border border-border/60 bg-background/55 p-4">
-      <div className="text-sm font-medium text-foreground">{title}</div>
-      <p className="mt-2 text-sm leading-7 text-muted-foreground">{description}</p>
-    </div>
-  )
-}
-
-function DecisionCard({
-  title,
-  description,
-}: {
-  title: string
-  description: string
-}) {
-  return (
-    <Card className="rounded-[1.6rem] border-border/60 bg-background/60">
-      <CardContent className="p-6">
-        <h3 className="text-lg font-semibold tracking-[-0.02em] text-foreground">{title}</h3>
-        <p className="mt-3 text-sm leading-7 text-muted-foreground">{description}</p>
       </CardContent>
     </Card>
   )
