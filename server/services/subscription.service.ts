@@ -505,6 +505,29 @@ export class SubscriptionService {
     return allocations
   }
 
+  async createBillingPortalSession(input: {
+    origin: string
+    returnPath: string
+    userId: string
+  }): Promise<{ portalUrl: string }> {
+    const subscription = await this.getCurrentSubscription(input.userId)
+
+    if (!subscription?.stripeCustomerId) {
+      throw new HttpError(409, 'No Stripe customer found for this account.')
+    }
+
+    const stripe = getStripeCheckoutClient()
+    const appUrl = getCheckoutBaseUrl(input.origin)
+    const returnUrl = `${appUrl}${normalizeReturnPath(input.returnPath)}`
+
+    const session = await stripe.billingPortal.sessions.create({
+      customer: subscription.stripeCustomerId,
+      return_url: returnUrl,
+    })
+
+    return { portalUrl: session.url }
+  }
+
   async createCheckoutSession(input: {
     origin: string
     planId: string
@@ -1225,6 +1248,7 @@ export function getSubscriptionService() {
 
 export type SubscriptionServiceLike = Pick<
   SubscriptionService,
+  | 'createBillingPortalSession'
   | 'createCheckoutSession'
   | 'createTopUpCheckoutSession'
   | 'commitReservedLaunchCredit'

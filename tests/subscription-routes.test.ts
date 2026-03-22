@@ -69,6 +69,9 @@ function createSubscriptionServiceStub(
   overrides: Partial<SubscriptionServiceLike> = {},
 ): SubscriptionServiceLike {
   return {
+    async createBillingPortalSession() {
+      throw new Error('not implemented')
+    },
     async commitReservedLaunchCredit() {
       return null
     },

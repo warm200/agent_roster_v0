@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
-import { LayoutDashboard, Package, Play, LogIn, LogOut } from 'lucide-react'
+import { LayoutDashboard, Package, Play, LogIn, LogOut, Settings } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { useAuth } from '@/lib/auth-context'
@@ -13,6 +13,7 @@ const sidebarLinks = [
   { href: '/app', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/app/bundles', label: 'My Bundles', icon: Package },
   { href: '/app/runs', label: 'Runs', icon: Play },
+  { href: '/app/account', label: 'Account', icon: Settings },
 ]
 
 export default function AppLayout({

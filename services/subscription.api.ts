@@ -61,3 +61,11 @@ export async function reconcileCreditTopUpCheckoutSession(sessionId: string) {
     `/api/me/subscription/top-up/checkout/session/${encodeURIComponent(sessionId)}`,
   )
 }
+
+type BillingPortalResponse = {
+  portalUrl: string
+}
+
+export async function createBillingPortalSession() {
+  return postJson<BillingPortalResponse>('/api/me/subscription/portal')
+}
