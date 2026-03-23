@@ -11,4 +11,3 @@ node_modules/
 .env
 .claude/
 tsconfig.tsbuildinfo
-agents_file/
