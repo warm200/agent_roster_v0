@@ -39,22 +39,28 @@ export function AgentCard({ agent, onAddToCart, isInCart = false }: AgentCardPro
 
   return (
     <div className="group h-[25rem] [perspective:1400px]">
-      <div className="relative h-full transition-transform duration-700 [transform-style:preserve-3d] max-md:[transform:rotateY(180deg)] md:group-hover:[transform:rotateY(180deg)] md:group-focus-within:[transform:rotateY(180deg)]">
+      <div className="relative h-full transition-transform duration-700 [transform-style:preserve-3d] md:group-hover:[transform:rotateY(180deg)] md:group-focus-within:[transform:rotateY(180deg)]">
         <div className="absolute inset-0 overflow-hidden rounded-[1.75rem] border border-border/70 bg-card shadow-[0_20px_60px_-28px_rgba(0,0,0,0.65)] [backface-visibility:hidden]">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.14),transparent_42%),linear-gradient(160deg,rgba(255,255,255,0.03),transparent_60%)]" />
           <div className="relative h-full px-3 pb-24 pt-3">
             <div className="absolute inset-0 bg-[linear-gradient(180deg,transparent_25%,rgba(0,0,0,0.58)_100%)]" />
-            <Avatar className="relative h-full w-full rounded-none border border-border/80 bg-secondary/80 shadow-[0_18px_50px_-24px_rgba(0,0,0,0.85)]">
-              <AvatarImage alt={getAgentDisplayName(agent)} className="h-full w-full object-cover object-center" src={agent.thumbnailUrl ?? undefined} />
-              <AvatarFallback className="rounded-none bg-secondary text-foreground">
-                <CategoryIcon className="h-20 w-20" />
-              </AvatarFallback>
-            </Avatar>
+            <Link
+              aria-label={`Open ${getAgentDisplayName(agent)} details`}
+              className="relative block h-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+              href={`/agents/${agent.slug}`}
+            >
+              <Avatar className="relative h-full w-full rounded-none border border-border/80 bg-secondary/80 shadow-[0_18px_50px_-24px_rgba(0,0,0,0.85)]">
+                <AvatarImage alt={getAgentDisplayName(agent)} className="h-full w-full object-cover object-center transition-transform duration-500 md:group-hover:scale-[1.02]" src={agent.thumbnailUrl ?? undefined} />
+                <AvatarFallback className="rounded-none bg-secondary text-foreground">
+                  <CategoryIcon className="h-20 w-20" />
+                </AvatarFallback>
+              </Avatar>
+            </Link>
             <div className="absolute inset-x-4 top-4 flex items-start justify-between gap-3">
               <Badge variant="secondary" className="border border-white/15 bg-background/72 text-foreground shadow-sm backdrop-blur-md">
                 {categoryLabels[agent.category]}
               </Badge>
-              <div className="inline-flex items-center gap-1 rounded-full border border-white/15 bg-background/72 px-2.5 py-1 text-[11px] text-muted-foreground shadow-sm backdrop-blur-md">
+              <div className="hidden items-center gap-1 rounded-full border border-white/15 bg-background/72 px-2.5 py-1 text-[11px] text-muted-foreground shadow-sm backdrop-blur-md md:inline-flex">
                 <Sparkles className="h-3.5 w-3.5" />
                 Flip for review
               </div>
