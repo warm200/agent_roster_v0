@@ -59,5 +59,3 @@ COPY docker/nginx/default.http.conf /etc/nginx/openroster/default.http.conf
 COPY docker/nginx/default.https.conf /etc/nginx/openroster/default.https.conf
 COPY docker/nginx/configure.sh /docker-entrypoint.d/40-configure-openroster.sh
 RUN chmod +x /docker-entrypoint.d/40-configure-openroster.sh
-COPY --from=builder /app/.next/static /usr/share/nginx/html/_next/static
-COPY --from=builder /app/public /usr/share/nginx/html
