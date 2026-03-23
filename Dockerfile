@@ -15,6 +15,7 @@ RUN pnpm install --frozen-lockfile
 FROM deps AS builder
 
 COPY . .
+RUN mkdir -p /app/openclaw_config_test
 RUN pnpm build
 
 FROM base AS app
