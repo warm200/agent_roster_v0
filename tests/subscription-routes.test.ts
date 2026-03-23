@@ -212,6 +212,9 @@ test('subscription checkout session route forwards plan payload to service', asy
         planId: 'warm_standby',
         returnPath: '/app/bundles/order-1',
       }),
+      headers: {
+        origin: 'http://localhost',
+      },
       method: 'POST',
     }),
   )
@@ -266,6 +269,9 @@ test('subscription checkout reconcile route returns the updated subscription', a
 
   const response = await reconcileSubscriptionCheckoutSession(
     new NextRequest('http://localhost/api/me/subscription/checkout/session/cs_sub_123', {
+      headers: {
+        origin: 'http://localhost',
+      },
       method: 'POST',
     }),
     {
@@ -298,6 +304,9 @@ test('subscription checkout session route preserves service errors', async () =>
         planId: 'free',
         returnPath: '/app/bundles/order-1',
       }),
+      headers: {
+        origin: 'http://localhost',
+      },
       method: 'POST',
     }),
   )
@@ -336,6 +345,9 @@ test('top-up checkout session route forwards pack payload to service', async () 
         returnPath: '/app/bundles/order-1',
         topUpPackId: 'builder_pack',
       }),
+      headers: {
+        origin: 'http://localhost',
+      },
       method: 'POST',
     }),
   )
@@ -389,6 +401,9 @@ test('top-up checkout reconcile route returns the updated subscription', async (
 
   const response = await reconcileTopUpCheckoutSession(
     new NextRequest('http://localhost/api/me/subscription/top-up/checkout/session/cs_topup_123', {
+      headers: {
+        origin: 'http://localhost',
+      },
       method: 'POST',
     }),
     {

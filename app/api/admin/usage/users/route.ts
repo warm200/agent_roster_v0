@@ -4,11 +4,17 @@ import { filterAdminUsers } from '@/lib/admin-user-filters'
 
 import {
   adminJson,
+  authorizeAdminRequest,
   buildAdminUsers,
   getAdminSnapshotFromRequest,
 } from '../_lib'
 
 export async function GET(request: NextRequest) {
+  const authError = await authorizeAdminRequest(request)
+  if (authError) {
+    return authError
+  }
+
   const snapshot = await getAdminSnapshotFromRequest(request)
   const users = filterAdminUsers(snapshot.users, {
     health: request.nextUrl.searchParams.get('health'),

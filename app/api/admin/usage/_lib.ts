@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 import type { AdminUsageSnapshot } from '@/lib/admin-usage-data'
+import { requireAdminApiRequest } from '@/server/lib/route-security'
 import { getAdminUsageSnapshot } from '@/server/services/admin-usage.service'
 
 export function getAdminWindowInput(request: NextRequest) {
@@ -13,6 +14,10 @@ export function getAdminWindowInput(request: NextRequest) {
 
 export async function getAdminSnapshotFromRequest(request: NextRequest) {
   return getAdminUsageSnapshot(getAdminWindowInput(request))
+}
+
+export async function authorizeAdminRequest(request: NextRequest) {
+  return requireAdminApiRequest(request)
 }
 
 export function adminJson(data: unknown) {

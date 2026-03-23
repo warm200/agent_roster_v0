@@ -108,6 +108,13 @@ Browser (only you)
 
 ### 3.4 应用层
 
+当前实现约束：
+
+* `/api/admin/**` 必须经过 OAuth session，并且邮箱命中 `ADMIN_ALLOWED_EMAILS`
+* 如果 allowlist 为空，admin UI / admin API 默认拒绝访问
+* 浏览器侧写接口（cart / checkout / orders / runs / subscription portal / Telegram pairing）要求 same-origin `Origin`
+* Webhook / internal route 继续走各自的 secret / token 校验，不走浏览器 CSRF 路径
+
 * 整个服务不需要公开注册/登录
 * 不需要普通用户 session
 * 不需要暴露给搜索引擎

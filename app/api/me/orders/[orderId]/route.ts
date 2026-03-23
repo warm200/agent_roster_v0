@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { updateOrderAgentSetupRequestSchema } from '@/lib/schemas'
 import { HttpError } from '@/server/lib/http'
 import { getRequestUserId } from '@/server/lib/request-user'
+import { verifySameOrigin } from '@/server/lib/route-security'
 import { getOrderService } from '@/server/services/order.service'
 
 export async function GET(
@@ -28,6 +29,11 @@ export async function PATCH(
   { params }: { params: Promise<{ orderId: string }> },
 ) {
   try {
+    const csrfError = verifySameOrigin(request)
+    if (csrfError) {
+      return csrfError
+    }
+
     const { orderId } = await params
     const userId = await getRequestUserId(request)
     const payload = updateOrderAgentSetupRequestSchema.parse(await request.json())

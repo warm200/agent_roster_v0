@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 
 import { HttpError } from '@/server/lib/http'
 import { getRequestUserId } from '@/server/lib/request-user'
+import { verifySameOrigin } from '@/server/lib/route-security'
 import { getRunService } from '@/server/services/run.service'
 
 export async function POST(
@@ -9,6 +10,11 @@ export async function POST(
   { params }: { params: Promise<{ runId: string }> },
 ) {
   try {
+    const csrfError = verifySameOrigin(request)
+    if (csrfError) {
+      return csrfError
+    }
+
     const { runId } = await params
     const userId = await getRequestUserId(request)
     const link = await getRunService().getRunControlUiLink(userId, runId)

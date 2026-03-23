@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 
 import { HttpError } from '@/server/lib/http'
 import { getRequestUserId } from '@/server/lib/request-user'
+import { verifySameOrigin } from '@/server/lib/route-security'
 import { getCheckoutService } from '@/server/services/checkout.service'
 
 export async function POST(
@@ -9,6 +10,11 @@ export async function POST(
   { params }: { params: Promise<{ sessionId: string }> },
 ) {
   try {
+    const csrfError = verifySameOrigin(request)
+    if (csrfError) {
+      return csrfError
+    }
+
     const { sessionId } = await params
     const userId = await getRequestUserId(request)
     const order = await getCheckoutService().reconcileCheckoutSession({

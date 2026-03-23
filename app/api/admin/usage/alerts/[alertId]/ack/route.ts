@@ -1,11 +1,22 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 
+import { requireAdminApiRequest, verifySameOrigin } from '@/server/lib/route-security'
 import { BillingAlertRepository } from '@/server/services/billing-alert.repository'
 
 export async function POST(
-  _request: Request,
+  request: NextRequest,
   { params }: { params: Promise<{ alertId: string }> },
 ) {
+  const authError = await requireAdminApiRequest(request)
+  if (authError) {
+    return authError
+  }
+
+  const csrfError = verifySameOrigin(request)
+  if (csrfError) {
+    return csrfError
+  }
+
   const { alertId } = await params
 
   try {

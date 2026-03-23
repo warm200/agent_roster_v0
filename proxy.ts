@@ -3,13 +3,7 @@ import { NextResponse } from 'next/server'
 import { getToken } from 'next-auth/jwt'
 
 import { isAuthConfigured } from '@/server/lib/auth'
-
-function getAdminAllowlist() {
-  return (process.env.ADMIN_ALLOWED_EMAILS ?? '')
-    .split(',')
-    .map((value) => value.trim().toLowerCase())
-    .filter(Boolean)
-}
+import { getAdminAllowedEmails } from '@/server/lib/route-security'
 
 function rewriteAdminToNotFound(request: NextRequest) {
   const response = NextResponse.rewrite(new URL('/_not-found', request.url))
@@ -37,10 +31,10 @@ export async function proxy(request: NextRequest) {
 
   if (token) {
     if (isAdminRoute) {
-      const allowedEmails = getAdminAllowlist()
+      const allowedEmails = getAdminAllowedEmails()
       const tokenEmail = typeof token.email === 'string' ? token.email.toLowerCase() : ''
 
-      if (allowedEmails.length > 0 && !allowedEmails.includes(tokenEmail)) {
+      if (allowedEmails.length === 0 || !allowedEmails.includes(tokenEmail)) {
         return rewriteAdminToNotFound(request)
       }
     }

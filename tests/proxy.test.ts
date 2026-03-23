@@ -115,6 +115,32 @@ test('proxy blocks authenticated admin traffic outside the allowlist', async () 
   assert.equal(response.headers.get('cache-control'), 'no-store')
 })
 
+test('proxy blocks authenticated admin traffic when no allowlist is configured', async () => {
+  process.env.AUTH_SECRET = 'test-secret'
+  delete process.env.ADMIN_ALLOWED_EMAILS
+  process.env.GITHUB_CLIENT_ID = 'github-client'
+  process.env.GITHUB_CLIENT_SECRET = 'github-secret'
+
+  const token = await encode({
+    secret: process.env.AUTH_SECRET,
+    token: {
+      email: 'woody@example.com',
+      name: 'Woody',
+      sub: 'user-1',
+    },
+  })
+
+  const request = new NextRequest('http://localhost/admin/usage', {
+    headers: {
+      cookie: `next-auth.session-token=${token}`,
+    },
+  })
+  const response = await proxy(request)
+
+  assert.equal(response.headers.get('x-middleware-rewrite'), 'http://localhost/_not-found')
+  assert.equal(response.headers.get('cache-control'), 'no-store')
+})
+
 test('proxy allows authenticated admin traffic from the allowlist', async () => {
   process.env.AUTH_SECRET = 'test-secret'
   process.env.ADMIN_ALLOWED_EMAILS = 'woody@example.com'

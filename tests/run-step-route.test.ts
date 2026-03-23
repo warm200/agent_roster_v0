@@ -44,6 +44,9 @@ test('legacy run step route returns deprecated response with run context', async
   } as unknown as RunService)
 
   const request = new NextRequest('http://localhost/api/runs/run-test-legacy/steps/approve', {
+    headers: {
+      origin: 'http://localhost',
+    },
     method: 'PATCH',
   })
 

@@ -87,12 +87,10 @@ export async function getRequestUserId(request: NextRequest) {
     return userId
   }
 
-  const headerUserId = request.headers.get('x-user-id')?.trim()
-  const userId = headerUserId || DEFAULT_REQUEST_USER_ID
-  await ensureRequestUser(userId, {
-    authProvider: headerUserId ? 'header' : 'demo',
+  await ensureRequestUser(DEFAULT_REQUEST_USER_ID, {
+    authProvider: 'demo',
   })
-  return userId
+  return DEFAULT_REQUEST_USER_ID
 }
 
 export function setRequestUserIdForTesting(

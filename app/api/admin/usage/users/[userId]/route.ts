@@ -1,11 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-import { getAdminSnapshotFromRequest } from '../../_lib'
+import { authorizeAdminRequest, getAdminSnapshotFromRequest } from '../../_lib'
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ userId: string }> },
 ) {
+  const authError = await authorizeAdminRequest(request)
+  if (authError) {
+    return authError
+  }
+
   const { userId } = await params
   const snapshot = await getAdminSnapshotFromRequest(request)
   const user = snapshot.users.find((row) => row.id === userId)

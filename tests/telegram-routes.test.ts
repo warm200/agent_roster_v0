@@ -64,6 +64,9 @@ test('telegram validate route forwards bot token to service', async () => {
 
   const request = new NextRequest('http://localhost/api/me/orders/order-test-1/run-channel/telegram/validate', {
     body: JSON.stringify({ botToken: '123:abc' }),
+    headers: {
+      origin: 'http://localhost',
+    },
     method: 'POST',
   })
 
@@ -100,6 +103,9 @@ test('telegram channel disconnect route forwards order and user to service', asy
 
   const response = await disconnectChannel(
     new NextRequest('http://localhost/api/me/orders/order-test-1/run-channel', {
+      headers: {
+        origin: 'http://localhost',
+      },
       method: 'DELETE',
     }),
     {
@@ -139,6 +145,9 @@ test('telegram pairing start route returns service payload', async () => {
   } as never)
 
   const request = new NextRequest('http://localhost/api/me/orders/order-test-1/run-channel/telegram/pairing/start', {
+    headers: {
+      origin: 'http://localhost',
+    },
     method: 'POST',
   })
 

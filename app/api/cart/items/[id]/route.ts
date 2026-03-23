@@ -1,17 +1,23 @@
 import { cookies } from 'next/headers'
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 
 import { HttpError } from '@/server/lib/http'
+import { verifySameOrigin } from '@/server/lib/route-security'
 import {
   CART_COOKIE_NAME,
   removeCartItem,
 } from '@/server/services/cart.service'
 
 export async function DELETE(
-  request: Request,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
+    const csrfError = verifySameOrigin(request)
+    if (csrfError) {
+      return csrfError
+    }
+
     const { id } = await params
     const cookieStore = await cookies()
     const cart = await removeCartItem({

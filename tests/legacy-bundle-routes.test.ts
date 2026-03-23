@@ -210,6 +210,9 @@ test('legacy bundle channel routes use telegram service', async () => {
 
   const disconnectResponse = await disconnectBundleChannel(
     new NextRequest('http://localhost/api/bundles/order-test-1/channel', {
+      headers: {
+        origin: 'http://localhost',
+      },
       method: 'DELETE',
     }),
     { params: Promise.resolve({ orderId: 'order-test-1' }) },
@@ -225,6 +228,9 @@ test('legacy bundle channel routes use telegram service', async () => {
 
   const pairingResponse = await startBundlePairing(
     new NextRequest('http://localhost/api/bundles/order-test-1/channel/telegram/pairing/start', {
+      headers: {
+        origin: 'http://localhost',
+      },
       method: 'POST',
     }),
     { params: Promise.resolve({ orderId: 'order-test-1' }) },
@@ -242,6 +248,9 @@ test('legacy bundle channel routes use telegram service', async () => {
   const validateResponse = await validateBundleToken(
     new NextRequest('http://localhost/api/bundles/order-test-1/channel/telegram/validate', {
       body: JSON.stringify({ botToken: '123:abc' }),
+      headers: {
+        origin: 'http://localhost',
+      },
       method: 'POST',
     }),
     { params: Promise.resolve({ orderId: 'order-test-1' }) },
@@ -315,6 +324,9 @@ test('legacy telegram verify compatibility route maps old payload keys', async (
         bundleId: 'order-test-1',
         code: 'legacy-code',
       }),
+      headers: {
+        origin: 'http://localhost',
+      },
       method: 'POST',
     }),
   )

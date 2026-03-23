@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import type { Agent, Order, Run, RunLog } from '@/lib/types'
 import { HttpError } from '@/server/lib/http'
 import { getRequestUserId } from '@/server/lib/request-user'
+import { verifySameOrigin } from '@/server/lib/route-security'
 import { getOrderService } from '@/server/services/order.service'
 import { getRunService } from '@/server/services/run.service'
 
@@ -70,6 +71,11 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const csrfError = verifySameOrigin(request)
+    if (csrfError) {
+      return csrfError
+    }
+
     const body = await request.json()
     const { orderId } = body
 

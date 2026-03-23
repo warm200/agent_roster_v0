@@ -162,6 +162,9 @@ test('order detail patch route forwards agent setup updates', async () => {
           anthropic: 'sk-ant-api03-test',
         },
       }),
+      headers: {
+        origin: 'http://localhost',
+      },
       method: 'PATCH',
     }),
     {
@@ -189,6 +192,51 @@ test('order detail patch route forwards agent setup updates', async () => {
   assert.equal(payload.agentSetup.modelPrimary, 'anthropic/claude-sonnet-4-5')
   assert.equal(payload.agentSetup.defaultAgentSlug, 'agent-test-default')
   assert.equal(payload.agentSetup.providerKeyStatus.anthropic, true)
+})
+
+test('order detail patch route rejects cross-site requests', async () => {
+  setRequestUserIdForTesting(() => 'user-test-1')
+  setOrderServiceForTesting({
+    async createPaidOrderFromCart() {
+      return order
+    },
+    async getOrderByIdForUser() {
+      return order
+    },
+    async getSignedDownloadsForOrder() {
+      return { downloads: [], orderId: order.id }
+    },
+    async listOrdersForUser() {
+      return [order]
+    },
+    async updateOrderAgentSetupForUser() {
+      throw new Error('should not be called')
+    },
+    async resolveSignedDownload() {
+      return '/downloads/agent-test.zip'
+    },
+  } satisfies OrderService)
+
+  const response = await patchOrder(
+    new NextRequest('http://localhost/api/me/orders/order-test-1', {
+      body: JSON.stringify({
+        agentSetup: {
+          defaultAgentSlug: 'agent-test-default',
+        } satisfies Partial<AgentSetup>,
+      }),
+      headers: {
+        origin: 'https://evil.example',
+      },
+      method: 'PATCH',
+    }),
+    {
+      params: Promise.resolve({ orderId: 'order-test-1' }),
+    },
+  )
+  const payload = await response.json()
+
+  assert.equal(response.status, 403)
+  assert.equal(payload.error, 'Cross-site request forbidden.')
 })
 
 test('order download route forwards baseUrl and userId', async () => {

@@ -326,6 +326,9 @@ test('run detail route returns enriched detail and supports retry/cancel', async
   const cancelResponse = await patchRun(
     new NextRequest('http://localhost/api/me/runs/run-test-1', {
       body: JSON.stringify({ action: 'cancel' }),
+      headers: {
+        origin: 'http://localhost',
+      },
       method: 'PATCH',
     }),
     { params: Promise.resolve({ runId: 'run-test-1' }) },
@@ -339,6 +342,9 @@ test('run detail route returns enriched detail and supports retry/cancel', async
   const retryResponse = await patchRun(
     new NextRequest('http://localhost/api/me/runs/run-test-1', {
       body: JSON.stringify({ action: 'retry' }),
+      headers: {
+        origin: 'http://localhost',
+      },
       method: 'PATCH',
     }),
     { params: Promise.resolve({ runId: 'run-test-1' }) },
@@ -383,6 +389,9 @@ test('run patch route reports stop failures as update errors instead of invalid 
   const response = await patchRun(
     new NextRequest('http://localhost/api/me/runs/run-test-1', {
       body: JSON.stringify({ action: 'cancel' }),
+      headers: {
+        origin: 'http://localhost',
+      },
       method: 'PATCH',
     }),
     { params: Promise.resolve({ runId: 'run-test-1' }) },
@@ -391,6 +400,54 @@ test('run patch route reports stop failures as update errors instead of invalid 
 
   assert.equal(response.status, 500)
   assert.equal(payload.error, 'sandbox stop failed')
+})
+
+test('run patch route rejects cross-site requests', async () => {
+  installServiceStubs()
+
+  setRunServiceForTesting({
+    async getRun() {
+      return fixtureRun
+    },
+    async getRunLogs() {
+      return fixtureLogs
+    },
+    async getRunResult() {
+      return fixtureResult
+    },
+    async listRuns() {
+      return [fixtureRun]
+    },
+    async retryRun() {
+      throw new Error('should not be called')
+    },
+    scanAgentVersion(version: AgentVersion) {
+      return version.riskProfile
+    },
+    async stopRun() {
+      throw new Error('should not be called')
+    },
+    async createRun() {
+      return fixtureRun
+    },
+  } as unknown as RunService)
+
+  const response = await patchRun(
+    new NextRequest('http://localhost/api/me/runs/run-test-1', {
+      body: JSON.stringify({ action: 'cancel' }),
+      headers: {
+        origin: 'https://evil.example',
+      },
+      method: 'PATCH',
+    }),
+    {
+      params: Promise.resolve({ runId: 'run-test-1' }),
+    },
+  )
+  const payload = await response.json()
+
+  assert.equal(response.status, 403)
+  assert.equal(payload.error, 'Cross-site request forbidden.')
 })
 
 test('run logs and result routes return service-backed payloads', async () => {
@@ -481,6 +538,9 @@ test('run control ui link route returns service-backed signed preview links', as
 
   const response = await createRunControlUiLink(
     new NextRequest('http://localhost/api/me/runs/run-test-1/control-ui-link', {
+      headers: {
+        origin: 'http://localhost',
+      },
       method: 'POST',
     }),
     { params: Promise.resolve({ runId: 'run-test-1' }) },

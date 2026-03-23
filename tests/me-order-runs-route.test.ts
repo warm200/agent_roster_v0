@@ -50,6 +50,9 @@ test('me order runs route creates a run via run service', async () => {
   } as unknown as RunService)
 
   const request = new NextRequest('http://localhost/api/me/orders/order-test-1/runs', {
+    headers: {
+      origin: 'http://localhost',
+    },
     method: 'POST',
   })
 
@@ -73,6 +76,9 @@ test('me order runs route surfaces launch conflicts', async () => {
   } as unknown as RunService)
 
   const request = new NextRequest('http://localhost/api/me/orders/order-test-1/runs', {
+    headers: {
+      origin: 'http://localhost',
+    },
     method: 'POST',
   })
 

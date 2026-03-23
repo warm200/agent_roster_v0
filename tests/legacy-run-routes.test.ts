@@ -233,6 +233,9 @@ test('legacy runs list and create routes use run service', async () => {
   const createResponse = await createLegacyRun(
     new NextRequest('http://localhost/api/runs', {
       body: JSON.stringify({ orderId: 'order-test-1' }),
+      headers: {
+        origin: 'http://localhost',
+      },
       method: 'POST',
     }),
   )
@@ -299,6 +302,9 @@ test('legacy run patch route supports cancel and retry actions', async () => {
   const cancelResponse = await patchLegacyRun(
     new NextRequest('http://localhost/api/runs/run-test-1', {
       body: JSON.stringify({ action: 'cancel' }),
+      headers: {
+        origin: 'http://localhost',
+      },
       method: 'PATCH',
     }),
     { params: Promise.resolve({ runId: 'run-test-1' }) },
@@ -312,6 +318,9 @@ test('legacy run patch route supports cancel and retry actions', async () => {
   const retryResponse = await patchLegacyRun(
     new NextRequest('http://localhost/api/runs/run-test-1', {
       body: JSON.stringify({ action: 'retry' }),
+      headers: {
+        origin: 'http://localhost',
+      },
       method: 'PATCH',
     }),
     { params: Promise.resolve({ runId: 'run-test-1' }) },

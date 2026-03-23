@@ -2,10 +2,16 @@ import { NextRequest, NextResponse } from 'next/server'
 
 import { HttpError } from '@/server/lib/http'
 import { getRequestUserId } from '@/server/lib/request-user'
+import { verifySameOrigin } from '@/server/lib/route-security'
 import { getTelegramService } from '@/server/services/telegram.service'
 
 export async function POST(request: NextRequest) {
   try {
+    const csrfError = verifySameOrigin(request)
+    if (csrfError) {
+      return csrfError
+    }
+
     const body = await request.json()
     const orderId = body.orderId || body.bundleId
     const botToken = body.botToken || body.code

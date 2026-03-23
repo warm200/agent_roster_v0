@@ -7,7 +7,7 @@ import { POST as createSession } from '@/app/api/checkout/session/route'
 import { POST as reconcileSession } from '@/app/api/checkout/session/[sessionId]/route'
 import { POST as stripeWebhook } from '@/app/api/webhooks/stripe/route'
 import { HttpError } from '@/server/lib/http'
-import { setRequestUserIdForTesting } from '@/server/lib/request-user'
+import { DEFAULT_REQUEST_USER_ID, setRequestUserIdForTesting } from '@/server/lib/request-user'
 import {
   setCheckoutServiceForTesting,
   type CheckoutService,
@@ -35,6 +35,7 @@ test('checkout session route forwards cart payload to checkout service', async (
       }
     | undefined
 
+  setRequestUserIdForTesting(() => DEFAULT_REQUEST_USER_ID)
   setCheckoutServiceForTesting({
     async createCheckoutSession(input) {
       received = input
@@ -56,8 +57,12 @@ test('checkout session route forwards cart payload to checkout service', async (
     body: JSON.stringify({
       cartId: 'cart-test-1',
       email: 'buyer@example.com',
-      userId: 'user-test-1',
+      userId: 'forged-user',
     }),
+    headers: {
+      origin: 'http://localhost',
+      'x-user-id': 'forged-header-user',
+    },
     method: 'POST',
   })
 
@@ -69,12 +74,13 @@ test('checkout session route forwards cart payload to checkout service', async (
     cartId: 'cart-test-1',
     origin: 'http://localhost',
     userEmail: 'buyer@example.com',
-    userId: 'user-test-1',
+    userId: DEFAULT_REQUEST_USER_ID,
   })
   assert.equal(payload.sessionId, 'cs_test_123')
 })
 
 test('checkout session route returns local success redirect for free carts', async () => {
+  setRequestUserIdForTesting(() => DEFAULT_REQUEST_USER_ID)
   setCheckoutServiceForTesting({
     async createCheckoutSession() {
       return {
@@ -96,6 +102,9 @@ test('checkout session route returns local success redirect for free carts', asy
         cartId: 'cart-free-1',
         userId: 'user-free-1',
       }),
+      headers: {
+        origin: 'http://localhost',
+      },
       method: 'POST',
     }),
   )
@@ -128,6 +137,9 @@ test('checkout session route requires auth when oauth is configured', async () =
       body: JSON.stringify({
         cartId: 'cart-test-1',
       }),
+      headers: {
+        origin: 'http://localhost',
+      },
       method: 'POST',
     }),
   )
@@ -175,6 +187,9 @@ test('checkout session route uses authenticated user when oauth is configured', 
         cartId: 'cart-test-1',
         userId: 'forged-user',
       }),
+      headers: {
+        origin: 'http://localhost',
+      },
       method: 'POST',
     }),
   )
@@ -216,6 +231,9 @@ test('checkout session reconcile route forwards authenticated user to service', 
   } satisfies CheckoutService)
 
   const request = new NextRequest('http://localhost/api/checkout/session/cs_test_123', {
+    headers: {
+      origin: 'http://localhost',
+    },
     method: 'POST',
   })
 
@@ -230,6 +248,34 @@ test('checkout session reconcile route forwards authenticated user to service', 
     userId: 'user-test-1',
   })
   assert.equal(payload.id, 'order-test-1')
+})
+
+test('checkout session route rejects cross-site post', async () => {
+  setCheckoutServiceForTesting({
+    async createCheckoutSession() {
+      throw new Error('should not be called')
+    },
+    async handleStripeWebhookEvent() {
+      return { received: true, type: 'checkout.session.completed' as const }
+    },
+    async reconcileCheckoutSession() {
+      return order as never
+    },
+  } satisfies CheckoutService)
+
+  const response = await createSession(
+    new NextRequest('http://localhost/api/checkout/session', {
+      body: JSON.stringify({ cartId: 'cart-test-1' }),
+      headers: {
+        origin: 'https://evil.example',
+      },
+      method: 'POST',
+    }),
+  )
+  const payload = await response.json()
+
+  assert.equal(response.status, 403)
+  assert.equal(payload.error, 'Cross-site request forbidden.')
 })
 
 test('stripe webhook route forwards payload and preserves checkout errors', async () => {

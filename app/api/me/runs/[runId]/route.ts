@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import type { Agent, Order, Run, RunLog } from '@/lib/types'
 import { HttpError, logServerError, unexpectedErrorMessage } from '@/server/lib/http'
 import { getRequestUserId } from '@/server/lib/request-user'
+import { verifySameOrigin } from '@/server/lib/route-security'
 import { getOrderService } from '@/server/services/order.service'
 import { getRunService } from '@/server/services/run.service'
 
@@ -65,6 +66,11 @@ export async function PATCH(
   let runId = 'unknown'
   let action: string | undefined
   try {
+    const csrfError = verifySameOrigin(request)
+    if (csrfError) {
+      return csrfError
+    }
+
     ;({ runId } = await params)
     const userId = await getRequestUserId(request)
     const body = (await request.json().catch(() => null)) as { action?: string } | null
