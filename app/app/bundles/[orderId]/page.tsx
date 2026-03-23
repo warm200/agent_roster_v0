@@ -2,7 +2,7 @@
 
 import { use, useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -57,7 +57,6 @@ function formatPlanTriggerMode(triggerMode: LaunchPolicyCheck['plan']['triggerMo
 
 export default function BundleDetailPage({ params }: PageProps) {
   const { orderId } = use(params)
-  const router = useRouter()
   const searchParams = useSearchParams()
   const [order, setOrder] = useState<Order | null>(null)
   const [orderRuns, setOrderRuns] = useState<Run[]>([])
@@ -122,6 +121,44 @@ export default function BundleDetailPage({ params }: PageProps) {
     )
   }, [])
 
+  const refreshBundleData = useCallback(async () => {
+    const orderPayload = await getOrder(orderId)
+    const [runsResult, downloadsResult, launchPolicyResult] = await Promise.allSettled([
+      listRuns({ orderId }),
+      getOrderDownloads(orderId),
+      getOrderLaunchPolicy(orderId),
+    ])
+
+    setOrder(orderPayload)
+    setOrderRuns(runsResult.status === 'fulfilled' ? runsResult.value.runs : [])
+    setDownloads(downloadsResult.status === 'fulfilled' ? downloadsResult.value.downloads : [])
+    setLaunchPolicy(launchPolicyResult.status === 'fulfilled' ? launchPolicyResult.value : null)
+  }, [orderId])
+
+  const clearCheckoutParamsInPlace = useCallback((keys: string[]) => {
+    if (typeof window === 'undefined') {
+      return
+    }
+
+    const nextUrl = new URL(window.location.href)
+    let mutated = false
+
+    for (const key of keys) {
+      if (!nextUrl.searchParams.has(key)) {
+        continue
+      }
+      nextUrl.searchParams.delete(key)
+      mutated = true
+    }
+
+    if (!mutated) {
+      return
+    }
+
+    const nextHref = `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`
+    window.history.replaceState(window.history.state, '', nextHref)
+  }, [])
+
   useEffect(() => {
     let isMounted = true
 
@@ -129,25 +166,11 @@ export default function BundleDetailPage({ params }: PageProps) {
       setIsLoading(true)
 
       try {
-        const orderPayload = await getOrder(orderId)
-
-        if (isMounted) {
-          setOrder(orderPayload)
-        }
-
-        const [runsResult, downloadsResult, launchPolicyResult] = await Promise.allSettled([
-          listRuns({ orderId }),
-          getOrderDownloads(orderId),
-          getOrderLaunchPolicy(orderId),
-        ])
+        await refreshBundleData()
 
         if (!isMounted) {
           return
         }
-
-        setOrderRuns(runsResult.status === 'fulfilled' ? runsResult.value.runs : [])
-        setDownloads(downloadsResult.status === 'fulfilled' ? downloadsResult.value.downloads : [])
-        setLaunchPolicy(launchPolicyResult.status === 'fulfilled' ? launchPolicyResult.value : null)
       } catch {
         if (isMounted) {
           setOrder(null)
@@ -167,7 +190,7 @@ export default function BundleDetailPage({ params }: PageProps) {
     return () => {
       isMounted = false
     }
-  }, [orderId])
+  }, [refreshBundleData])
 
   useEffect(() => {
     if (
@@ -188,18 +211,17 @@ export default function BundleDetailPage({ params }: PageProps) {
 
       try {
         await reconcileSubscriptionCheckoutSession(sessionId)
-        const nextLaunchPolicy = await getOrderLaunchPolicy(orderId)
+        await refreshBundleData()
 
         if (!isMounted) {
           return
         }
 
-        setLaunchPolicy(nextLaunchPolicy)
         window.dispatchEvent(new CustomEvent('subscription-updated'))
         toast.success('Plan updated. Credits are ready.')
         completed = true
         setIsReconcilingPlan(false)
-        router.replace(`/app/bundles/${orderId}`)
+        clearCheckoutParamsInPlace(['subscription_session_id'])
       } catch (error) {
         if (!isMounted) {
           return
@@ -219,7 +241,7 @@ export default function BundleDetailPage({ params }: PageProps) {
     return () => {
       isMounted = false
     }
-  }, [isReconcilingPlan, orderId, router, subscriptionSessionId])
+  }, [clearCheckoutParamsInPlace, isReconcilingPlan, refreshBundleData, subscriptionSessionId])
 
   useEffect(() => {
     if (!topUpSessionId || isReconcilingTopUp || reconciledTopUpSessionRef.current === topUpSessionId) {
@@ -236,18 +258,17 @@ export default function BundleDetailPage({ params }: PageProps) {
 
       try {
         await reconcileCreditTopUpCheckoutSession(sessionId)
-        const nextLaunchPolicy = await getOrderLaunchPolicy(orderId)
+        await refreshBundleData()
 
         if (!isMounted) {
           return
         }
 
-        setLaunchPolicy(nextLaunchPolicy)
         window.dispatchEvent(new CustomEvent('subscription-updated'))
         toast.success('Credits added. They expire 90 days after purchase.')
         completed = true
         setIsReconcilingTopUp(false)
-        router.replace(`/app/bundles/${orderId}`)
+        clearCheckoutParamsInPlace(['top_up_session_id'])
       } catch (error) {
         if (!isMounted) {
           return
@@ -267,7 +288,7 @@ export default function BundleDetailPage({ params }: PageProps) {
     return () => {
       isMounted = false
     }
-  }, [isReconcilingTopUp, orderId, router, topUpSessionId])
+  }, [clearCheckoutParamsInPlace, isReconcilingTopUp, refreshBundleData, topUpSessionId])
 
   if (isLoading) {
     return <BundleDetailSkeleton />
@@ -333,7 +354,7 @@ export default function BundleDetailPage({ params }: PageProps) {
     try {
       const payload = await createOrderRun(order.id)
       toast.success('Run requested. Redirecting to run details...')
-      router.push(`/app/runs/${payload.id}`)
+      window.location.assign(`/app/runs/${payload.id}`)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Network error while launching run')
     } finally {
