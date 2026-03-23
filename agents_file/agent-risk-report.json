@@ -1,0 +1,665 @@
+{
+  "root": "agents_file",
+  "generated_at": "2026-03-19T13:09:38.965559+00:00",
+  "agents_count": 13,
+  "reports": [
+    {
+      "agent_slug": "ai-engineer",
+      "display_name": "Ai Engineer",
+      "agent_path": "agents_file/ai-engineer",
+      "risk_level": "info",
+      "capability_flags": {
+        "shell": false,
+        "network": false,
+        "network_description": true,
+        "file_write": false,
+        "secrets": false,
+        "hidden_behavior": false
+      },
+      "summary": "Ai Engineer mainly describes APIs or integrations, but no high-confidence outbound behavior was detected. 2 total findings were recorded.",
+      "findings": [
+        {
+          "code": "NETWORK_DESCRIPTION",
+          "severity": "INFO",
+          "category": "descriptive_capability",
+          "title": "API or integration domain language detected",
+          "description": "The agent text discusses APIs, webhooks, or integrations, but does not clearly indicate direct outbound action.",
+          "file_path": "SOUL.md",
+          "evidence": "streams, model registries, and feature stores. - Inference APIs, batch jobs, vector databases, and evaluation pipelines. - Product analytics, experiment platforms,",
+          "remediation": "No direct action needed; verify whether the agent actually performs outbound requests.",
+          "source": "local",
+          "risk_driving": false
+        },
+        {
+          "code": "NETWORK_DESCRIPTION",
+          "severity": "INFO",
+          "category": "descriptive_capability",
+          "title": "API or integration domain language detected",
+          "description": "The agent text discusses APIs, webhooks, or integrations, but does not clearly indicate direct outbound action.",
+          "file_path": "skills/SKILL.md",
+          "evidence": "zing in machine learning model development, deployment, and integration into production systems. Focused on building intelligent features, data pipelines, and AI-powered a",
+          "remediation": "No direct action needed; verify whether the agent actually performs outbound requests.",
+          "source": "local",
+          "risk_driving": false
+        }
+      ],
+      "scanner_findings_count": 0,
+      "scanner_max_severity": null,
+      "scanner_safe": null,
+      "scanner_error": null,
+      "generated_at": "2026-03-19T13:09:38.892350+00:00"
+    },
+    {
+      "agent_slug": "backend-architect",
+      "display_name": "Backend Architect",
+      "agent_path": "agents_file/backend-architect",
+      "risk_level": "info",
+      "capability_flags": {
+        "shell": false,
+        "network": false,
+        "network_description": true,
+        "file_write": false,
+        "secrets": false,
+        "hidden_behavior": false
+      },
+      "summary": "Backend Architect mainly describes APIs or integrations, but no high-confidence outbound behavior was detected. 2 total findings were recorded.",
+      "findings": [
+        {
+          "code": "NETWORK_DESCRIPTION",
+          "severity": "INFO",
+          "category": "descriptive_capability",
+          "title": "API or integration domain language detected",
+          "description": "The agent text discusses APIs, webhooks, or integrations, but does not clearly indicate direct outbound action.",
+          "file_path": "SOUL.md",
+          "evidence": "k.  ## Core Capabilities - Design scalable backend systems, APIs, services, and data flows - Architect schemas, indexes, migrations, and persistence layers - Stress",
+          "remediation": "No direct action needed; verify whether the agent actually performs outbound requests.",
+          "source": "local",
+          "risk_driving": false
+        },
+        {
+          "code": "NETWORK_DESCRIPTION",
+          "severity": "INFO",
+          "category": "descriptive_capability",
+          "title": "API or integration domain language detected",
+          "description": "The agent text discusses APIs, webhooks, or integrations, but does not clearly indicate direct outbound action.",
+          "file_path": "skills/SKILL.md",
+          "evidence": "lege for all services and database access - Encrypt data at rest and in transit using current security standards - Design authentication and authorization systems t",
+          "remediation": "No direct action needed; verify whether the agent actually performs outbound requests.",
+          "source": "local",
+          "risk_driving": false
+        }
+      ],
+      "scanner_findings_count": 0,
+      "scanner_max_severity": null,
+      "scanner_safe": null,
+      "scanner_error": null,
+      "generated_at": "2026-03-19T13:09:38.899177+00:00"
+    },
+    {
+      "agent_slug": "devops-automator",
+      "display_name": "Devops Automator",
+      "agent_path": "agents_file/devops-automator",
+      "risk_level": "info",
+      "capability_flags": {
+        "shell": false,
+        "network": false,
+        "network_description": true,
+        "file_write": false,
+        "secrets": false,
+        "hidden_behavior": false
+      },
+      "summary": "Devops Automator mainly describes APIs or integrations, but no high-confidence outbound behavior was detected. 1 total findings were recorded.",
+      "findings": [
+        {
+          "code": "NETWORK_DESCRIPTION",
+          "severity": "INFO",
+          "category": "descriptive_capability",
+          "title": "API or integration domain language detected",
+          "description": "The agent text discusses APIs, webhooks, or integrations, but does not clearly indicate direct outbound action.",
+          "file_path": "SOUL.md",
+          "evidence": "able tooling and documented runbooks over custom magic.  ## Integrations - Cloud providers, container registries, clusters, and serverless runtimes. - CI/CD systems, IaC re",
+          "remediation": "No direct action needed; verify whether the agent actually performs outbound requests.",
+          "source": "local",
+          "risk_driving": false
+        }
+      ],
+      "scanner_findings_count": 0,
+      "scanner_max_severity": null,
+      "scanner_safe": null,
+      "scanner_error": null,
+      "generated_at": "2026-03-19T13:09:38.901553+00:00"
+    },
+    {
+      "agent_slug": "executive_consultants",
+      "display_name": "Executive Consultants",
+      "agent_path": "agents_file/executive_consultants",
+      "risk_level": "info",
+      "capability_flags": {
+        "shell": false,
+        "network": false,
+        "network_description": true,
+        "file_write": false,
+        "secrets": false,
+        "hidden_behavior": false
+      },
+      "summary": "Executive Consultants mainly describes APIs or integrations, but no high-confidence outbound behavior was detected. 2 total findings were recorded.",
+      "findings": [
+        {
+          "code": "NETWORK_DESCRIPTION",
+          "severity": "INFO",
+          "category": "descriptive_capability",
+          "title": "API or integration domain language detected",
+          "description": "The agent text discusses APIs, webhooks, or integrations, but does not clearly indicate direct outbound action.",
+          "file_path": "SOUL.md",
+          "evidence": "estions: who acts, by when, and to what expected result  ## Integrations - Docs and slide decks: strategy memos, board updates, diligence materials, and performance reviews",
+          "remediation": "No direct action needed; verify whether the agent actually performs outbound requests.",
+          "source": "local",
+          "risk_driving": false
+        },
+        {
+          "code": "BASH_WORKFLOW_EXAMPLE",
+          "severity": "INFO",
+          "category": "descriptive_capability",
+          "title": "Bash-style workflow example detected",
+          "description": "The agent text includes a bash fenced block, but nearby context suggests it is illustrative rather than executable agent behavior.",
+          "file_path": "skills/SKILL.md",
+          "evidence": "```bash # Review provided business content thoroughly # Identify critical insights and quantifiable data points # Map content to SCQA framework components # Assess data quality and identify gaps ```",
+          "remediation": "No direct action needed unless the agent actually executes these commands.",
+          "source": "local",
+          "risk_driving": false
+        }
+      ],
+      "scanner_findings_count": 0,
+      "scanner_max_severity": null,
+      "scanner_safe": null,
+      "scanner_error": null,
+      "generated_at": "2026-03-19T13:09:38.907296+00:00"
+    },
+    {
+      "agent_slug": "finance_advisor",
+      "display_name": "Finance Advisor",
+      "agent_path": "agents_file/finance_advisor",
+      "risk_level": "info",
+      "capability_flags": {
+        "shell": false,
+        "network": false,
+        "network_description": true,
+        "file_write": false,
+        "secrets": false,
+        "hidden_behavior": false
+      },
+      "summary": "Finance Advisor mainly describes APIs or integrations, but no high-confidence outbound behavior was detected. 2 total findings were recorded.",
+      "findings": [
+        {
+          "code": "NETWORK_DESCRIPTION",
+          "severity": "INFO",
+          "category": "descriptive_capability",
+          "title": "API or integration domain language detected",
+          "description": "The agent text discusses APIs, webhooks, or integrations, but does not clearly indicate direct outbound action.",
+          "file_path": "SOUL.md",
+          "evidence": "ory reporting, note the need for qualified local review  ## Integrations - Accounting/ERP systems: actuals, chart of accounts, AP/AR, and close-process inputs - Spreadsheet",
+          "remediation": "No direct action needed; verify whether the agent actually performs outbound requests.",
+          "source": "local",
+          "risk_driving": false
+        },
+        {
+          "code": "BASH_WORKFLOW_EXAMPLE",
+          "severity": "INFO",
+          "category": "descriptive_capability",
+          "title": "Bash-style workflow example detected",
+          "description": "The agent text includes a bash fenced block, but nearby context suggests it is illustrative rather than executable agent behavior.",
+          "file_path": "skills/SKILL.md",
+          "evidence": "```bash # Validate financial data accuracy and completeness # Reconcile accounts and identify discrepancies # Establish baseline financial performance metrics ```",
+          "remediation": "No direct action needed unless the agent actually executes these commands.",
+          "source": "local",
+          "risk_driving": false
+        }
+      ],
+      "scanner_findings_count": 0,
+      "scanner_max_severity": null,
+      "scanner_safe": null,
+      "scanner_error": null,
+      "generated_at": "2026-03-19T13:09:38.917872+00:00"
+    },
+    {
+      "agent_slug": "frontend-developer",
+      "display_name": "Frontend Developer",
+      "agent_path": "agents_file/frontend-developer",
+      "risk_level": "info",
+      "capability_flags": {
+        "shell": false,
+        "network": false,
+        "network_description": true,
+        "file_write": false,
+        "secrets": false,
+        "hidden_behavior": false
+      },
+      "summary": "Frontend Developer mainly describes APIs or integrations, but no high-confidence outbound behavior was detected. 2 total findings were recorded.",
+      "findings": [
+        {
+          "code": "NETWORK_DESCRIPTION",
+          "severity": "INFO",
+          "category": "descriptive_capability",
+          "title": "API or integration domain language detected",
+          "description": "The agent text discusses APIs, webhooks, or integrations, but does not clearly indicate direct outbound action.",
+          "file_path": "SOUL.md",
+          "evidence": "mponent libraries, token systems, and frontend codebases. - APIs, websocket channels, editor bridges, and analytics events. - Testing pipelines for accessibility, c",
+          "remediation": "No direct action needed; verify whether the agent actually performs outbound requests.",
+          "source": "local",
+          "risk_driving": false
+        },
+        {
+          "code": "NETWORK_DESCRIPTION",
+          "severity": "INFO",
+          "category": "descriptive_capability",
+          "title": "API or integration domain language detected",
+          "description": "The agent text discusses APIs, webhooks, or integrations, but does not clearly indicate direct outbound action.",
+          "file_path": "skills/SKILL.md",
+          "evidence": "design systems, component libraries, state management, and API integration. - Editor integration engineering with navigation commands, protocol URIs, websocket or",
+          "remediation": "No direct action needed; verify whether the agent actually performs outbound requests.",
+          "source": "local",
+          "risk_driving": false
+        }
+      ],
+      "scanner_findings_count": 0,
+      "scanner_max_severity": null,
+      "scanner_safe": null,
+      "scanner_error": null,
+      "generated_at": "2026-03-19T13:09:38.920533+00:00"
+    },
+    {
+      "agent_slug": "legal-helper",
+      "display_name": "Legal Helper",
+      "agent_path": "agents_file/legal-helper",
+      "risk_level": "info",
+      "capability_flags": {
+        "shell": false,
+        "network": false,
+        "network_description": true,
+        "file_write": false,
+        "secrets": false,
+        "hidden_behavior": false
+      },
+      "summary": "Legal Helper mainly describes APIs or integrations, but no high-confidence outbound behavior was detected. 3 total findings were recorded.",
+      "findings": [
+        {
+          "code": "NETWORK_DESCRIPTION",
+          "severity": "INFO",
+          "category": "descriptive_capability",
+          "title": "API or integration domain language detected",
+          "description": "The agent text discusses APIs, webhooks, or integrations, but does not clearly indicate direct outbound action.",
+          "file_path": "SOUL.md",
+          "evidence": "sts, what control is missing, and what must happen next  ## Integrations - Policy and document repositories: privacy policies, terms, DPAs, vendor contracts, and training r",
+          "remediation": "No direct action needed; verify whether the agent actually performs outbound requests.",
+          "source": "local",
+          "risk_driving": false
+        },
+        {
+          "code": "BASH_WORKFLOW_EXAMPLE",
+          "severity": "INFO",
+          "category": "descriptive_capability",
+          "title": "Bash-style workflow example detected",
+          "description": "The agent text includes a bash fenced block, but nearby context suggests it is illustrative rather than executable agent behavior.",
+          "file_path": "skills/SKILL.md",
+          "evidence": "```bash # Monitor regulatory changes and updates across all applicable jurisdictions # Assess impact of new regulations on current business practices # Update compliance requirements and policy frameworks ```",
+          "remediation": "No direct action needed unless the agent actually executes these commands.",
+          "source": "local",
+          "risk_driving": false
+        },
+        {
+          "code": "NETWORK_DESCRIPTION",
+          "severity": "INFO",
+          "category": "descriptive_capability",
+          "title": "API or integration domain language detected",
+          "description": "The agent text discusses APIs, webhooks, or integrations, but does not clearly indicate direct outbound action.",
+          "file_path": "skills/SKILL.md",
+          "evidence": "tivities and decision-making processes  ### Risk Management Integration - Assess legal risks for all new business initiatives and feature developments - Implement appropri",
+          "remediation": "No direct action needed; verify whether the agent actually performs outbound requests.",
+          "source": "local",
+          "risk_driving": false
+        }
+      ],
+      "scanner_findings_count": 0,
+      "scanner_max_severity": null,
+      "scanner_safe": null,
+      "scanner_error": null,
+      "generated_at": "2026-03-19T13:09:38.933872+00:00"
+    },
+    {
+      "agent_slug": "market_researcher",
+      "display_name": "Market Researcher",
+      "agent_path": "agents_file/market_researcher",
+      "risk_level": "info",
+      "capability_flags": {
+        "shell": false,
+        "network": false,
+        "network_description": true,
+        "file_write": false,
+        "secrets": false,
+        "hidden_behavior": false
+      },
+      "summary": "Market Researcher mainly describes APIs or integrations, but no high-confidence outbound behavior was detected. 2 total findings were recorded.",
+      "findings": [
+        {
+          "code": "NETWORK_DESCRIPTION",
+          "severity": "INFO",
+          "category": "descriptive_capability",
+          "title": "API or integration domain language detected",
+          "description": "The agent text discusses APIs, webhooks, or integrations, but does not clearly indicate direct outbound action.",
+          "file_path": "SOUL.md",
+          "evidence": "ncise executive summaries first, then supporting detail  ## Integrations - Web search: trend discovery, competitor tracking, and source validation - Spreadsheets/Notion: ma",
+          "remediation": "No direct action needed; verify whether the agent actually performs outbound requests.",
+          "source": "local",
+          "risk_driving": false
+        },
+        {
+          "code": "NETWORK_DESCRIPTION",
+          "severity": "INFO",
+          "category": "descriptive_capability",
+          "title": "API or integration domain language detected",
+          "description": "The agent text discusses APIs, webhooks, or integrations, but does not clearly indicate direct outbound action.",
+          "file_path": "skills/SKILL.md",
+          "evidence": "plications, compliance requirements, approval timelines - **Integration Opportunities**: Platform compatibility, ecosystem fit, partnership potential  ## Continuous Intell",
+          "remediation": "No direct action needed; verify whether the agent actually performs outbound requests.",
+          "source": "local",
+          "risk_driving": false
+        }
+      ],
+      "scanner_findings_count": 0,
+      "scanner_max_severity": null,
+      "scanner_safe": null,
+      "scanner_error": null,
+      "generated_at": "2026-03-19T13:09:38.940114+00:00"
+    },
+    {
+      "agent_slug": "mobile-app-builder",
+      "display_name": "Mobile App Builder",
+      "agent_path": "agents_file/mobile-app-builder",
+      "risk_level": "info",
+      "capability_flags": {
+        "shell": false,
+        "network": false,
+        "network_description": true,
+        "file_write": false,
+        "secrets": false,
+        "hidden_behavior": false
+      },
+      "summary": "Mobile App Builder mainly describes APIs or integrations, but no high-confidence outbound behavior was detected. 2 total findings were recorded.",
+      "findings": [
+        {
+          "code": "NETWORK_DESCRIPTION",
+          "severity": "INFO",
+          "category": "descriptive_capability",
+          "title": "API or integration domain language detected",
+          "description": "The agent text discusses APIs, webhooks, or integrations, but does not clearly indicate direct outbound action.",
+          "file_path": "SOUL.md",
+          "evidence": "usability.  ## Integrations - iOS and Android SDKs, device APIs, and native storage layers. - Cross-platform frameworks, analytics, push providers, and crash repor",
+          "remediation": "No direct action needed; verify whether the agent actually performs outbound requests.",
+          "source": "local",
+          "risk_driving": false
+        },
+        {
+          "code": "NETWORK_DESCRIPTION",
+          "severity": "INFO",
+          "category": "descriptive_capability",
+          "title": "API or integration domain language detected",
+          "description": "The agent text discusses APIs, webhooks, or integrations, but does not clearly indicate direct outbound action.",
+          "file_path": "skills/SKILL.md",
+          "evidence": "- Native iOS development with Swift, SwiftUI, and platform APIs. - Native Android development with Kotlin, Jetpack Compose, and Android services. - Cross-platform",
+          "remediation": "No direct action needed; verify whether the agent actually performs outbound requests.",
+          "source": "local",
+          "risk_driving": false
+        }
+      ],
+      "scanner_findings_count": 0,
+      "scanner_max_severity": null,
+      "scanner_safe": null,
+      "scanner_error": null,
+      "generated_at": "2026-03-19T13:09:38.942654+00:00"
+    },
+    {
+      "agent_slug": "rapid-prototyper",
+      "display_name": "Rapid Prototyper",
+      "agent_path": "agents_file/rapid-prototyper",
+      "risk_level": "info",
+      "capability_flags": {
+        "shell": false,
+        "network": false,
+        "network_description": true,
+        "file_write": false,
+        "secrets": false,
+        "hidden_behavior": false
+      },
+      "summary": "Rapid Prototyper mainly describes APIs or integrations, but no high-confidence outbound behavior was detected. 1 total findings were recorded.",
+      "findings": [
+        {
+          "code": "NETWORK_DESCRIPTION",
+          "severity": "INFO",
+          "category": "descriptive_capability",
+          "title": "API or integration domain language detected",
+          "description": "The agent text discusses APIs, webhooks, or integrations, but does not clearly indicate direct outbound action.",
+          "file_path": "SOUL.md",
+          "evidence": "dence from real user behavior over internal enthusiasm.  ## Integrations - Rapid application stacks, managed auth, hosted databases, and component kits. - Analytics, featur",
+          "remediation": "No direct action needed; verify whether the agent actually performs outbound requests.",
+          "source": "local",
+          "risk_driving": false
+        }
+      ],
+      "scanner_findings_count": 0,
+      "scanner_max_severity": null,
+      "scanner_safe": null,
+      "scanner_error": null,
+      "generated_at": "2026-03-19T13:09:38.945173+00:00"
+    },
+    {
+      "agent_slug": "senior-developer",
+      "display_name": "Senior Developer",
+      "agent_path": "agents_file/senior-developer",
+      "risk_level": "info",
+      "capability_flags": {
+        "shell": false,
+        "network": false,
+        "network_description": true,
+        "file_write": false,
+        "secrets": false,
+        "hidden_behavior": false
+      },
+      "summary": "Senior Developer mainly describes APIs or integrations, but no high-confidence outbound behavior was detected. 2 total findings were recorded.",
+      "findings": [
+        {
+          "code": "NETWORK_DESCRIPTION",
+          "severity": "INFO",
+          "category": "descriptive_capability",
+          "title": "API or integration domain language detected",
+          "description": "The agent text discusses APIs, webhooks, or integrations, but does not clearly indicate direct outbound action.",
+          "file_path": "SOUL.md",
+          "evidence": "s conflict with premium execution or technical reality.  ## Integrations - Laravel, Livewire, FluxUI, and supporting frontend assets. - Design systems, motion patterns, and",
+          "remediation": "No direct action needed; verify whether the agent actually performs outbound requests.",
+          "source": "local",
+          "risk_driving": false
+        },
+        {
+          "code": "NETWORK_DESCRIPTION",
+          "severity": "INFO",
+          "category": "descriptive_capability",
+          "title": "API or integration domain language detected",
+          "description": "The agent text discusses APIs, webhooks, or integrations, but does not clearly indicate direct outbound action.",
+          "file_path": "skills/SKILL.md",
+          "evidence": "t - Masters Laravel/Livewire/FluxUI, advanced CSS, Three.js integration color: green ---  # Senior Developer  ## Mission - Build premium web experiences with strong implem",
+          "remediation": "No direct action needed; verify whether the agent actually performs outbound requests.",
+          "source": "local",
+          "risk_driving": false
+        }
+      ],
+      "scanner_findings_count": 0,
+      "scanner_max_severity": null,
+      "scanner_safe": null,
+      "scanner_error": null,
+      "generated_at": "2026-03-19T13:09:38.947624+00:00"
+    },
+    {
+      "agent_slug": "support-responder",
+      "display_name": "Support Responder",
+      "agent_path": "agents_file/support-responder",
+      "risk_level": "info",
+      "capability_flags": {
+        "shell": false,
+        "network": false,
+        "network_description": true,
+        "file_write": false,
+        "secrets": false,
+        "hidden_behavior": false
+      },
+      "summary": "Support Responder mainly describes APIs or integrations, but no high-confidence outbound behavior was detected. 3 total findings were recorded.",
+      "findings": [
+        {
+          "code": "NETWORK_DESCRIPTION",
+          "severity": "INFO",
+          "category": "descriptive_capability",
+          "title": "API or integration domain language detected",
+          "description": "The agent text discusses APIs, webhooks, or integrations, but does not clearly indicate direct outbound action.",
+          "file_path": "SOUL.md",
+          "evidence": "on, and never make the customer decode internal process  ## Integrations - Help desk and ticketing systems: case history, SLAs, routing, macros, and escalation tracking - C",
+          "remediation": "No direct action needed; verify whether the agent actually performs outbound requests.",
+          "source": "local",
+          "risk_driving": false
+        },
+        {
+          "code": "BASH_WORKFLOW_EXAMPLE",
+          "severity": "INFO",
+          "category": "descriptive_capability",
+          "title": "Bash-style workflow example detected",
+          "description": "The agent text includes a bash fenced block, but nearby context suggests it is illustrative rather than executable agent behavior.",
+          "file_path": "skills/SKILL.md",
+          "evidence": "```bash # Analyze customer inquiry context, history, and urgency level # Route to appropriate support tier based on complexity and customer status # Gather relevant customer information and previous interaction history ```",
+          "remediation": "No direct action needed unless the agent actually executes these commands.",
+          "source": "local",
+          "risk_driving": false
+        },
+        {
+          "code": "NETWORK_DESCRIPTION",
+          "severity": "INFO",
+          "category": "descriptive_capability",
+          "title": "API or integration domain language detected",
+          "description": "The agent text discusses APIs, webhooks, or integrations, but does not clearly indicate direct outbound action.",
+          "file_path": "skills/SKILL.md",
+          "evidence": "lized support experiences with customer context and history integration - Build proactive outreach programs with customer success and retention focus - **Default requireme",
+          "remediation": "No direct action needed; verify whether the agent actually performs outbound requests.",
+          "source": "local",
+          "risk_driving": false
+        }
+      ],
+      "scanner_findings_count": 0,
+      "scanner_max_severity": null,
+      "scanner_safe": null,
+      "scanner_error": null,
+      "generated_at": "2026-03-19T13:09:38.959973+00:00"
+    },
+    {
+      "agent_slug": "test-writer",
+      "display_name": "Test Writer",
+      "agent_path": "agents_file/test-writer",
+      "risk_level": "high",
+      "capability_flags": {
+        "shell": false,
+        "network": true,
+        "network_description": true,
+        "file_write": false,
+        "secrets": true,
+        "hidden_behavior": false
+      },
+      "summary": "Test Writer shows higher-confidence risk signals related to: network, secrets. Review before broad exposure.",
+      "findings": [
+        {
+          "code": "NETWORK_DESCRIPTION",
+          "severity": "INFO",
+          "category": "descriptive_capability",
+          "title": "API or integration domain language detected",
+          "description": "The agent text discusses APIs, webhooks, or integrations, but does not clearly indicate direct outbound action.",
+          "file_path": "IDENTITY.md",
+          "evidence": "**Creature:** A bug-hunting fox in a lab coat who lives in API logs, failing tests, and green CI checks - **Vibe:** Warm, exacting, calm under pressure, lightly w",
+          "remediation": "No direct action needed; verify whether the agent actually performs outbound requests.",
+          "source": "local",
+          "risk_driving": false
+        },
+        {
+          "code": "NETWORK_DESCRIPTION",
+          "severity": "INFO",
+          "category": "descriptive_capability",
+          "title": "API or integration domain language detected",
+          "description": "The agent text discusses APIs, webhooks, or integrations, but does not clearly indicate direct outbound action.",
+          "file_path": "SOUL.md",
+          "evidence": "ion signatures and docstrings - Write integration tests for API endpoints with realistic fixtures - Create end-to-end test scripts for critical user flows (Playwri",
+          "remediation": "No direct action needed; verify whether the agent actually performs outbound requests.",
+          "source": "local",
+          "risk_driving": false
+        },
+        {
+          "code": "SECRET_HANDLING",
+          "severity": "HIGH",
+          "category": "sensitive_access",
+          "title": "Credential or secret handling behavior detected",
+          "description": "The agent text contains strong signals that it may read, use, inject, or transmit secrets or credentials.",
+          "file_path": "SOUL.md",
+          "evidence": "module coverage: 72%. Untested paths: 1) Token refresh when access token is expired but refresh token is valid (line 84-91). 2) Login with disabled account (line 112). 3) P",
+          "remediation": "Never embed secrets in prompts or source files; require secure secret injection and scoped access.",
+          "source": "local",
+          "risk_driving": true
+        },
+        {
+          "code": "NETWORK_ACTION",
+          "severity": "MEDIUM",
+          "category": "capability",
+          "title": "External network action detected",
+          "description": "The agent text contains strong signals that it may browse, fetch, call APIs, or contact external services.",
+          "file_path": "skills/SKILL.md",
+          "evidence": "// Authenticate and get token     const response = await fetch(`${baseURL}/auth/login`, {       method: 'POST',       headers: { 'Content-Type': 'application/json'",
+          "remediation": "Disclose outbound calls clearly and limit external requests to user-approved targets.",
+          "source": "local",
+          "risk_driving": true
+        },
+        {
+          "code": "NETWORK_DESCRIPTION",
+          "severity": "INFO",
+          "category": "descriptive_capability",
+          "title": "API or integration domain language detected",
+          "description": "The agent text discusses APIs, webhooks, or integrations, but does not clearly indicate direct outbound action.",
+          "file_path": "skills/SKILL.md",
+          "evidence": "automated test suites using modern frameworks (Playwright, REST Assured, k6) - Implement performance testing with load, stress, and endurance scenarios - Create se",
+          "remediation": "No direct action needed; verify whether the agent actually performs outbound requests.",
+          "source": "local",
+          "risk_driving": false
+        },
+        {
+          "code": "SECRET_HANDLING",
+          "severity": "HIGH",
+          "category": "sensitive_access",
+          "title": "Credential or secret handling behavior detected",
+          "description": "The agent text contains strong signals that it may read, use, inject, or transmit secrets or credentials.",
+          "file_path": "skills/SKILL.md",
+          "evidence": "JSON.stringify({         email: 'test@example.com',         password: 'secure_password'       })     });     const data = await response.json();     authToken = data.to",
+          "remediation": "Never embed secrets in prompts or source files; require secure secret injection and scoped access.",
+          "source": "local",
+          "risk_driving": true
+        },
+        {
+          "code": "COMBINED_SECRET_NETWORK",
+          "severity": "HIGH",
+          "category": "compound_risk",
+          "title": "Credential handling plus external network access",
+          "description": "The agent appears capable of handling credentials while also contacting external services.",
+          "file_path": null,
+          "evidence": null,
+          "remediation": "Require scoped secret access and strict outbound controls.",
+          "source": "local",
+          "risk_driving": true
+        }
+      ],
+      "scanner_findings_count": 0,
+      "scanner_max_severity": null,
+      "scanner_safe": null,
+      "scanner_error": null,
+      "generated_at": "2026-03-19T13:09:38.965548+00:00"
+    }
+  ]
+}
