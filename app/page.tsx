@@ -1,5 +1,6 @@
 import Link from 'next/link'
 
+import { BrandLogo } from '@/components/brand-logo'
 import { Header } from '@/components/header'
 import { RiskBadge } from '@/components/risk-badge'
 import { Button } from '@/components/ui/button'
@@ -490,9 +491,7 @@ export default function HomePage() {
       <footer className="border-t border-border/60 bg-card/35">
         <div className="container mx-auto flex flex-col gap-3 px-4 py-6 text-sm text-muted-foreground md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-2 text-foreground">
-            <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-foreground text-background">
-              <Bot className="h-4 w-4" />
-            </div>
+            <BrandLogo className="h-7 w-7 rounded-xl" size={28} />
             OpenRoster
           </div>
           <div className="flex items-center gap-4">

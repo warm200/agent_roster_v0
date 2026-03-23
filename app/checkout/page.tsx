@@ -192,7 +192,15 @@ export default function CheckoutPage() {
                     onCheckedChange={(checked) => setAcceptedTerms(checked === true)}
                   />
                   <Label htmlFor="terms" className="text-sm leading-relaxed cursor-pointer">
-                    I agree to the Terms of Service and Privacy Policy. I understand that purchases are non-refundable.
+                    I agree to the{' '}
+                    <Link className="underline hover:text-foreground" href="/terms" onClick={(event) => event.stopPropagation()}>
+                      Terms of Service
+                    </Link>{' '}
+                    and{' '}
+                    <Link className="underline hover:text-foreground" href="/privacy" onClick={(event) => event.stopPropagation()}>
+                      Privacy Policy
+                    </Link>
+                    . I understand that purchases are non-refundable.
                   </Label>
                 </div>
                 <div className="flex items-start gap-3">
