@@ -163,6 +163,9 @@ If you use this path:
 - interval: `60s` to `300s`
 - in Docker Compose, run it as a separate long-lived `maintenance` service, not inside the web container
 - Docker Compose startup now runs the one-shot `migrate` service before `app` and `maintenance`
+- nginx now supports optional TLS termination on `443`
+- mount certs at `docker/nginx/certs/tls.crt` and `docker/nginx/certs/tls.key`
+- with certs present, nginx redirects `80 -> 443`; without them, it falls back to plain HTTP on `80`
 - for manual schema reruns, use:
   - `docker compose run --rm migrate`
 

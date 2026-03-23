@@ -142,8 +142,16 @@ services:
     restart: unless-stopped
     depends_on:
       - app
+    environment:
+      NGINX_ENABLE_HTTPS: ${NGINX_ENABLE_HTTPS:-true}
+      NGINX_SERVER_NAME: ${NGINX_SERVER_NAME:-_}
+      NGINX_SSL_CERT_PATH: ${NGINX_SSL_CERT_PATH:-/etc/nginx/certs/tls.crt}
+      NGINX_SSL_KEY_PATH: ${NGINX_SSL_KEY_PATH:-/etc/nginx/certs/tls.key}
     ports:
       - '80:80'
+      - '443:443'
+    volumes:
+      - ./docker/nginx/certs:/etc/nginx/certs:ro
 
 volumes:
   postgres_data:
