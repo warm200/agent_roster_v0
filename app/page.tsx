@@ -109,7 +109,7 @@ export default function HomePage() {
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.08),transparent_32%),radial-gradient(circle_at_80%_20%,rgba(255,255,255,0.06),transparent_28%),linear-gradient(180deg,rgba(255,255,255,0.02),transparent_60%)]" />
           <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/30 to-transparent" />
 
-          <div className="container mx-auto grid gap-14 px-4 py-18 md:grid-cols-[minmax(0,1.05fr)_minmax(22rem,0.95fr)] md:items-center md:py-24 lg:gap-20 lg:py-28">
+          <div className="container mx-auto grid gap-12 px-4 pb-16 pt-8 md:grid-cols-[minmax(0,1.05fr)_minmax(22rem,0.95fr)] md:items-start md:gap-14 md:pb-20 md:pt-10 lg:gap-20 lg:pb-24 lg:pt-12">
             <div className="relative z-10">
               <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-border/70 bg-card/70 px-3 py-1.5 text-xs uppercase tracking-[0.22em] text-muted-foreground backdrop-blur">
                 <Sparkles className="h-3.5 w-3.5 text-emerald-300" />
