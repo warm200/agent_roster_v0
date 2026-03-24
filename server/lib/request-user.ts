@@ -67,30 +67,38 @@ export async function getRequestUserId(request: NextRequest) {
   }
 
   if (isAuthConfigured()) {
-    const token = await getToken({
-      req: request,
-      secret: process.env.AUTH_SECRET,
-    })
-
-    if (!token || typeof token.sub !== 'string' || token.sub.trim().length === 0) {
-      throw new HttpError(401, 'Authentication required.')
-    }
-
-    const userId = token.sub.trim()
-
-    await ensureRequestUser(userId, {
-      authProvider: 'oauth',
-      email: typeof token.email === 'string' ? token.email : null,
-      name: typeof token.name === 'string' ? token.name : null,
-    })
-
-    return userId
+    return getAuthenticatedRequestUserId(request)
   }
 
   await ensureRequestUser(DEFAULT_REQUEST_USER_ID, {
     authProvider: 'demo',
   })
   return DEFAULT_REQUEST_USER_ID
+}
+
+export async function getAuthenticatedRequestUserId(request: NextRequest) {
+  if (requestUserIdOverride) {
+    return requestUserIdOverride(request)
+  }
+
+  const token = await getToken({
+    req: request,
+    secret: process.env.AUTH_SECRET,
+  })
+
+  if (!token || typeof token.sub !== 'string' || token.sub.trim().length === 0) {
+    throw new HttpError(401, 'Authentication required.')
+  }
+
+  const userId = token.sub.trim()
+
+  await ensureRequestUser(userId, {
+    authProvider: 'oauth',
+    email: typeof token.email === 'string' ? token.email : null,
+    name: typeof token.name === 'string' ? token.name : null,
+  })
+
+  return userId
 }
 
 export function setRequestUserIdForTesting(

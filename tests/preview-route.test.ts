@@ -6,6 +6,7 @@ import { NextRequest } from 'next/server'
 import type { Agent } from '@/lib/types'
 import { POST } from '@/app/api/interviews/preview/route'
 import { HttpError } from '@/server/lib/http'
+import { setRequestUserIdForTesting } from '@/server/lib/request-user'
 import {
   setCatalogServiceForTesting,
   type CatalogService,
@@ -54,6 +55,7 @@ function buildAgent(overrides: Partial<Agent> = {}): Agent {
 
 afterEach(() => {
   setCatalogServiceForTesting(null)
+  setRequestUserIdForTesting(null)
 })
 
 test('preview route returns service-backed reply', async () => {
@@ -75,6 +77,7 @@ test('preview route returns service-backed reply', async () => {
   }
 
   setCatalogServiceForTesting(stubService)
+  setRequestUserIdForTesting(() => 'user-test-1')
 
   const request = new NextRequest('http://localhost/api/interviews/preview', {
     body: JSON.stringify({
@@ -93,7 +96,25 @@ test('preview route returns service-backed reply', async () => {
   assert.equal(receivedMessages, 1)
 })
 
+test('preview route requires an authenticated user', async () => {
+  const request = new NextRequest('http://localhost/api/interviews/preview', {
+    body: JSON.stringify({
+      messages: [{ role: 'user', content: 'How do you work?' }],
+      slug: 'ops-agent',
+    }),
+    method: 'POST',
+  })
+
+  const response = await POST(request)
+  const payload = await response.json()
+
+  assert.equal(response.status, 401)
+  assert.equal(payload.error, 'Authentication required.')
+})
+
 test('preview route rejects invalid payloads', async () => {
+  setRequestUserIdForTesting(() => 'user-test-1')
+
   const request = new NextRequest('http://localhost/api/interviews/preview', {
     body: JSON.stringify({ slug: 'ops-agent', messages: [] }),
     method: 'POST',
@@ -120,6 +141,7 @@ test('preview route preserves service error details', async () => {
   }
 
   setCatalogServiceForTesting(stubService)
+  setRequestUserIdForTesting(() => 'user-test-1')
 
   const request = new NextRequest('http://localhost/api/interviews/preview', {
     body: JSON.stringify({

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 
 import { previewInterviewRequestSchema } from '@/lib/schemas'
 import { HttpError } from '@/server/lib/http'
+import { getAuthenticatedRequestUserId } from '@/server/lib/request-user'
 import { AgentNotFoundError, getCatalogService } from '@/server/services/catalog.service'
 
 function logPreviewRouteError(kind: string, error: unknown) {
@@ -34,6 +35,8 @@ async function resolveAgentSlug(agentId?: string, slug?: string) {
 
 export async function POST(request: NextRequest) {
   try {
+    await getAuthenticatedRequestUserId(request)
+
     const body = await request.json().catch(() => null)
     const parsed = previewInterviewRequestSchema.safeParse(body)
 

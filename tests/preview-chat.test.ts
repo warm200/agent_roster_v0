@@ -63,6 +63,18 @@ test('preview chat renders a bounded scrolling transcript', () => {
   assert.match(markup, /Send preview message/)
 })
 
+test('preview gate copy can point signed-out users to sign in first', () => {
+  const markup = renderToStaticMarkup(
+    createElement(
+      'p',
+      { className: 'mb-4 text-sm text-muted-foreground' },
+      'Sign in to try the preview chat for this agent.',
+    ),
+  )
+
+  assert.match(markup, /Sign in to try the preview chat/)
+})
+
 test('preview message body renders basic markdown structure', () => {
   const markup = renderToStaticMarkup(
     createElement(PreviewMessageBody, {

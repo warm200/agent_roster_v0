@@ -55,7 +55,7 @@ export default function AgentDetailPage({ params }: PageProps) {
   const [isLoading, setIsLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const { addItem, isInCart } = useCart()
-  const { session } = useAuth()
+  const { isAuthenticated, session, status } = useAuth()
   const [showChat, setShowChat] = useState(false)
 
   useEffect(() => {
@@ -135,6 +135,7 @@ export default function AgentDetailPage({ params }: PageProps) {
   const riskLevel = getAgentRiskLevel(agent)
   const riskSummary = getAgentSummary(agent)
   const capabilityChips = getAgentCapabilityChips(agent, 4)
+  const canUsePreviewChat = isAuthenticated
 
   const handleAddToCart = () => {
     addItem(agent)
@@ -365,12 +366,24 @@ export default function AgentDetailPage({ params }: PageProps) {
                 </div>
               </CardHeader>
               <CardContent className="min-h-0">
-                {showChat ? (
+                {showChat && canUsePreviewChat ? (
                   <PreviewChat
                     agent={agent}
                     userAvatarUrl={session?.user?.image ?? null}
                     userName={session?.user?.name ?? null}
                   />
+                ) : !isAuthenticated ? (
+                  <div className="py-8 text-center">
+                    <p className="mb-4 text-sm text-muted-foreground">
+                      Sign in to try the preview chat for this agent.
+                    </p>
+                    <Button asChild disabled={status === 'loading'}>
+                      <Link href={`/login?callbackUrl=${encodeURIComponent(`/agents/${agent.slug}`)}`}>
+                        <MessageSquare className="mr-2 h-4 w-4" />
+                        Sign In to Preview
+                      </Link>
+                    </Button>
+                  </div>
                 ) : (
                   <div className="text-center py-8">
                     <p className="text-sm text-muted-foreground mb-4">
