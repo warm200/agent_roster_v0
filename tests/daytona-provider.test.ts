@@ -7,7 +7,10 @@ import { afterEach, test } from 'node:test'
 
 import type { Order } from '@/lib/types'
 import { setLocalAgentsRootForTesting } from '@/server/services/local-agent-files'
-import { DaytonaRunProvider } from '@/server/providers/daytona.provider'
+import {
+  DaytonaRunProvider,
+  deriveOpenClawSessionActivitySnapshot,
+} from '@/server/providers/daytona.provider'
 import { getRuntimeLifecyclePolicy } from '@/server/services/runtime-policy'
 import { DaytonaNotFoundError, SandboxState } from '@daytonaio/sdk'
 
@@ -1664,10 +1667,12 @@ test('daytona run provider restarts the same stopped sandbox in place', async ()
   )
 })
 
-test('daytona run provider recovers archived sandboxes before restart', async () => {
+test('daytona run provider waits for toolbox readiness before restarting archived sandboxes', async () => {
   const runId = 'run-recover-archived-sandbox'
   const createdAt = new Date().toISOString()
   let started = false
+  let toolboxReady = false
+  let toolboxProbeAttempts = 0
   const files: Record<string, string> = {
     '/tmp/agent-roster/manifest.json': JSON.stringify({
       agentTitles: ['Inbox Triage Agent'],
@@ -1711,6 +1716,9 @@ test('daytona run provider recovers archived sandboxes before restart', async ()
           createdAt,
           fs: {
             async downloadFile(filePath: string) {
+              if (!toolboxReady) {
+                throw new Error('503 toolbox unavailable after archive start')
+              }
               const value = files[filePath]
               if (value === undefined) {
                 const error = new Error(`404 ${filePath}`)
@@ -1721,12 +1729,23 @@ test('daytona run provider recovers archived sandboxes before restart', async ()
               return Buffer.from(value, 'utf8')
             },
             async uploadFile(file: Buffer, filePath: string) {
+              if (!toolboxReady) {
+                throw new Error('503 toolbox unavailable after archive start')
+              }
               files[filePath] = file.toString('utf8')
             },
           },
           id,
           process: {
-            async executeCommand() {
+            async executeCommand(command: string) {
+              if (command === 'true') {
+                toolboxProbeAttempts += 1
+                if (toolboxProbeAttempts >= 2) {
+                  toolboxReady = true
+                  return { exitCode: 0, result: '' }
+                }
+                throw new Error('503 toolbox unavailable after archive start')
+              }
               return { exitCode: 0, result: '' }
             },
           },
@@ -1762,6 +1781,7 @@ test('daytona run provider recovers archived sandboxes before restart', async ()
 
   assert.ok(restarted)
   assert.equal(started, true)
+  assert.equal(toolboxProbeAttempts >= 2, true)
 })
 
 test('daytona run provider falls back to a provisioning runtime when post-restart read still reports stopped sandbox', async () => {
@@ -1982,5 +2002,28 @@ test('daytona run provider probes OpenClaw session activity from per-agent sessi
     lastOpenClawSessionActivityAt: '2026-03-20T21:45:45.139Z',
     lastOpenClawSessionProbeAt: '2026-03-20T21:46:00.000Z',
     openClawSessionCount: 2,
+  })
+})
+
+test('deriveOpenClawSessionActivitySnapshot uses transcript mtimes when they are newer than session updatedAt', () => {
+  const snapshot = deriveOpenClawSessionActivitySnapshot(
+    [
+      {
+        sessionFile: '/home/daytona/.openclaw/agents/devops/sessions/session.jsonl',
+        updatedAt: Date.parse('2026-03-24T12:55:01.667Z'),
+      },
+    ],
+    {
+      '/home/daytona/.openclaw/agents/devops/sessions/session.jsonl': Date.parse(
+        '2026-03-24T13:14:30.000Z',
+      ),
+    },
+    '2026-03-24T13:14:31.000Z',
+  )
+
+  assert.deepEqual(snapshot, {
+    lastOpenClawSessionActivityAt: '2026-03-24T13:14:30.000Z',
+    lastOpenClawSessionProbeAt: '2026-03-24T13:14:31.000Z',
+    openClawSessionCount: 1,
   })
 })

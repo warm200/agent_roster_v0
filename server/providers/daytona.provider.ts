@@ -347,6 +347,52 @@ function mapSandboxStateToRuntimeState(state?: string): RuntimeInstanceState {
   }
 }
 
+function isTransientSandboxToolboxError(error: unknown) {
+  const message = error instanceof Error ? error.message.toLowerCase() : ''
+
+  return (
+    message.includes('503') ||
+    message.includes('service unavailable') ||
+    message.includes('toolbox unavailable') ||
+    message.includes('toolbox is not available') ||
+    message.includes('sandbox is not started') ||
+    message.includes('sandbox is stopped') ||
+    message.includes('sandbox is stopping') ||
+    message.includes('sandbox is starting')
+  )
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+async function waitForSandboxToolboxReady(
+  sandbox: Pick<DaytonaSandboxLike, 'id' | 'process'>,
+  options: {
+    attempts?: number
+    delayMs?: number
+  } = {},
+) {
+  const attempts = options.attempts ?? 15
+  const delayMs = options.delayMs ?? 1_000
+  let lastError: unknown = null
+
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      await sandbox.process.executeCommand('true', undefined, undefined, 10)
+      return
+    } catch (error) {
+      lastError = error
+      if (!isTransientSandboxToolboxError(error) || attempt === attempts - 1) {
+        throw error
+      }
+      await sleep(delayMs)
+    }
+  }
+
+  throw lastError ?? new Error(`Timed out waiting for sandbox toolbox: ${sandbox.id}`)
+}
+
 function isTerminalSandboxState(state?: string) {
   return (
     state === SandboxState.STOPPED ||
@@ -813,15 +859,68 @@ async function refreshGatewayStatus(
   return nextStatus
 }
 
+type OpenClawSessionActivityEntry = {
+  sessionFile?: unknown
+  updatedAt?: unknown
+}
+
+export function deriveOpenClawSessionActivitySnapshot(
+  sessions: OpenClawSessionActivityEntry[],
+  fileMtimeMsByPath: Record<string, number> = {},
+  probedAt = new Date().toISOString(),
+): RuntimeActivitySnapshot {
+  let lastActivityMs: number | null = null
+  let openClawSessionCount = 0
+
+  for (const session of sessions) {
+    if (!session || typeof session !== 'object') {
+      continue
+    }
+
+    openClawSessionCount += 1
+
+    const updatedAtMs =
+      typeof session.updatedAt === 'number' && Number.isFinite(session.updatedAt)
+        ? session.updatedAt
+        : null
+    const sessionFile =
+      typeof session.sessionFile === 'string' && session.sessionFile.trim().length > 0
+        ? session.sessionFile
+        : null
+    const transcriptMtimeMs =
+      sessionFile && Number.isFinite(fileMtimeMsByPath[sessionFile]) ? fileMtimeMsByPath[sessionFile] : null
+    const candidateMs =
+      updatedAtMs != null && transcriptMtimeMs != null
+        ? Math.max(updatedAtMs, transcriptMtimeMs)
+        : updatedAtMs ?? transcriptMtimeMs
+
+    if (candidateMs == null) {
+      continue
+    }
+
+    if (lastActivityMs == null || candidateMs > lastActivityMs) {
+      lastActivityMs = candidateMs
+    }
+  }
+
+  return {
+    lastOpenClawSessionActivityAt:
+      lastActivityMs == null ? null : new Date(lastActivityMs).toISOString(),
+    lastOpenClawSessionProbeAt: probedAt,
+    openClawSessionCount,
+  }
+}
+
 function buildOpenClawSessionProbeScript() {
   return `
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
+const deriveOpenClawSessionActivitySnapshot = ${deriveOpenClawSessionActivitySnapshot.toString()};
 
 const root = path.join(os.homedir(), '.openclaw', 'agents');
-let lastUpdatedAtMs = null;
-let openClawSessionCount = 0;
+const sessions = [];
+const fileMtimeMsByPath = {};
 
 if (fs.existsSync(root)) {
   for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
@@ -842,24 +941,29 @@ if (fs.existsSync(root)) {
     }
 
     for (const session of Object.values(parsed ?? {})) {
-      const updatedAt = session && typeof session === 'object' ? session.updatedAt : undefined;
-      if (!Number.isFinite(updatedAt)) {
+      if (!session || typeof session !== 'object') {
         continue;
       }
 
-      openClawSessionCount += 1;
-      if (lastUpdatedAtMs == null || updatedAt > lastUpdatedAtMs) {
-        lastUpdatedAtMs = updatedAt;
+      sessions.push(session);
+
+      const sessionFile = typeof session.sessionFile === 'string' ? session.sessionFile : '';
+      if (!sessionFile || fileMtimeMsByPath[sessionFile] !== undefined) {
+        continue;
+      }
+
+      try {
+        fileMtimeMsByPath[sessionFile] = fs.statSync(sessionFile).mtimeMs;
+      } catch {
+        continue;
       }
     }
   }
 }
 
-process.stdout.write(JSON.stringify({
-  lastOpenClawSessionActivityAt: lastUpdatedAtMs == null ? null : new Date(lastUpdatedAtMs).toISOString(),
-  lastOpenClawSessionProbeAt: new Date().toISOString(),
-  openClawSessionCount,
-}));
+process.stdout.write(JSON.stringify(
+  deriveOpenClawSessionActivitySnapshot(sessions, fileMtimeMsByPath, new Date().toISOString())
+));
 `.trim()
 }
 
@@ -1387,6 +1491,7 @@ export class DaytonaRunProvider implements RunProvider {
     } else if (sandbox.start) {
       await sandbox.start(60)
     }
+    await waitForSandboxToolboxReady(sandbox)
     return this.getRuntimeInstance(runId)
   }
 
@@ -1413,6 +1518,7 @@ export class DaytonaRunProvider implements RunProvider {
     const manifest = await downloadJsonFile<DaytonaRunManifest>(sandbox, MANIFEST_PATH).catch(() => null)
     if ((sandbox.state === SandboxState.ARCHIVED || sandbox.state === SandboxState.ARCHIVING) && sandbox.start) {
       await sandbox.start(60)
+      await waitForSandboxToolboxReady(sandbox)
     }
     const runtime = await this.restartRun(runId, order, undefined, runtimeConfig)
     if (!runtime) {

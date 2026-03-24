@@ -245,7 +245,7 @@ Important implemented properties:
 - if provider status becomes unavailable but runtime state exists, capacity can still be released correctly
 - if provider reads fail with an already-stopped sandbox path, refresh/read now repairs stale `runtime_instances.state = running` rows into stopped or released lifecycle state
 - explicit stop requests are idempotent against already stopped Daytona sandboxes and should reconcile back to stopped state instead of bubbling `Sandbox is not started`
-- archived Daytona sandboxes now restart with the correct `start()` path instead of the error-state-only `recover()` path
+- archived Daytona sandboxes now restart with the correct `start()` path, and backend waits for toolbox readiness before replaying restart bootstrap
 - paired Telegram inbound traffic can now auto-resume exactly one stopped Warm Standby runtime for the order
 - stopped Warm Standby runtimes can also be terminated explicitly, which deletes preserved state and clears launch-policy reuse blockers for that bundle
 - Control UI exposure is now readiness-gated:

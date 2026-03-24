@@ -59,7 +59,7 @@ read_when:
 - failed resume/restart attempts now re-sync persisted runtime state before surfacing the error, so run pages fall back to `Stopped`/resume instead of stale live controls
 - externally stopped Daytona sandboxes now self-heal stale `running` runtime rows on refresh/read when provider access reports a stopped sandbox path
 - explicit stop requests are now idempotent against already stopped Daytona sandboxes instead of surfacing `Sandbox is not started` back to the UI
-- archived Daytona sandboxes now restart via `start()` instead of `recover()`, which fixes archived Warm resume/wake
+- archived Daytona sandboxes now restart via `start()`, and backend waits for toolbox readiness before replaying bootstrap, which fixes archived Warm resume/wake
 - paired Telegram inbound messages can now auto-resume exactly one stopped Warm Standby runtime for the order
 - stopped Warm Standby runtimes can now be terminated explicitly, which deletes preserved state and clears the fresh-launch blocker for that bundle
 - Telegram bot ownership now hands off by runtime state:

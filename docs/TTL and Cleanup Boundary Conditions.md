@@ -124,7 +124,9 @@ Current MVP Backend Notes:
     - passive reads still do not count as meaningful activity
   activity_clock:
     - `run_usage.lastMeaningfulActivityAt` stores the last meaningful activity timestamp
-    - `run_usage.lastOpenClawSessionActivityAt` stores the latest OpenClaw session `updatedAt`
+    - `run_usage.lastOpenClawSessionActivityAt` stores the latest OpenClaw session activity seen from either:
+      - session `updatedAt`
+      - session transcript file (`sessionFile`) mtime when it is newer than the registry timestamp
     - `run_usage.lastOpenClawSessionProbeAt` stores when maintenance last probed the sandbox
     - `run_usage.openClawSessionCount` stores how many OpenClaw sessions were present during the last probe
     - an internal route can advance it without relying on UI polling
