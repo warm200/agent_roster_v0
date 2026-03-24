@@ -5,6 +5,39 @@ import { isAuthConfigured } from './auth'
 
 const FORBIDDEN_CSRF_MESSAGE = 'Cross-site request forbidden.'
 
+function getRequestOrigin(request: NextRequest) {
+  const originHeader = request.headers.get('origin')?.trim()
+  const refererHeader = request.headers.get('referer')?.trim()
+
+  for (const value of [originHeader, refererHeader]) {
+    if (!value) {
+      continue
+    }
+
+    try {
+      return new URL(value).origin
+    } catch {
+      continue
+    }
+  }
+
+  return null
+}
+
+function getExpectedOrigin(request: NextRequest) {
+  const forwardedHost = request.headers.get('x-forwarded-host')?.trim()
+  const host = request.headers.get('host')?.trim()
+  const hostname = forwardedHost || host
+  const forwardedProto = request.headers.get('x-forwarded-proto')?.trim()
+  const protocol = forwardedProto || request.nextUrl.protocol.replace(/:$/, '')
+
+  if (!hostname || !protocol) {
+    return request.nextUrl.origin
+  }
+
+  return `${protocol}://${hostname}`
+}
+
 export function getAdminAllowedEmails() {
   return (process.env.ADMIN_ALLOWED_EMAILS ?? '')
     .split(',')
@@ -13,9 +46,10 @@ export function getAdminAllowedEmails() {
 }
 
 export function verifySameOrigin(request: NextRequest) {
-  const origin = request.headers.get('origin')?.trim()
+  const origin = getRequestOrigin(request)
+  const expectedOrigin = getExpectedOrigin(request)
 
-  if (!origin || origin !== request.nextUrl.origin) {
+  if (!origin || origin !== expectedOrigin) {
     return NextResponse.json({ error: FORBIDDEN_CSRF_MESSAGE }, { status: 403 })
   }
 
