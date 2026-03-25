@@ -47,6 +47,7 @@ Work style: telegraph; min tokens.
 ## Build / Test
 - Before handoff: run full gate (lint/typecheck/tests/docs).
 - For every code change, run the full gate via `bash scripts/gate.sh [--no-build]`; do not treat single-file or targeted tests as final verification.
+- Exception: if the current turn is only `commit` / `push`, do not rerun `gate.sh` just for the commit step when the same changes were already validated earlier in the work.
 - Gate: `scripts/gate.sh [--no-build]`
   - Runs: Biome (lint+format+imports), tsc typecheck, debug-stmt check, trailing whitespace, build, tests.
   - `--no-build` skips the build step.
