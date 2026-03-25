@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { cache } from 'react'
 
 import { BrandLogo } from '@/components/brand-logo'
 import { Header } from '@/components/header'
@@ -11,6 +12,7 @@ import {
   Calendar,
   CheckCircle2,
   FileText,
+  Github,
   Layers3,
   Mail,
   MessageSquare,
@@ -99,7 +101,46 @@ const benefits = [
   'Telegram setup without webhook pain in local dev',
 ]
 
-export default function HomePage() {
+const GITHUB_REPO_URL = 'https://github.com/OpenRoster-ai/awesome-openroster'
+
+const getGithubStars = cache(async () => {
+  try {
+    const response = await fetch('https://api.github.com/repos/OpenRoster-ai/awesome-openroster', {
+      cache: 'no-store',
+      headers: {
+        Accept: 'application/vnd.github+json',
+        'User-Agent': 'OpenRoster',
+      },
+    })
+
+    if (!response.ok) {
+      return null
+    }
+
+    const payload = (await response.json()) as {
+      stargazers_count?: number
+    }
+
+    return typeof payload.stargazers_count === 'number' ? payload.stargazers_count : null
+  } catch {
+    return null
+  }
+})
+
+function formatGithubStars(count: number | null) {
+  if (count == null) {
+    return null
+  }
+
+  return new Intl.NumberFormat('en', {
+    maximumFractionDigits: count >= 1000 ? 1 : 0,
+    notation: count >= 1000 ? 'compact' : 'standard',
+  }).format(count)
+}
+
+export default async function HomePage() {
+  const githubStars = formatGithubStars(await getGithubStars())
+
   return (
     <div className="min-h-screen bg-background">
       <Header />
@@ -495,6 +536,20 @@ export default function HomePage() {
             OpenRoster
           </div>
           <div className="flex items-center gap-4">
+            <Link
+              href={GITHUB_REPO_URL}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-background/60 px-3 py-1.5 text-foreground transition-colors hover:border-foreground/25 hover:bg-background"
+            >
+              <Github className="h-4 w-4" />
+              <span>GitHub</span>
+              {githubStars ? (
+                <span className="rounded-full border border-border/70 bg-card/70 px-2 py-0.5 text-xs text-muted-foreground">
+                  {githubStars} stars
+                </span>
+              ) : null}
+            </Link>
             <Link href="/terms" className="hover:text-foreground transition-colors">Terms</Link>
             <Link href="/privacy" className="hover:text-foreground transition-colors">Privacy</Link>
             <Link href="/contact" className="hover:text-foreground transition-colors">Contact</Link>
