@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { Check, CreditCard, Flame, Play, Snowflake, TimerReset } from 'lucide-react'
 import { toast } from 'sonner'
 
-import { formatAgentsPerBundleLabel } from '@/lib/subscription-plans'
+import { formatAgentsPerBundleLabel, formatPlanIncludedCreditsLabel } from '@/lib/subscription-plans'
 import type { SubscriptionPlanId } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import {
@@ -35,21 +35,6 @@ const planIconMap = {
   run: Play,
   warm_standby: TimerReset,
 } as const
-
-function getPlanSupportNote(
-  plan: Awaited<ReturnType<typeof listPricingPlans>>['plans'][number],
-) {
-  switch (plan.id) {
-    case 'run':
-      return 'Includes 15 runtime credits.'
-    case 'warm_standby':
-      return 'Includes 10 runtime credits per month.'
-    case 'always_on':
-      return 'Persistent managed runtime.'
-    default:
-      return 'No managed runtime.'
-  }
-}
 
 export function PlanUpgradeDialog({
   currentPlanId,
@@ -159,7 +144,7 @@ export function PlanUpgradeDialog({
                       {plan.priceLabel}
                     </div>
                     <p className="mt-4 text-sm leading-6 text-zinc-400">{plan.suitFor}</p>
-                    <p className="mt-2 text-xs leading-5 text-zinc-500">{getPlanSupportNote(plan)}</p>
+                    <p className="mt-2 text-xs leading-5 text-zinc-500">{formatPlanIncludedCreditsLabel(plan)}</p>
                   </div>
 
                   <div className="mt-5 space-y-2 text-sm text-zinc-300">

@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { Header } from '@/components/header'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { formatAgentsPerBundleLabel, listSubscriptionPlans } from '@/lib/subscription-plans'
+import { formatAgentsPerBundleLabel, formatPlanIncludedCreditsLabel, listSubscriptionPlans } from '@/lib/subscription-plans'
 import type { SubscriptionPlanId } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import {
@@ -153,12 +153,7 @@ function formatTriggerModeLabel(planId: SubscriptionPlanId) {
 const plans = listSubscriptionPlans().filter((plan) => plan.id !== 'free').map((plan) => {
   const presentation = planPresentation[plan.id]
   const agentsPerBundle = formatAgentsPerBundleLabel(plan.agentsPerBundle)
-  const budgetDetail =
-    plan.id === 'run'
-      ? `Includes ${plan.includedCredits} runtime credits.`
-      : plan.id === 'warm_standby'
-        ? `Includes ${plan.includedCredits} runtime credits per month.`
-        : presentation.budgetDetail
+  const budgetDetail = plan.id === 'always_on' ? presentation.budgetDetail : formatPlanIncludedCreditsLabel(plan)
 
   return {
     ...presentation,

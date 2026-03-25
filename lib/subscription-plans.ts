@@ -77,6 +77,18 @@ export function formatAgentsPerBundleLabel(agentsPerBundle: number) {
   return isUnlimitedAgentsPerBundle(agentsPerBundle) ? 'Unlimited' : String(agentsPerBundle)
 }
 
+export function formatPlanIncludedCreditsLabel(plan: Pick<SubscriptionPlan, 'includedCredits' | 'billingInterval' | 'runtimeAccess'>) {
+  if (!plan.runtimeAccess || plan.includedCredits <= 0) {
+    return 'No managed runtime.'
+  }
+
+  if (plan.billingInterval === 'month') {
+    return `Includes ${plan.includedCredits} runtime credits per month.`
+  }
+
+  return `Includes ${plan.includedCredits} runtime credits.`
+}
+
 export function listSubscriptionPlans() {
   return [...SUBSCRIPTION_PLANS]
 }
