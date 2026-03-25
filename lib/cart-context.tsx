@@ -3,6 +3,7 @@
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react'
 import type { Agent, BundleRisk, Cart, CartItem } from './types'
 import { calculateBundleRisk } from './mock-data'
+import { trackFirstCollectionOnce } from '@/lib/analytics'
 import { addCartItem, removeCartItem, syncCart as syncCartItems } from '@/services/cart.api'
 
 const CART_STORAGE_KEY = 'agent-roster-cart:v1'
@@ -105,11 +106,15 @@ export function CartProvider({ children }: { children: ReactNode }) {
   }, [hasLoadedStorage, items])
 
   const addItem = useCallback((agent: Agent) => {
+    let shouldTrackFirstCollection = false
+
     setItems((prev) => {
       // Don't add duplicates
       if (prev.some((item) => item.agent.id === agent.id)) {
         return prev
       }
+
+      shouldTrackFirstCollection = prev.length === 0
 
       const newItem: CartItem = {
         id: `cart-item-${Date.now()}`,
@@ -121,6 +126,10 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
       return [...prev, newItem]
     })
+
+    if (shouldTrackFirstCollection) {
+      trackFirstCollectionOnce(agent)
+    }
 
     void (async () => {
       try {

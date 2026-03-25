@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/componen
 import { Label } from '@/components/ui/label'
 import { Spinner } from '@/components/ui/spinner'
 import { usePairingStatus } from '@/hooks/use-pairing-status'
+import { trackTelegramConnectionOnce } from '@/lib/analytics'
 import { disconnectTelegramChannel, startTelegramPairing, validateTelegramToken } from '@/services/telegram.api'
 import type { RunChannelConfig } from '@/lib/types'
 import { CheckCircle2, Send, ArrowRight, RotateCcw } from 'lucide-react'
@@ -66,6 +67,10 @@ export function TelegramSetupWizard({
 
       if (!hasCompletedRef.current) {
         hasCompletedRef.current = true
+        trackTelegramConnectionOnce({
+          orderId,
+          botUsername,
+        })
         toast.success('Telegram paired successfully!')
         onComplete?.()
       }

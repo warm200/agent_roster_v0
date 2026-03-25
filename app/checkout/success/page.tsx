@@ -7,8 +7,10 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
 import { CheckCircle2, ArrowRight, Bot, MessageCircle } from 'lucide-react'
+import { trackPurchaseOnce } from '@/lib/analytics'
 import { useCart } from '@/lib/cart-context'
 import { reconcileCheckoutSession } from '@/services/checkout.api'
+import type { Order } from '@/lib/types'
 
 export default function CheckoutSuccessPage({
   searchParams,
@@ -19,6 +21,7 @@ export default function CheckoutSuccessPage({
   const router = useRouter()
   const { clearCart } = useCart()
   const [orderId, setOrderId] = useState<string | null>(params.orderId ?? null)
+  const [trackedOrder, setTrackedOrder] = useState<Order | null>(null)
   const [isLoading, setIsLoading] = useState(!params.orderId && Boolean(params.session_id))
   const [loadError, setLoadError] = useState<string | null>(null)
 
@@ -43,6 +46,7 @@ export default function CheckoutSuccessPage({
         if (isMounted) {
           clearCart()
           setOrderId(payload.id)
+          setTrackedOrder(payload)
         }
       } catch (error) {
         const message =
@@ -70,6 +74,14 @@ export default function CheckoutSuccessPage({
       isMounted = false
     }
   }, [clearCart, params.orderId, params.session_id, router])
+
+  useEffect(() => {
+    if (!trackedOrder) {
+      return
+    }
+
+    trackPurchaseOnce(trackedOrder)
+  }, [trackedOrder])
 
   if (isLoading) {
     return (

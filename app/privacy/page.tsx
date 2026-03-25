@@ -13,7 +13,7 @@ export default function PrivacyPolicyPage() {
       <Header />
       <main className="container mx-auto max-w-3xl px-4 py-12">
         <h1 className="text-3xl font-bold mb-2">Privacy Policy</h1>
-        <p className="text-sm text-muted-foreground mb-10">Effective date: March 22, 2026</p>
+        <p className="text-sm text-muted-foreground mb-10">Effective date: March 24, 2026</p>
 
         <div className="prose prose-sm prose-neutral dark:prose-invert max-w-none space-y-8 [&_h2]:text-lg [&_h2]:font-semibold [&_h2]:mt-8 [&_h2]:mb-3 [&_p]:text-muted-foreground [&_li]:text-muted-foreground [&_ul]:list-disc [&_ul]:pl-5">
 
@@ -54,7 +54,7 @@ export default function PrivacyPolicyPage() {
 
             <p><strong>Client-side storage</strong></p>
             <p>
-              We use browser localStorage to store your shopping cart contents. We use cookies for session management (authentication) and UI preferences (sidebar state). We do not use third-party tracking cookies.
+              We use browser localStorage to store your shopping cart contents and first-touch marketing attribution parameters such as UTM tags. We use cookies for session management (authentication), UI preferences (sidebar state), and Google Analytics 4 measurement.
             </p>
           </section>
 
@@ -67,7 +67,8 @@ export default function PrivacyPolicyPage() {
               <li>Provision and manage sandbox runtime environments</li>
               <li>Configure and launch Agents on your behalf</li>
               <li>Display run status, logs, and results</li>
-              <li>Monitor platform health and usage (aggregate, internal metrics only)</li>
+              <li>Measure marketing acquisition and product conversion milestones such as sign-in, first collection, Telegram connection, and purchase</li>
+              <li>Monitor platform health and usage</li>
             </ul>
           </section>
 
@@ -80,7 +81,7 @@ export default function PrivacyPolicyPage() {
               <li><strong>Messaging platform</strong> (Telegram) &mdash; to deliver Agent interactions to your connected bot</li>
               <li><strong>Runtime infrastructure providers</strong> &mdash; to provision and manage sandbox environments where Agents execute</li>
               <li><strong>AI model providers</strong> &mdash; to power Agent preview conversations and runtime execution</li>
-              <li><strong>Analytics</strong> (Vercel Analytics) &mdash; to collect anonymous, aggregate usage metrics</li>
+              <li><strong>Analytics providers</strong> (Google Analytics 4, Vercel Analytics) &mdash; to measure acquisition, page usage, and conversion behavior</li>
             </ul>
             <p>
               Each third-party service operates under its own privacy policy. We encourage you to review their policies.
