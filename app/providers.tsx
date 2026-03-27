@@ -6,12 +6,18 @@ import { AuthProvider } from '@/lib/auth-context'
 import { GoogleAnalytics } from '@/components/google-analytics'
 import { Toaster } from '@/components/ui/sonner'
 
-export function Providers({ children }: { children: React.ReactNode }) {
+export function Providers({
+  children,
+  gaMeasurementId,
+}: {
+  children: React.ReactNode
+  gaMeasurementId: string | null
+}) {
   return (
     <AuthProvider>
       <CartProvider>
         <Suspense fallback={null}>
-          <GoogleAnalytics />
+          <GoogleAnalytics measurementId={gaMeasurementId} />
         </Suspense>
         {children}
         <Toaster />

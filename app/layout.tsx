@@ -1,7 +1,9 @@
 import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
 import { Inter, JetBrains_Mono } from 'next/font/google'
+import Script from 'next/script'
 import { ChunkReloadGuard } from '@/components/chunk-reload-guard'
+import { buildGoogleAnalyticsInlineScript } from '@/lib/google-analytics'
 import './globals.css'
 import { Providers } from './providers'
 
@@ -39,11 +41,25 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   const enableVercelAnalytics = process.env.VERCEL === '1'
+  const gaMeasurementId = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID?.trim() || null
 
   return (
     <html lang="en" className="dark">
+      <head>
+        {gaMeasurementId ? (
+          <>
+            <Script
+              src={`https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(gaMeasurementId)}`}
+              strategy="afterInteractive"
+            />
+            <Script id="google-analytics" strategy="afterInteractive">
+              {buildGoogleAnalyticsInlineScript(gaMeasurementId)}
+            </Script>
+          </>
+        ) : null}
+      </head>
       <body className={`${inter.variable} ${jetbrainsMono.variable} font-sans antialiased`}>
-        <Providers>
+        <Providers gaMeasurementId={gaMeasurementId}>
           <ChunkReloadGuard />
           {children}
         </Providers>

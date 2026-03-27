@@ -44,7 +44,7 @@ Set this in production:
 NEXT_PUBLIC_GA_MEASUREMENT_ID=G-XXXXXXXXXX
 ```
 
-This is read at runtime through `/api/analytics/config`, so it works in the Docker deployment model without baking the id into the image build.
+The root layout now renders the official GA bootstrap through `next/script`, so the measurement id must be present in the runtime environment seen by the app server.
 
 ## GA4 property setup
 

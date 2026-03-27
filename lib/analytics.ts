@@ -123,6 +123,10 @@ export function buildAttributionEventParams(stored: StoredAttribution | null) {
   }
 }
 
+function hasGoogleAnalytics() {
+  return typeof window !== 'undefined' && typeof window.gtag === 'function'
+}
+
 function markEventSeen(storageKey: string) {
   if (!canUseBrowserStorage()) {
     return false
@@ -136,64 +140,33 @@ function markEventSeen(storageKey: string) {
   return true
 }
 
-export function ensureAnalyticsBootstrap(measurementId: string) {
-  if (typeof window === 'undefined' || !measurementId) {
-    return
-  }
-
-  if (!window.dataLayer) {
-    window.dataLayer = []
-  }
-
-  if (typeof window.gtag !== 'function') {
-    window.gtag = function gtag(...args: unknown[]) {
-      window.dataLayer?.push(args)
-    }
-  }
-
-  if (window.__openRosterGaMeasurementId === measurementId) {
-    return
-  }
-
-  window.__openRosterGaMeasurementId = measurementId
-
-  window.gtag('js', new Date())
-  window.gtag('config', measurementId, { send_page_view: false })
-}
-
-export function loadGoogleAnalyticsScript(measurementId: string) {
-  if (typeof document === 'undefined' || !measurementId) {
-    return
-  }
-
-  if (document.querySelector(`script[data-openroster-ga="${measurementId}"]`)) {
-    return
-  }
-
-  const script = document.createElement('script')
-  script.async = true
-  script.src = `https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(measurementId)}`
-  script.dataset.openrosterGa = measurementId
-  document.head.appendChild(script)
-}
-
 export function trackEvent(name: string, params: Record<string, string | number | boolean | undefined> = {}) {
-  if (typeof window === 'undefined' || typeof window.gtag !== 'function') {
+  if (!hasGoogleAnalytics()) {
     return
   }
 
-  window.gtag('event', name, {
+  const gtag = window.gtag
+  if (!gtag) {
+    return
+  }
+
+  gtag('event', name, {
     ...buildAttributionEventParams(readStoredAttribution()),
     ...params,
   })
 }
 
 export function trackPageView(path: string) {
-  if (typeof window === 'undefined' || typeof window.gtag !== 'function') {
+  if (!hasGoogleAnalytics()) {
     return
   }
 
-  window.gtag('event', 'page_view', {
+  const gtag = window.gtag
+  if (!gtag) {
+    return
+  }
+
+  gtag('event', 'page_view', {
     page_location: window.location.href,
     page_path: path,
     page_title: document.title,
