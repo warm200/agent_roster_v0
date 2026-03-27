@@ -64,6 +64,13 @@
       "when": 1774059300000,
       "tag": "0008_openclaw_idle_activity",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1774587600000,
+      "tag": "0009_launch_attempts_and_billing_alerts",
+      "breakpoints": true
     }
   ]
 }

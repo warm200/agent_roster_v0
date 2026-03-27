@@ -254,8 +254,9 @@ create table launch_attempts (
 当前实现备注：
 
 * 应用代码已开始写入 `launch_attempts`，admin dashboard 也会优先读取它
+* 该表的 Drizzle migration 已补到 `drizzle/0009_launch_attempts_and_billing_alerts.sql`
 * 如果现网数据库还没建这张表，产品主流程不会被阻断；admin 会自动回退到推导口径
-* 部署后仍需执行 schema rollout（例如 `pnpm db:push`）
+* 部署后仍需执行 schema rollout（例如 `docker compose run --rm migrate`）
 
 #### `billing_alerts`
 
@@ -286,9 +287,10 @@ create table billing_alerts (
 当前实现备注：
 
 * 已落地 `billing_alerts` schema + internal sync / ack API
+* 该表的 Drizzle migration 已补到 `drizzle/0009_launch_attempts_and_billing_alerts.sql`
 * admin dashboard / internal usage API 读取快照时会先尝试自动 sync 持久化告警；没有表或 sync 失败时回退到推导口径
 * 页面上仍保留 manual sync 按钮，方便立即强制刷新
-* 部署后仍需执行 schema rollout（例如 `pnpm db:push`），再调用内部 sync 接口生成首批告警
+* 部署后仍需执行 schema rollout（例如 `docker compose run --rm migrate`），再调用内部 sync 接口生成首批告警
 
 ---
 
