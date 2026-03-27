@@ -227,3 +227,17 @@ export function trackPurchaseOnce(order: Pick<Order, 'id' | 'amountCents' | 'cur
     item_count: order.items.length,
   })
 }
+
+export function trackLaunchIntent(input: {
+  orderId: string
+  planId?: string | null
+  allowed: boolean
+  blocker?: string | null
+}) {
+  trackEvent('launch_intent', {
+    order_id: input.orderId,
+    plan_id: input.planId ?? undefined,
+    allowed: input.allowed,
+    blocker: input.blocker ?? undefined,
+  })
+}

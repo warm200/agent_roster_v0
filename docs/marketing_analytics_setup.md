@@ -16,6 +16,9 @@ The frontend now emits these Google Analytics 4 events:
   - current implementation treats first OAuth-authenticated session as signup
 - `first_collection`
   - first time a browser adds any agent to cart
+- `launch_intent`
+  - whenever a paid bundle with Telegram already paired gets a launch click
+  - includes both allowed launches and monetization-blocked attempts so the product can measure launch demand before plan purchase
 - `telegram_connection`
   - when bundle Telegram pairing reaches `paired`
 - `purchase`
@@ -74,12 +77,14 @@ Recommended funnel in GA4 Explorations:
 1. `sign_up`
 2. `first_collection`
 3. `telegram_connection`
-4. `purchase`
+4. `launch_intent`
+5. `purchase`
 
 Notes:
 
 - `sign_up` is a pragmatic proxy because the app uses OAuth and does not currently expose a server-side "user created just now" event to the browser.
 - `first_collection` is intentionally first-add-to-cart, not checkout start.
+- `launch_intent` is intentionally broader than successful launches; it also records paid, Telegram-ready clicks that are blocked by plan or credit state.
 - `purchase` is emitted after checkout reconciliation, not on Stripe redirect alone.
 
 ## UTM convention

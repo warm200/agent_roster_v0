@@ -16,6 +16,8 @@ import { CreditTopUpDialog } from '@/components/credit-top-up-dialog'
 import { AgentSetupCard } from '@/components/agent-setup-card'
 import { PlanUpgradeDialog } from '@/components/plan-upgrade-dialog'
 import { TelegramSetupWizard } from '@/components/telegram-setup-wizard'
+import { trackLaunchIntent } from '@/lib/analytics'
+import { getBundleLaunchState, getVisibleLaunchRequirementBlockers } from '@/lib/bundle-launch'
 import { calculateBundleRiskFromVersions } from '@/lib/bundle-risk'
 import { formatPrice } from '@/lib/mock-data'
 import { formatAgentsPerBundleLabel } from '@/lib/subscription-plans'
@@ -323,8 +325,16 @@ export default function BundleDetailPage({ params }: PageProps) {
       order.channelConfig?.recipientBindingStatus === 'paired'
     )
 
-  const planAllowsLaunch = launchPolicy ? launchPolicy.allowed : true
-  const canLaunchRun = order.status === 'paid' && hasTelegramSetup && planAllowsLaunch
+  const { canStartLaunchFlow, canSubmitLaunchRequest, monetizationBlocked, showRequirementsWarning } =
+    getBundleLaunchState({
+      launchPolicy,
+      orderStatus: order.status,
+      hasTelegramSetup,
+    })
+  const visibleLaunchRequirementBlockers = getVisibleLaunchRequirementBlockers({
+    launchPolicy,
+    hasTelegramSetup,
+  })
   const effectiveDefaultAgentSlug = order.agentSetup?.defaultAgentSlug ?? order.items[0]?.agent.slug ?? null
   const liveBundleRisk = calculateBundleRiskFromVersions(
     order.items.map((item) => ({
@@ -347,7 +357,14 @@ export default function BundleDetailPage({ params }: PageProps) {
   ) ?? null
 
   const handleLaunchRun = async () => {
-    if (!canLaunchRun || isLaunching || isReconcilingPlan || isReconcilingTopUp) return
+    if (!canStartLaunchFlow || isLaunching || isReconcilingPlan || isReconcilingTopUp) return
+
+    trackLaunchIntent({
+      orderId: order.id,
+      planId: launchPolicy?.plan.id ?? null,
+      allowed: canSubmitLaunchRequest,
+      blocker: launchPolicy?.blockers[0] ?? null,
+    })
 
     setIsLaunching(true)
 
@@ -356,6 +373,14 @@ export default function BundleDetailPage({ params }: PageProps) {
       toast.success('Run requested. Redirecting to run details...')
       window.location.assign(`/app/runs/${payload.id}`)
     } catch (error) {
+      if (monetizationBlocked) {
+        if (canTopUpCredits) {
+          setIsTopUpDialogOpen(true)
+        } else {
+          setIsPlanDialogOpen(true)
+        }
+      }
+
       toast.error(error instanceof Error ? error.message : 'Network error while launching run')
     } finally {
       setIsLaunching(false)
@@ -397,7 +422,7 @@ export default function BundleDetailPage({ params }: PageProps) {
         <div className="flex flex-col gap-3 sm:flex-row">
           <Button
             size="lg"
-            disabled={!canLaunchRun || isLaunching || isReconcilingPlan || isReconcilingTopUp}
+            disabled={!canStartLaunchFlow || isLaunching || isReconcilingPlan || isReconcilingTopUp}
             onClick={handleLaunchRun}
           >
             {isReconcilingPlan ? (
@@ -426,7 +451,7 @@ export default function BundleDetailPage({ params }: PageProps) {
       </div>
 
       {/* Run Requirements Warning */}
-      {!canLaunchRun && (
+      {showRequirementsWarning && (
         <Card className="mb-6 border-amber-500/30 bg-amber-500/5">
           <CardContent className="flex flex-col gap-4 p-4 md:flex-row md:items-start md:justify-between">
             <div className="flex items-start gap-3">
@@ -439,7 +464,7 @@ export default function BundleDetailPage({ params }: PageProps) {
                     You need to connect Telegram before launching runs. This enables notifications and result delivery.
                   </p>
                 ) : null}
-                {launchPolicy?.blockers.map((blocker) => (
+                {visibleLaunchRequirementBlockers.map((blocker) => (
                   <p key={blocker}>{blocker}</p>
                 ))}
               </div>
@@ -664,12 +689,12 @@ export default function BundleDetailPage({ params }: PageProps) {
               <CardContent className="p-8 text-center">
                 <Play className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
                 <p className="font-medium mb-2">No runs yet</p>
-                <p className="text-sm text-muted-foreground mb-4">
-                  {canLaunchRun
+              <p className="text-sm text-muted-foreground mb-4">
+                  {canStartLaunchFlow
                     ? 'Launch your first run to see it here.'
                     : 'Complete Telegram setup to launch runs.'}
-                </p>
-                {canLaunchRun && (
+              </p>
+                {canStartLaunchFlow && (
                   <Button onClick={handleLaunchRun} disabled={isLaunching || isReconcilingPlan}>
                     {isReconcilingPlan ? (
                       <>
