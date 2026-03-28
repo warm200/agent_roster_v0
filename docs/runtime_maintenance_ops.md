@@ -162,12 +162,16 @@ If you use this path:
 - use `pnpm runtime:maintenance:watch`
 - interval: `60s` to `300s`
 - in Docker Compose, run it as a separate long-lived `maintenance` service, not inside the web container
-- Docker Compose startup now runs the one-shot `migrate` service before `app` and `maintenance`
+- Docker Compose startup now lets `app` wait for Postgres, run `pnpm db:migrate`, then start the web server
+- the migration step is idempotent, so it no-ops when the schema is already current
+- `maintenance` waits for `app` startup instead of a separate migration container
 - nginx now supports optional TLS termination on `443`
 - mount certs at `docker/nginx/certs/tls.crt` and `docker/nginx/certs/tls.key`
 - with certs present, nginx redirects `80 -> 443`; without them, it falls back to plain HTTP on `80`
-- for manual schema reruns, use:
-  - `docker compose run --rm migrate`
+- normal deploy is now:
+  - `docker compose up -d --build`
+- if you ever need a manual schema rerun inside the app image, use:
+  - `docker compose run --rm app /app/docker/entrypoints/start-with-migrations.sh true`
 
 ### Production on Vercel Pro without separate workers
 
