@@ -1,9 +1,12 @@
-import type { SubscriptionPlan, UserSubscription } from '@/lib/types'
+import type { AdminRuntimeGrant, SubscriptionPlan, UserSubscription } from '@/lib/types'
 
 import { getJson, postJson } from './api'
 
 type CurrentSubscriptionResponse = {
+  availableCredits: number
+  effectivePlan: SubscriptionPlan
   plan: SubscriptionPlan
+  runtimeGrant: AdminRuntimeGrant | null
   subscription: UserSubscription | null
 }
 

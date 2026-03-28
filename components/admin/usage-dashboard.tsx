@@ -337,6 +337,7 @@ export function AdminUsageDashboard({
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="all">All plans</SelectItem>
+                          <SelectItem value="free">Free</SelectItem>
                           <SelectItem value="run">Run</SelectItem>
                           <SelectItem value="warm_standby">Warm standby</SelectItem>
                           <SelectItem value="always_on">Always on</SelectItem>

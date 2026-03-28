@@ -325,6 +325,20 @@ export const userSubscriptionSchema = z.object({
   updatedAt: timestampSchema,
 })
 
+export const adminRuntimeGrantSchema = z.object({
+  id: z.string().min(1),
+  userId: z.string().min(1),
+  grantedByUserId: z.string().min(1).nullable(),
+  creditsTotal: z.number().int().nonnegative(),
+  creditsRemaining: z.number().int().nonnegative(),
+  expiresAt: timestampSchema,
+  consumedAt: timestampSchema.nullable(),
+  revokedAt: timestampSchema.nullable(),
+  note: z.string().nullable(),
+  createdAt: timestampSchema,
+  updatedAt: timestampSchema,
+})
+
 export const creditLedgerEntrySchema = z.object({
   id: z.string().min(1),
   userId: z.string().min(1),
@@ -433,7 +447,10 @@ export const launchPolicyCheckSchema = z.object({
   allowed: z.boolean(),
   blockers: z.array(z.string().min(1)),
   plan: subscriptionPlanSchema,
+  effectivePlan: subscriptionPlanSchema,
   subscription: userSubscriptionSchema.nullable(),
+  runtimeGrant: adminRuntimeGrantSchema.nullable(),
+  availableCredits: z.number().int().nonnegative().nullable(),
   usage: launchPolicyUsageSchema,
 })
 
@@ -480,6 +497,12 @@ export const updateOrderAgentSetupRequestSchema = z.object({
 export const createSubscriptionCheckoutSessionRequestSchema = z.object({
   planId: subscriptionPlanIdSchema,
   returnPath: z.string().min(1).optional(),
+})
+
+export const grantAdminRuntimeCreditsRequestSchema = z.object({
+  credits: z.number().int().positive().max(1000),
+  expiresAt: z.string().datetime(),
+  note: z.string().trim().max(500).nullable().optional(),
 })
 
 export const apiErrorSchema = z.object({

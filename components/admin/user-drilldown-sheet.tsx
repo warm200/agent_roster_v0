@@ -1,5 +1,12 @@
 'use client'
 
+import { useMemo, useState } from 'react'
+
+import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
+
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
 import {
   Sheet,
@@ -8,6 +15,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
+import { Textarea } from '@/components/ui/textarea'
 import type { AdminUserRecord } from '@/lib/admin-usage-data'
 import { formatDateTime } from '@/lib/utils'
 
@@ -35,6 +43,61 @@ export function UserDrilldownSheet({
   onOpenChange: (open: boolean) => void
   user: AdminUserRecord | null
 }) {
+  const router = useRouter()
+  const [credits, setCredits] = useState('3')
+  const [expiresAt, setExpiresAt] = useState('')
+  const [note, setNote] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const defaultExpiry = useMemo(() => {
+    const date = new Date()
+    date.setDate(date.getDate() + 7)
+    date.setMinutes(date.getMinutes() - date.getTimezoneOffset())
+    return date.toISOString().slice(0, 16)
+  }, [])
+
+  const effectiveExpiresAt = expiresAt || defaultExpiry
+
+  async function handleGrantSubmit() {
+    if (!user) {
+      return
+    }
+
+    const parsedCredits = Number.parseInt(credits, 10)
+    if (!Number.isFinite(parsedCredits) || parsedCredits <= 0) {
+      toast.error('Credits must be a positive integer.')
+      return
+    }
+
+    setIsSubmitting(true)
+    try {
+      const response = await fetch(`/api/admin/usage/users/${user.id}/grants`, {
+        body: JSON.stringify({
+          credits: parsedCredits,
+          expiresAt: new Date(effectiveExpiresAt).toISOString(),
+          note: note.trim() || null,
+        }),
+        headers: {
+          'content-type': 'application/json',
+        },
+        method: 'POST',
+      })
+
+      const payload = await response.json()
+      if (!response.ok) {
+        throw new Error(payload.error ?? 'Unable to grant runtime credits.')
+      }
+
+      toast.success('Runtime credits granted.')
+      setNote('')
+      setExpiresAt('')
+      router.refresh()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to grant runtime credits.')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
@@ -74,6 +137,54 @@ export function UserDrilldownSheet({
                     <KeyValue label="remaining_credits" value={formatMetricValue(user.subscription.remainingCredits, 'credits')} />
                     <KeyValue label="period_start" value={formatDateTime(user.subscription.currentPeriodStart)} />
                     <KeyValue label="period_end" value={formatDateTime(user.subscription.currentPeriodEnd)} />
+                  </div>
+                </Panel>
+
+                <Panel className="p-5">
+                  <div className="mb-4">
+                    <p className="text-[11px] tracking-[0.2em] uppercase text-zinc-500">Runtime Grant</p>
+                    <h3 className="mt-2 text-lg font-semibold text-white">Admin launch credits</h3>
+                  </div>
+                  {user.runtimeGrant ? (
+                    <div className="mb-5 rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-medium text-white">{user.runtimeGrant.remainingCredits} / {user.runtimeGrant.creditsTotal} credits</p>
+                          <p className="mt-1 text-xs text-zinc-400">Expires {formatDateTime(user.runtimeGrant.expiresAt)}</p>
+                        </div>
+                        <SignalPill tone="stable">active</SignalPill>
+                      </div>
+                      {user.runtimeGrant.note ? (
+                        <p className="mt-3 text-sm text-zinc-300">{user.runtimeGrant.note}</p>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <p className="mb-5 text-sm text-zinc-400">No active admin runtime grant.</p>
+                  )}
+                  <div className="grid gap-3">
+                    <Input
+                      className="border-white/10 bg-black/20 text-white"
+                      min="1"
+                      onChange={(event) => setCredits(event.target.value)}
+                      placeholder="Credits"
+                      type="number"
+                      value={credits}
+                    />
+                    <Input
+                      className="border-white/10 bg-black/20 text-white"
+                      onChange={(event) => setExpiresAt(event.target.value)}
+                      type="datetime-local"
+                      value={effectiveExpiresAt}
+                    />
+                    <Textarea
+                      className="min-h-24 border-white/10 bg-black/20 text-white"
+                      onChange={(event) => setNote(event.target.value)}
+                      placeholder="Optional admin note"
+                      value={note}
+                    />
+                    <Button disabled={isSubmitting} onClick={handleGrantSubmit}>
+                      {isSubmitting ? 'Granting...' : 'Grant Runtime Credits'}
+                    </Button>
                   </div>
                 </Panel>
 

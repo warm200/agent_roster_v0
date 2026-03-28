@@ -405,6 +405,22 @@ export const billingAlerts = pgTable('billing_alerts', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 })
 
+export const adminRuntimeGrants = pgTable('admin_runtime_grants', {
+  id: text('id').primaryKey(),
+  userId: text('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  grantedByUserId: text('granted_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+  creditsTotal: integer('credits_total').notNull(),
+  creditsRemaining: integer('credits_remaining').notNull(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  consumedAt: timestamp('consumed_at', { withTimezone: true }),
+  revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  note: text('note'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
 export const orderItems = pgTable('order_items', {
   id: text('id').primaryKey(),
   orderId: text('order_id')

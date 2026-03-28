@@ -330,6 +330,20 @@ export interface CreditTopUpPack {
   summary: string
 }
 
+export interface AdminRuntimeGrant {
+  id: string
+  userId: string
+  grantedByUserId: string | null
+  creditsTotal: number
+  creditsRemaining: number
+  expiresAt: string
+  consumedAt: string | null
+  revokedAt: string | null
+  note: string | null
+  createdAt: string
+  updatedAt: string
+}
+
 export interface CreditLedgerEntry {
   id: string
   userId: string
@@ -436,7 +450,10 @@ export interface LaunchPolicyCheck {
   allowed: boolean
   blockers: string[]
   plan: SubscriptionPlan
+  effectivePlan: SubscriptionPlan
   subscription: UserSubscription | null
+  runtimeGrant: AdminRuntimeGrant | null
+  availableCredits: number | null
   usage: LaunchPolicyUsage
 }
 

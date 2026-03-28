@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { getSubscriptionPlan } from '@/lib/subscription-plans'
-import type { Order, UserSubscription } from '@/lib/types'
+import type { AdminRuntimeGrant, Order, UserSubscription } from '@/lib/types'
 import {
   buildLaunchPolicyCheck,
   getStripeSubscriptionCurrentPeriodEnd,
@@ -120,6 +120,23 @@ function buildSubscription(planId: UserSubscription['planId'], remainingCredits 
   }
 }
 
+function buildRuntimeGrant(overrides: Partial<AdminRuntimeGrant> = {}): AdminRuntimeGrant {
+  return {
+    id: 'grant-1',
+    userId: 'user-1',
+    grantedByUserId: 'admin-1',
+    creditsTotal: 3,
+    creditsRemaining: 3,
+    expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+    consumedAt: null,
+    revokedAt: null,
+    note: 'promo',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    ...overrides,
+  }
+}
+
 test('counted active runs stop counting once workspace is released', () => {
   assert.equal(
     isCountedActiveRun({ status: 'completed', usesRealWorkspace: true, workspaceReleasedAt: null }),
@@ -150,10 +167,14 @@ test('getStripeSubscriptionCurrentPeriodEnd returns a date when Stripe includes 
 })
 
 test('free plan blocks all launches', () => {
+  const plan = getSubscriptionPlan('free')
   const policy = buildLaunchPolicyCheck({
+    availableCredits: 0,
+    effectivePlan: plan,
     order: buildOrder(1),
-    plan: getSubscriptionPlan('free'),
+    plan,
     runRows: [],
+    runtimeGrant: null,
     subscription: null,
   })
 
@@ -162,10 +183,14 @@ test('free plan blocks all launches', () => {
 })
 
 test('run plan blocks bundles above the plan agent limit', () => {
+  const plan = getSubscriptionPlan('run')
   const policy = buildLaunchPolicyCheck({
+    availableCredits: 30,
+    effectivePlan: plan,
     order: buildOrder(4),
-    plan: getSubscriptionPlan('run'),
+    plan,
     runRows: [],
+    runtimeGrant: null,
     subscription: buildSubscription('run', 30),
   })
 
@@ -174,14 +199,18 @@ test('run plan blocks bundles above the plan agent limit', () => {
 })
 
 test('launch policy blocks when any live run is still active', () => {
+  const plan = getSubscriptionPlan('warm_standby')
   const policy = buildLaunchPolicyCheck({
+    availableCredits: 50,
+    effectivePlan: plan,
     order: buildOrder(2, 'order-next'),
-    plan: getSubscriptionPlan('warm_standby'),
+    plan,
     runRows: [
       { id: 'run-1', orderId: 'order-a', status: 'running', usesRealWorkspace: true, workspaceReleasedAt: null },
       { id: 'run-2', orderId: 'order-b', status: 'running', usesRealWorkspace: true, workspaceReleasedAt: null },
       { id: 'run-3', orderId: 'order-c', status: 'completed', usesRealWorkspace: true, workspaceReleasedAt: null },
     ],
+    runtimeGrant: null,
     subscription: buildSubscription('warm_standby', 50),
   })
 
@@ -192,10 +221,14 @@ test('launch policy blocks when any live run is still active', () => {
 })
 
 test('warm standby allows large bundles without an agent-count blocker', () => {
+  const plan = getSubscriptionPlan('warm_standby')
   const policy = buildLaunchPolicyCheck({
+    availableCredits: 50,
+    effectivePlan: plan,
     order: buildOrder(25, 'order-warm-large'),
-    plan: getSubscriptionPlan('warm_standby'),
+    plan,
     runRows: [],
+    runtimeGrant: null,
     subscription: buildSubscription('warm_standby', 50),
   })
 
@@ -206,10 +239,14 @@ test('warm standby allows large bundles without an agent-count blocker', () => {
 })
 
 test('always on allows large bundles without an agent-count blocker', () => {
+  const plan = getSubscriptionPlan('always_on')
   const policy = buildLaunchPolicyCheck({
+    availableCredits: 50,
+    effectivePlan: plan,
     order: buildOrder(25, 'order-always-large'),
-    plan: getSubscriptionPlan('always_on'),
+    plan,
     runRows: [],
+    runtimeGrant: null,
     subscription: buildSubscription('always_on', 50),
   })
 
@@ -220,9 +257,12 @@ test('always on allows large bundles without an agent-count blocker', () => {
 })
 
 test('warm standby launch policy blocks when the same bundle already has a stopped recoverable run', () => {
+  const plan = getSubscriptionPlan('warm_standby')
   const policy = buildLaunchPolicyCheck({
+    availableCredits: 10,
+    effectivePlan: plan,
     order: buildOrder(2, 'order-warm'),
-    plan: getSubscriptionPlan('warm_standby'),
+    plan,
     runRows: [
       {
         id: 'run-stopped-1',
@@ -235,6 +275,7 @@ test('warm standby launch policy blocks when the same bundle already has a stopp
         workspaceReleasedAt: null,
       },
     ],
+    runtimeGrant: null,
     subscription: buildSubscription('warm_standby', 10),
   })
 
@@ -244,4 +285,22 @@ test('warm standby launch policy blocks when the same bundle already has a stopp
       /resume or terminate the existing stopped warm standby run for this bundle/i.test(entry),
     ),
   )
+})
+
+test('free plan becomes launchable when an active admin runtime grant is present', () => {
+  const policy = buildLaunchPolicyCheck({
+    availableCredits: 3,
+    effectivePlan: getSubscriptionPlan('run'),
+    order: buildOrder(3),
+    plan: getSubscriptionPlan('free'),
+    runRows: [],
+    runtimeGrant: buildRuntimeGrant(),
+    subscription: null,
+  })
+
+  assert.equal(policy.allowed, true)
+  assert.equal(policy.plan.id, 'free')
+  assert.equal(policy.effectivePlan.id, 'run')
+  assert.equal(policy.availableCredits, 3)
+  assert.equal(policy.runtimeGrant?.id, 'grant-1')
 })

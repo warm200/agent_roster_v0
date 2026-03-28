@@ -17,6 +17,7 @@ import { adminUsageSnapshot as fallbackSnapshot } from '@/lib/admin-usage-data'
 import { resolveEstimatedInternalCostCents } from '@/lib/runtime-cost'
 
 import {
+  adminRuntimeGrants,
   creditLedger,
   orders,
   runChannelConfigs,
@@ -395,6 +396,7 @@ export function buildAlerts(input: {
 }
 
 export function buildUserRows(input: {
+  adminRuntimeGrantRows: Array<typeof adminRuntimeGrants.$inferSelect>
   channelRows: Array<typeof runChannelConfigs.$inferSelect>
   ledgerRows: Array<typeof creditLedger.$inferSelect>
   orderRows: Array<typeof orders.$inferSelect>
@@ -409,8 +411,14 @@ export function buildUserRows(input: {
   const usageByUser = new Map<string, Array<typeof runUsage.$inferSelect>>()
   const ledgerByUser = new Map<string, Array<typeof creditLedger.$inferSelect>>()
   const subscriptionByUser = new Map(input.subscriptionRows.map((row) => [row.userId, row]))
-  const channelByOrderId = new Map(input.channelRows.map((row) => [row.orderId, row]))
   const now = new Date()
+  const activeGrantByUser = new Map(
+    input.adminRuntimeGrantRows
+      .filter((row) => !row.revokedAt && row.creditsRemaining > 0 && row.expiresAt > now)
+      .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
+      .map((row) => [row.userId, row]),
+  )
+  const channelByOrderId = new Map(input.channelRows.map((row) => [row.orderId, row]))
 
   for (const order of input.orderRows) {
     const rows = ordersByUser.get(order.userId) ?? []
@@ -435,12 +443,14 @@ export function buildUserRows(input: {
     ...ordersByUser.keys(),
     ...usageByUser.keys(),
     ...subscriptionByUser.keys(),
+    ...activeGrantByUser.keys(),
   ])
 
   return Array.from(userIds)
     .map((userId) => {
       const user = userMap.get(userId)
       const subscription = subscriptionByUser.get(userId)
+      const runtimeGrant = activeGrantByUser.get(userId) ?? null
       const paidOrders = (ordersByUser.get(userId) ?? []).filter((order) => order.status === 'paid')
       const userUsage = (usageByUser.get(userId) ?? []).sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
       const userLedger = (ledgerByUser.get(userId) ?? []).sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
@@ -454,7 +464,7 @@ export function buildUserRows(input: {
       }).length
       const blockedBundles = Math.max(paidOrders.length - pairedBundles, 0)
       const pairingReady = paidOrders.length > 0 && blockedBundles === 0
-      const remainingCredits = subscription?.remainingCredits ?? 0
+      const remainingCredits = (subscription?.remainingCredits ?? 0) + (runtimeGrant?.creditsRemaining ?? 0)
       const health: AdminUserHealth =
         !pairingReady && paidOrders.length > 0
           ? 'blocked'
@@ -462,8 +472,8 @@ export function buildUserRows(input: {
             ? 'watch'
             : 'stable'
       const latestUsage = userUsage[0]
-      const sourcePlan = subscription?.planId ?? latestUsage?.planId ?? 'run'
-      const currentPlan: AdminUserRecord['currentPlan'] = sourcePlan === 'free' ? 'run' : sourcePlan
+      const sourcePlan = subscription?.planId ?? latestUsage?.planId ?? 'free'
+      const currentPlan: AdminUserRecord['currentPlan'] = sourcePlan
 
       return {
         avgWorkspaceMinutes: Math.round(average(usageThisPeriod.map((row) => row.workspaceMinutes ?? 0).filter(Boolean))),
@@ -508,6 +518,15 @@ export function buildUserRows(input: {
           terminationReason: row.terminationReason,
           workspaceMinutes: row.workspaceMinutes,
         })),
+        runtimeGrant: runtimeGrant ? {
+          createdAt: runtimeGrant.createdAt.toISOString(),
+          creditsTotal: runtimeGrant.creditsTotal,
+          expiresAt: runtimeGrant.expiresAt.toISOString(),
+          id: runtimeGrant.id,
+          note: runtimeGrant.note,
+          remainingCredits: runtimeGrant.creditsRemaining,
+          updatedAt: runtimeGrant.updatedAt.toISOString(),
+        } : null,
         subscription: {
           currentPeriodEnd: subscription?.currentPeriodEnd?.toISOString() ?? now.toISOString(),
           currentPeriodStart: periodStart.toISOString(),
@@ -582,7 +601,7 @@ export function buildMismatchRows(
   return subscriptionRows
     .map((subscription) => {
       const rows = ledgerRows
-        .filter((row) => row.userId === subscription.userId)
+        .filter((row) => row.subscriptionId === subscription.id)
         .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
       const recomputedBalance = computeResultingBalance(rows)
       const lastLedgerEventAt = rows[0]?.createdAt.toISOString() ?? subscription.updatedAt.toISOString()

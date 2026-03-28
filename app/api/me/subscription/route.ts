@@ -9,10 +9,18 @@ export async function GET(request: NextRequest) {
   const service = getSubscriptionService()
   await service.syncSubscriptionFromStripe(userId)
   const subscription = await service.getCurrentSubscription(userId)
+  const plan = subscription ? getSubscriptionPlan(subscription.planId) : getFreeSubscriptionPlan()
+  const runtimeGrant = !plan.runtimeAccess ? await service.getCurrentRuntimeGrant(userId) : null
+  const effectivePlan = runtimeGrant ? getSubscriptionPlan('run') : plan
+  const availableCredits =
+    runtimeGrant?.creditsRemaining ?? subscription?.remainingCredits ?? plan.includedCredits
 
   return NextResponse.json(
     {
-      plan: subscription ? getSubscriptionPlan(subscription.planId) : getFreeSubscriptionPlan(),
+      availableCredits,
+      effectivePlan,
+      plan,
+      runtimeGrant,
       subscription,
     },
     { status: 200 },

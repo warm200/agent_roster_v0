@@ -13,6 +13,23 @@ function buildLaunchPolicy(overrides: Partial<LaunchPolicyCheck>): LaunchPolicyC
   return {
     allowed: true,
     blockers: [],
+    availableCredits: 12,
+    effectivePlan: {
+      id: 'warm_standby',
+      name: 'Warm Standby',
+      priceLabel: '$19/mo',
+      priceCents: 1900,
+      billingInterval: 'month',
+      includedCredits: 24,
+      activeBundles: 1,
+      agentsPerBundle: UNLIMITED_AGENTS_PER_BUNDLE,
+      triggerMode: 'auto_wake',
+      concurrentRuns: 1,
+      alwaysOnBundles: 0,
+      runtimeAccess: true,
+      planIncludes: [],
+      suitFor: 'test',
+    },
     plan: {
       id: 'warm_standby',
       name: 'Warm Standby',
@@ -49,6 +66,7 @@ function buildLaunchPolicy(overrides: Partial<LaunchPolicyCheck>): LaunchPolicyC
       createdAt: '2026-03-27T00:00:00.000Z',
       updatedAt: '2026-03-27T00:00:00.000Z',
     },
+    runtimeGrant: null,
     usage: {
       activeBundles: 0,
       activeRunIds: [],
@@ -61,6 +79,7 @@ function buildLaunchPolicy(overrides: Partial<LaunchPolicyCheck>): LaunchPolicyC
 test('bundle launch state keeps monetization-blocked paired users clickable while hiding the pre-block card', () => {
   const launchPolicy = buildLaunchPolicy({
     allowed: false,
+    availableCredits: 0,
     blockers: ['No credits remaining on the current subscription.'],
     subscription: {
       ...buildLaunchPolicy({}).subscription!,
@@ -110,6 +129,16 @@ test('hasMonetizationLaunchBlocker treats free plan runtime access blocks as mon
   const launchPolicy = buildLaunchPolicy({
     allowed: false,
     blockers: ['Free does not include run launches.'],
+    effectivePlan: {
+      ...buildLaunchPolicy({}).effectivePlan,
+      id: 'free',
+      name: 'Free',
+      includedCredits: 0,
+      runtimeAccess: false,
+      triggerMode: 'none',
+      agentsPerBundle: 0,
+      billingInterval: 'none',
+    },
     plan: {
       ...buildLaunchPolicy({}).plan,
       id: 'free',

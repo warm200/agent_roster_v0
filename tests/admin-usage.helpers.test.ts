@@ -90,6 +90,7 @@ test('staged admin user records include order ids for dashboard search', () => {
 
 test('buildUserRows uses the selected admin window for activity metrics', () => {
   const rows = buildUserRows({
+    adminRuntimeGrantRows: [],
     channelRows: [
       {
         orderId: 'order-1',
@@ -162,6 +163,7 @@ test('buildUserRows uses the selected admin window for activity metrics', () => 
 
 test('buildUserRows derives estimated cost from workspace minutes when stored cost is missing', () => {
   const rows = buildUserRows({
+    adminRuntimeGrantRows: [],
     channelRows: [],
     ledgerRows: [],
     orderRows: [

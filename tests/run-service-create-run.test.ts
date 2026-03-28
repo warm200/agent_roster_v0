@@ -174,8 +174,11 @@ test('run service refreshes telegram pairing state before launch checks', async 
           calls.push('subscription.getLaunchPolicy')
           return {
             allowed: true,
+            availableCredits: 24,
             blockers: [],
+            effectivePlan: getSubscriptionPlan('warm_standby'),
             plan: getSubscriptionPlan('warm_standby'),
+            runtimeGrant: null,
             subscription: null,
             usage: {
               activeBundles: 0,
@@ -281,8 +284,11 @@ test('run service reconciles existing runs before launch policy checks', async (
           calls.push('subscription.getLaunchPolicy')
           return {
             allowed: true,
+            availableCredits: 24,
             blockers: [],
+            effectivePlan: getSubscriptionPlan('warm_standby'),
             plan: getSubscriptionPlan('warm_standby'),
+            runtimeGrant: null,
             subscription: null,
             usage: {
               activeBundles: 0,
@@ -345,6 +351,101 @@ test('run service reconciles existing runs before launch policy checks', async (
   ])
 })
 
+test('run service reserves launch credits against an admin runtime grant when free plan overlay is active', async () => {
+  let receivedReserve:
+    | {
+        orderId: string
+        plan: ReturnType<typeof getSubscriptionPlan>
+        runId: string
+        runtimeGrantId?: string | null
+        subscriptionId: string | null
+        userId: string
+      }
+    | undefined
+
+  const service = new RunService({
+    async createRun(run: Run) {
+      return run
+    },
+    async updateRun(_runId: string, input: Partial<Run>) {
+      return {
+        ...buildRun(),
+        ...input,
+      }
+    },
+  } as never)
+
+  setRunServiceDepsForTesting({
+    getOrderByIdForUser: async () => order,
+    getOrderProviderApiKeysForUser: async () => ({}),
+    getRunProvider: () => ({
+      name: 'test',
+      createRun: async (_order, runId) => ({
+        ...buildRun(),
+        id: runId ?? 'run-fallback',
+      }),
+      getLogs: async () => [],
+      getResult: async () => null,
+      getStatus: async () => null,
+      stopRun: async () => null,
+    }),
+    getSubscriptionService: () =>
+      ({
+        commitReservedLaunchCredit: async () => null,
+        getLaunchPolicy: async () => ({
+          allowed: true,
+          availableCredits: 3,
+          blockers: [],
+          effectivePlan: getSubscriptionPlan('run'),
+          plan: getSubscriptionPlan('free'),
+          runtimeGrant: {
+            id: 'grant-1',
+            userId: order.userId,
+            grantedByUserId: 'admin-1',
+            creditsTotal: 3,
+            creditsRemaining: 3,
+            expiresAt: new Date(Date.now() + 60_000).toISOString(),
+            consumedAt: null,
+            revokedAt: null,
+            note: null,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          },
+          subscription: null,
+          usage: {
+            activeBundles: 0,
+            activeRunIds: [],
+            concurrentRuns: 0,
+          },
+        }),
+        refundReservedLaunchCredit: async () => null,
+        reserveLaunchCredit: async (input: {
+          orderId: string
+          plan: ReturnType<typeof getSubscriptionPlan>
+          runId: string
+          runtimeGrantId?: string | null
+          subscriptionId: string | null
+          userId: string
+        }) => {
+          receivedReserve = input
+          return null
+        },
+      } as never),
+    getTelegramService: () =>
+      ({
+        getChannelConfig: async () => order.channelConfig!,
+        releaseWebhookToRuntimePolling: async () => ({ orderId: order.id }),
+      } as never),
+  })
+
+  await service.createRun(order.userId, order.id)
+  await new Promise((resolve) => setTimeout(resolve, 0))
+
+  assert.equal(receivedReserve?.plan.id, 'run')
+  assert.equal(receivedReserve?.subscriptionId, null)
+  assert.equal(receivedReserve?.runtimeGrantId, 'grant-1')
+})
+
 test('run service blocks launch when subscription policy rejects the order', async () => {
   const calls: string[] = []
   const service = new RunService({
@@ -370,8 +471,11 @@ test('run service blocks launch when subscription policy rejects the order', asy
           calls.push('subscription.getLaunchPolicy')
           return {
             allowed: false,
+            availableCredits: 0,
             blockers: ['Run allows at most 3 agents per launched bundle.'],
+            effectivePlan: getSubscriptionPlan('run'),
             plan: getSubscriptionPlan('run'),
+            runtimeGrant: null,
             subscription: null,
             usage: {
               activeBundles: 0,
@@ -453,8 +557,11 @@ test('run service refunds reserved credit when provider never accepts the launch
         },
         getLaunchPolicy: async () => ({
           allowed: true,
+          availableCredits: 15,
           blockers: [],
+          effectivePlan: getSubscriptionPlan('run'),
           plan: getSubscriptionPlan('run'),
+          runtimeGrant: null,
           subscription: {
             id: 'subscription-1',
             userId: order.userId,
@@ -549,8 +656,11 @@ test('run service blocks managed restart when launch policy rejects it', async (
           calls.push('subscription.getLaunchPolicy')
           return {
             allowed: false,
+            availableCredits: 0,
             blockers: ['Run allows at most 3 agents per launched bundle.'],
+            effectivePlan: getSubscriptionPlan('run'),
             plan: getSubscriptionPlan('run'),
+            runtimeGrant: null,
             subscription: null,
             usage: {
               activeBundles: 1,
@@ -630,8 +740,11 @@ test('run service refunds reserved credit when managed restart throws', async ()
           calls.push('subscription.getLaunchPolicy')
           return {
             allowed: true,
+            availableCredits: 9,
             blockers: [],
+            effectivePlan: getSubscriptionPlan('warm_standby'),
             plan: getSubscriptionPlan('warm_standby'),
+            runtimeGrant: null,
             subscription: {
               id: 'subscription-1',
               userId: order.userId,
@@ -802,8 +915,11 @@ test('run service re-syncs stopped runtime state when managed resume throws', as
           calls.push('subscription.getLaunchPolicy')
           return {
             allowed: true,
+            availableCredits: 24,
             blockers: [],
+            effectivePlan: getSubscriptionPlan('warm_standby'),
             plan: getSubscriptionPlan('warm_standby'),
+            runtimeGrant: null,
             subscription: null,
             usage: {
               activeBundles: 0,

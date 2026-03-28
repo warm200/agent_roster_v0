@@ -9,6 +9,7 @@ import { resolveEstimatedInternalCostCents } from '@/lib/runtime-cost'
 
 import { createDb } from '../db'
 import {
+  adminRuntimeGrants,
   billingAlerts,
   creditLedger,
   launchAttempts,
@@ -77,13 +78,14 @@ export async function getAdminUsageSnapshot(input?: {
     const previous24hStart = new Date(now.getTime() - 2 * DAY_MS)
     const todayRowsStart = new Date(now.getTime() - DAY_MS)
 
-    const [userRows, orderRows, channelRows, subscriptionRows, ledgerRows, usageRows] = await Promise.all([
+    const [userRows, orderRows, channelRows, subscriptionRows, ledgerRows, usageRows, adminRuntimeGrantRows] = await Promise.all([
       db.select().from(users),
       db.select().from(orders),
       db.select().from(runChannelConfigs),
       db.select().from(userSubscriptions),
       db.select().from(creditLedger).orderBy(desc(creditLedger.createdAt)),
       db.select().from(runUsage).orderBy(desc(runUsage.createdAt)),
+      db.select().from(adminRuntimeGrants).orderBy(desc(adminRuntimeGrants.createdAt)),
     ])
     let runtimeInstanceRows: Array<typeof runtimeInstances.$inferSelect> | null = null
     let runtimeIntervalRows: Array<typeof runtimeIntervals.$inferSelect> | null = null
@@ -148,6 +150,7 @@ export async function getAdminUsageSnapshot(input?: {
     )
     const mismatchRows = buildMismatchRows(subscriptionRows, ledgerRows)
     const userDrilldownRows = buildUserRows({
+      adminRuntimeGrantRows,
       channelRows,
       ledgerRows,
       orderRows,

@@ -195,6 +195,28 @@ export default function BundleDetailPage({ params }: PageProps) {
   }, [refreshBundleData])
 
   useEffect(() => {
+    const handleRefresh = () => {
+      void refreshBundleData()
+    }
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        void refreshBundleData()
+      }
+    }
+
+    window.addEventListener('focus', handleRefresh)
+    window.addEventListener('subscription-updated', handleRefresh)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      window.removeEventListener('focus', handleRefresh)
+      window.removeEventListener('subscription-updated', handleRefresh)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [refreshBundleData])
+
+  useEffect(() => {
     if (
       !subscriptionSessionId ||
       isReconcilingPlan ||
@@ -342,11 +364,16 @@ export default function BundleDetailPage({ params }: PageProps) {
       version: item.agentVersion,
     })),
   )
+  const displayPlan = launchPolicy?.effectivePlan ?? launchPolicy?.plan ?? null
   const hasPlanBlockers = Boolean(launchPolicy && launchPolicy.blockers.length > 0)
-  const currentCredits = launchPolicy?.subscription?.remainingCredits ?? launchPolicy?.plan.includedCredits ?? 0
+  const currentCredits =
+    launchPolicy?.runtimeGrant?.creditsRemaining ??
+    launchPolicy?.availableCredits ??
+    displayPlan?.includedCredits ??
+    0
   const canTopUpCredits = Boolean(
     launchPolicy?.subscription &&
-      (launchPolicy.plan.id === 'run' || launchPolicy.plan.id === 'warm_standby'),
+      (displayPlan?.id === 'run' || displayPlan?.id === 'warm_standby'),
   )
   const stoppedWarmRun = orderRuns.find(
     (run) =>
@@ -361,7 +388,7 @@ export default function BundleDetailPage({ params }: PageProps) {
 
     trackLaunchIntent({
       orderId: order.id,
-      planId: launchPolicy?.plan.id ?? null,
+      planId: displayPlan?.id ?? launchPolicy?.plan.id ?? null,
       allowed: canSubmitLaunchRequest,
       blocker: launchPolicy?.blockers[0] ?? null,
     })
@@ -503,14 +530,15 @@ export default function BundleDetailPage({ params }: PageProps) {
           <CardContent className="flex flex-col gap-3 p-4 md:flex-row md:items-center md:justify-between">
             <div>
               <p className="text-sm font-medium text-foreground">
-                Current plan: {launchPolicy.plan.name}
+                Current plan: {displayPlan?.name ?? launchPolicy.plan.name}
+                {launchPolicy.runtimeGrant ? ' (grant)' : ''}
               </p>
               <p className="text-sm text-muted-foreground">
                 Credits {currentCredits}
                 {' · '}
-                Agents per bundle {formatAgentsPerBundleLabel(launchPolicy.plan.agentsPerBundle)}
+                Agents per bundle {formatAgentsPerBundleLabel((displayPlan ?? launchPolicy.plan).agentsPerBundle)}
                 {' · '}
-                Runtime mode {formatPlanTriggerMode(launchPolicy.plan.triggerMode)}
+                Runtime mode {formatPlanTriggerMode((displayPlan ?? launchPolicy.plan).triggerMode)}
               </p>
             </div>
             <div className="flex gap-2">
@@ -732,7 +760,7 @@ export default function BundleDetailPage({ params }: PageProps) {
       {launchPolicy ? (
         <CreditTopUpDialog
           currentCredits={currentCredits}
-          currentPlanId={launchPolicy.plan.id}
+          currentPlanId={(displayPlan ?? launchPolicy.plan).id}
           onOpenChange={setIsTopUpDialogOpen}
           open={isTopUpDialogOpen}
           returnPath={`/app/bundles/${orderId}`}

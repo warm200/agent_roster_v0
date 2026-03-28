@@ -765,7 +765,10 @@ test('run service resumes recoverable stopped runtime state from completed statu
           blockers: [
             'Resume or terminate the existing stopped Warm Standby run for this bundle instead of launching a new one.',
           ],
-          plan: { id: 'warm_standby' },
+          availableCredits: 0,
+          effectivePlan: getSubscriptionPlan('warm_standby'),
+          plan: getSubscriptionPlan('warm_standby'),
+          runtimeGrant: null,
           subscription: null,
           usage: {
             activeBundles: 0,
@@ -953,8 +956,11 @@ test('run service keeps a restarted warm standby run in restarting state when im
       ({
         getLaunchPolicy: async () => ({
           allowed: true,
+          availableCredits: 9,
           blockers: [],
+          effectivePlan: getSubscriptionPlan('warm_standby'),
           plan: getSubscriptionPlan('warm_standby'),
+          runtimeGrant: null,
           subscription: {
             id: 'sub-1',
             userId: completedRun.userId,
@@ -1199,8 +1205,11 @@ test('run service auto-wakes a single stopped warm standby run for an order', as
         },
         getLaunchPolicy: async () => ({
           allowed: true,
+          availableCredits: 0,
           blockers: [],
-          plan: { id: 'warm_standby' },
+          effectivePlan: getSubscriptionPlan('warm_standby'),
+          plan: getSubscriptionPlan('warm_standby'),
+          runtimeGrant: null,
           subscription: null,
           usage: {
             activeBundles: 0,

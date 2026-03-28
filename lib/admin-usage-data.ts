@@ -103,13 +103,23 @@ export type UserRunEvent = {
   terminationReason: string | null
 }
 
+export type AdminRuntimeGrantSummary = {
+  id: string
+  creditsTotal: number
+  remainingCredits: number
+  expiresAt: string
+  note: string | null
+  createdAt: string
+  updatedAt: string
+}
+
 export type AdminUserRecord = {
   id: string
   name: string
   email: string
   orderIds: string[]
   latestRunStatus: UserRunEvent['status'] | 'none'
-  currentPlan: 'run' | 'warm_standby' | 'always_on'
+  currentPlan: 'free' | 'run' | 'warm_standby' | 'always_on'
   health: AdminUserHealth
   remainingCredits: number
   currentPeriodEnd: string
@@ -129,6 +139,7 @@ export type AdminUserRecord = {
   }
   ledgerTimeline: LedgerEvent[]
   runTimeline: UserRunEvent[]
+  runtimeGrant: AdminRuntimeGrantSummary | null
   bundleReadiness: {
     purchasedBundles: number
     pairedBundles: number

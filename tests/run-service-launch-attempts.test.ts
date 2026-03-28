@@ -173,8 +173,11 @@ test('run service records a blocked launch attempt when launch policy rejects th
       ({
         getLaunchPolicy: async () => ({
           allowed: false,
+          availableCredits: 0,
           blockers: ['No credits remaining on the current subscription.'],
+          effectivePlan: getSubscriptionPlan('run'),
           plan: getSubscriptionPlan('run'),
+          runtimeGrant: null,
           subscription: {
             id: 'sub-1',
             userId: order.userId,
@@ -260,8 +263,11 @@ test('run service upgrades a reserved launch attempt to provider_accepted on suc
         commitReservedLaunchCredit: async () => null,
         getLaunchPolicy: async () => ({
           allowed: true,
+          availableCredits: 24,
           blockers: [],
+          effectivePlan: getSubscriptionPlan('warm_standby'),
           plan: getSubscriptionPlan('warm_standby'),
+          runtimeGrant: null,
           subscription: null,
           usage: {
             activeBundles: 0,
@@ -332,8 +338,11 @@ test('run service marks a reserved launch attempt as failed_before_accept when p
       ({
         getLaunchPolicy: async () => ({
           allowed: true,
+          availableCredits: 15,
           blockers: [],
+          effectivePlan: getSubscriptionPlan('run'),
           plan: getSubscriptionPlan('run'),
+          runtimeGrant: null,
           subscription: null,
           usage: {
             activeBundles: 0,

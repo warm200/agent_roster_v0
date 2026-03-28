@@ -3,6 +3,8 @@ import { and, asc, eq, gt, lte, sql } from 'drizzle-orm'
 
 import { getCreditTopUpExpiresAt, getCreditTopUpPack, listCreditTopUpPacks } from '@/lib/credit-topups'
 import {
+  adminRuntimeGrantSchema,
+  grantAdminRuntimeCreditsRequestSchema,
   launchPolicyCheckSchema,
   subscriptionPlanSchema,
   userSubscriptionSchema,
@@ -15,6 +17,7 @@ import {
   listSubscriptionPlans,
 } from '@/lib/subscription-plans'
 import type {
+  AdminRuntimeGrant,
   CreditTopUpPack,
   Order,
   LaunchPolicyCheck,
@@ -24,6 +27,7 @@ import type {
 
 import { createDb, type DbClient } from '../db'
 import {
+  adminRuntimeGrants,
   creditLedger,
   runUsage,
   runs,
@@ -43,6 +47,14 @@ type SubscriptionCheckoutSession = {
 type TopUpAllocation = {
   credits: number
   topUpId: string
+}
+
+type GrantFundingSource = 'subscription' | 'admin_runtime_grant'
+
+type LaunchCreditSource = {
+  availableCredits: number | null
+  fundingSource: GrantFundingSource | null
+  runtimeGrant: AdminRuntimeGrant | null
 }
 
 type MutationDb = Pick<DbClient, 'execute' | 'insert' | 'select' | 'update'>
@@ -173,6 +185,8 @@ export function isCountedActiveRun(run: {
 }
 
 export function buildLaunchPolicyCheck(input: {
+  availableCredits: number | null
+  effectivePlan: SubscriptionPlan
   order: Order
   plan: SubscriptionPlan
   runRows: Array<{
@@ -185,6 +199,7 @@ export function buildLaunchPolicyCheck(input: {
     usesRealWorkspace: boolean
     workspaceReleasedAt: string | null
   }>
+  runtimeGrant: AdminRuntimeGrant | null
   subscription: UserSubscription | null
 }) {
   const activeRuns = input.runRows.filter(isCountedActiveRun)
@@ -198,16 +213,16 @@ export function buildLaunchPolicyCheck(input: {
   )
   const blockers: string[] = []
 
-  if (!input.plan.runtimeAccess) {
+  if (!input.effectivePlan.runtimeAccess) {
     blockers.push(`${input.plan.name} does not include run launches.`)
   }
 
   if (
-    !isUnlimitedAgentsPerBundle(input.plan.agentsPerBundle) &&
-    input.order.items.length > input.plan.agentsPerBundle
+    !isUnlimitedAgentsPerBundle(input.effectivePlan.agentsPerBundle) &&
+    input.order.items.length > input.effectivePlan.agentsPerBundle
   ) {
     blockers.push(
-      `${input.plan.name} allows at most ${input.plan.agentsPerBundle} agent${input.plan.agentsPerBundle === 1 ? '' : 's'} per launched bundle.`,
+      `${input.plan.name} allows at most ${input.effectivePlan.agentsPerBundle} agent${input.effectivePlan.agentsPerBundle === 1 ? '' : 's'} per launched bundle.`,
     )
   }
 
@@ -215,18 +230,27 @@ export function buildLaunchPolicyCheck(input: {
     blockers.push('Stop your current live run before starting another one.')
   }
 
-  if (input.plan.id === 'warm_standby' && recoverableStoppedRun) {
+  if (input.effectivePlan.id === 'warm_standby' && recoverableStoppedRun) {
     blockers.push('Resume or terminate the existing stopped Warm Standby run for this bundle instead of launching a new one.')
   }
 
-  if (input.subscription && input.subscription.remainingCredits <= 0 && input.plan.includedCredits > 0) {
-    blockers.push('No credits remaining on the current subscription.')
+  if (
+    planConsumesLaunchCredits(input.effectivePlan.id) &&
+    (input.availableCredits ?? 0) <= 0 &&
+    input.effectivePlan.includedCredits > 0
+  ) {
+    blockers.push(
+      input.runtimeGrant ? 'No runtime grant credits remaining.' : 'No credits remaining on the current subscription.',
+    )
   }
 
   return launchPolicyCheckSchema.parse({
     allowed: blockers.length === 0,
+    availableCredits: input.availableCredits,
     blockers,
+    effectivePlan: input.effectivePlan,
     plan: input.plan,
+    runtimeGrant: input.runtimeGrant,
     subscription: input.subscription,
     usage: {
       activeBundles: activeBundleIds.size,
@@ -254,6 +278,22 @@ function toUserSubscription(record: typeof userSubscriptions.$inferSelect): User
     stripeCheckoutSessionId: record.stripeCheckoutSessionId,
     currentPeriodStart: record.currentPeriodStart?.toISOString() ?? null,
     currentPeriodEnd: record.currentPeriodEnd?.toISOString() ?? null,
+    createdAt: record.createdAt.toISOString(),
+    updatedAt: record.updatedAt.toISOString(),
+  })
+}
+
+function toAdminRuntimeGrant(record: typeof adminRuntimeGrants.$inferSelect): AdminRuntimeGrant {
+  return adminRuntimeGrantSchema.parse({
+    id: record.id,
+    userId: record.userId,
+    grantedByUserId: record.grantedByUserId,
+    creditsTotal: record.creditsTotal,
+    creditsRemaining: record.creditsRemaining,
+    expiresAt: record.expiresAt.toISOString(),
+    consumedAt: record.consumedAt?.toISOString() ?? null,
+    revokedAt: record.revokedAt?.toISOString() ?? null,
+    note: record.note ?? null,
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
   })
@@ -318,6 +358,14 @@ function parseTopUpAllocations(metadataJson: Record<string, unknown>) {
       } satisfies TopUpAllocation
     })
     .filter((entry): entry is TopUpAllocation => entry !== null)
+}
+
+function getGrantIdFromLedgerMetadata(metadataJson: Record<string, unknown>) {
+  return typeof metadataJson.grantId === 'string' ? metadataJson.grantId : null
+}
+
+function getLaunchCreditFundingSource(metadataJson: Record<string, unknown>): GrantFundingSource {
+  return metadataJson.fundingSource === 'admin_runtime_grant' ? 'admin_runtime_grant' : 'subscription'
 }
 
 function isMissingTopUpTableError(error: unknown) {
@@ -455,6 +503,107 @@ export class SubscriptionService {
 
   private async expireStaleTopUpCredits(userId: string) {
     return this.db.transaction((tx) => this.expireStaleTopUpCreditsInDb(tx, userId))
+  }
+
+  private async expireStaleAdminRuntimeGrantsInDb(db: MutationDb, userId: string) {
+    const now = new Date()
+    const expiredRows = await db
+      .select()
+      .from(adminRuntimeGrants)
+      .where(
+        and(
+          eq(adminRuntimeGrants.userId, userId),
+          gt(adminRuntimeGrants.creditsRemaining, 0),
+          lte(adminRuntimeGrants.expiresAt, now),
+          sql`${adminRuntimeGrants.revokedAt} is null`,
+        ),
+      )
+      .orderBy(asc(adminRuntimeGrants.expiresAt), asc(adminRuntimeGrants.createdAt))
+
+    for (const row of expiredRows) {
+      await db
+        .update(adminRuntimeGrants)
+        .set({
+          consumedAt: row.consumedAt ?? now,
+          creditsRemaining: 0,
+          updatedAt: now,
+        })
+        .where(eq(adminRuntimeGrants.id, row.id))
+
+      await db.insert(creditLedger).values({
+        id: crypto.randomUUID(),
+        userId,
+        subscriptionId: null,
+        orderId: null,
+        runId: null,
+        eventType: 'expire',
+        unitType: 'launch_credit',
+        deltaCredits: -row.creditsRemaining,
+        resultingBalance: 0,
+        status: 'committed',
+        reasonCode: 'admin_runtime_grant_expired',
+        idempotencyKey: `admin-runtime-grant-expire:${row.id}`,
+        metadataJson: {
+          expiresAt: row.expiresAt.toISOString(),
+          fundingSource: 'admin_runtime_grant',
+          grantId: row.id,
+        },
+      })
+    }
+
+    return expiredRows.length
+  }
+
+  private async expireStaleAdminRuntimeGrants(userId: string) {
+    return this.db.transaction((tx) => this.expireStaleAdminRuntimeGrantsInDb(tx, userId))
+  }
+
+  private async getCurrentAdminRuntimeGrant(userId: string) {
+    await this.expireStaleAdminRuntimeGrants(userId)
+
+    const [row] = await this.db
+      .select()
+      .from(adminRuntimeGrants)
+      .where(
+        and(
+          eq(adminRuntimeGrants.userId, userId),
+          gt(adminRuntimeGrants.creditsRemaining, 0),
+          gt(adminRuntimeGrants.expiresAt, new Date()),
+          sql`${adminRuntimeGrants.revokedAt} is null`,
+        ),
+      )
+      .orderBy(asc(adminRuntimeGrants.expiresAt), asc(adminRuntimeGrants.createdAt))
+      .limit(1)
+
+    return row ? toAdminRuntimeGrant(row) : null
+  }
+
+  private resolveLaunchCreditSource(input: {
+    plan: SubscriptionPlan
+    runtimeGrant: AdminRuntimeGrant | null
+    subscription: UserSubscription | null
+  }): LaunchCreditSource {
+    if (planConsumesLaunchCredits(input.plan.id)) {
+      if (input.runtimeGrant) {
+        return {
+          availableCredits: input.runtimeGrant.creditsRemaining,
+          fundingSource: 'admin_runtime_grant',
+          runtimeGrant: input.runtimeGrant,
+        }
+      }
+
+      return {
+        availableCredits: input.subscription?.remainingCredits ?? input.plan.includedCredits,
+        fundingSource: input.subscription ? 'subscription' : null,
+        runtimeGrant: null,
+      }
+    }
+
+    return {
+      availableCredits: input.subscription?.remainingCredits ?? null,
+      fundingSource: input.subscription ? 'subscription' : null,
+      runtimeGrant: input.runtimeGrant,
+    }
   }
 
   private async allocateTopUpCredits(db: MutationDb, userId: string, credits: number) {
@@ -711,10 +860,21 @@ export class SubscriptionService {
     })
   }
 
+  async getCurrentRuntimeGrant(userId: string) {
+    return this.getCurrentAdminRuntimeGrant(userId)
+  }
+
   async getLaunchPolicy(userId: string, order: Order): Promise<LaunchPolicyCheck> {
     await this.expireStaleTopUpCredits(userId)
     const subscription = await this.getCurrentSubscription(userId)
     const plan = subscription ? getSubscriptionPlan(subscription.planId) : getFreeSubscriptionPlan()
+    const runtimeGrant = !plan.runtimeAccess ? await this.getCurrentAdminRuntimeGrant(userId) : null
+    const effectivePlan = runtimeGrant ? getSubscriptionPlan('run') : plan
+    const creditSource = this.resolveLaunchCreditSource({
+      plan: effectivePlan,
+      runtimeGrant,
+      subscription,
+    })
     const runRows = await this.db
       .select({
         id: runs.id,
@@ -731,6 +891,8 @@ export class SubscriptionService {
       .leftJoin(runtimeInstances, eq(runtimeInstances.runId, runs.id))
       .where(eq(runs.userId, userId))
     return buildLaunchPolicyCheck({
+      availableCredits: creditSource.availableCredits,
+      effectivePlan,
       order,
       plan,
       runRows: runRows.map((run) => ({
@@ -740,6 +902,7 @@ export class SubscriptionService {
         runtimeState: run.runtimeState ?? null,
         workspaceReleasedAt: run.workspaceReleasedAt?.toISOString() ?? null,
       })),
+      runtimeGrant,
       subscription,
     })
   }
@@ -749,6 +912,7 @@ export class SubscriptionService {
     orderId: string
     plan: SubscriptionPlan
     runId: string
+    runtimeGrantId?: string | null
     subscriptionId: string | null
     userId: string
   }) {
@@ -761,6 +925,7 @@ export class SubscriptionService {
 
     return this.db.transaction(async (tx) => {
       await this.expireStaleTopUpCreditsInDb(tx, input.userId)
+      await this.expireStaleAdminRuntimeGrantsInDb(tx, input.userId)
 
       const existingRows = await tx
         .select()
@@ -774,6 +939,66 @@ export class SubscriptionService {
         return {
           alreadyReserved: true,
           subscriptionId: existing.subscriptionId,
+        }
+      }
+
+      if (input.runtimeGrantId) {
+        const lockedGrantRows = await tx.execute(sql`
+          select *
+          from admin_runtime_grants
+          where id = ${input.runtimeGrantId}
+          for update
+        `)
+        const grantRow = lockedGrantRows.rows[0] as Record<string, unknown> | undefined
+
+        if (!grantRow) {
+          throw new HttpError(409, 'No runtime grant credits remaining.')
+        }
+
+        const grantExpiresAt = grantRow.expires_at instanceof Date ? grantRow.expires_at : new Date(String(grantRow.expires_at))
+        if (
+          Number(grantRow.credits_remaining ?? 0) <= 0 ||
+          (grantRow.revoked_at && grantRow.revoked_at !== null) ||
+          grantExpiresAt <= new Date()
+        ) {
+          throw new HttpError(409, 'No runtime grant credits remaining.')
+        }
+
+        const nextBalance = Number(grantRow.credits_remaining) - 1
+        const now = new Date()
+
+        await tx
+          .update(adminRuntimeGrants)
+          .set({
+            consumedAt: nextBalance === 0 ? now : null,
+            creditsRemaining: nextBalance,
+            updatedAt: now,
+          })
+          .where(eq(adminRuntimeGrants.id, input.runtimeGrantId))
+
+        await tx.insert(creditLedger).values({
+          id: crypto.randomUUID(),
+          userId: input.userId,
+          subscriptionId: null,
+          orderId: input.orderId,
+          runId: null,
+          eventType: 'reserve',
+          unitType: 'launch_credit',
+          deltaCredits: -1,
+          resultingBalance: nextBalance,
+          status: 'pending',
+          reasonCode: 'launch_requested',
+          idempotencyKey,
+          metadataJson: {
+            fundingSource: 'admin_runtime_grant',
+            grantId: input.runtimeGrantId,
+            planId: input.plan.id,
+          },
+        })
+
+        return {
+          alreadyReserved: false,
+          subscriptionId: null,
         }
       }
 
@@ -861,6 +1086,8 @@ export class SubscriptionService {
         return null
       }
 
+      const fundingSource = getLaunchCreditFundingSource(reserve.metadataJson)
+
       await tx
         .update(creditLedger)
         .set({
@@ -881,7 +1108,7 @@ export class SubscriptionService {
       await tx.insert(creditLedger).values({
         id: crypto.randomUUID(),
         userId: input.userId,
-        subscriptionId: reserve.subscriptionId,
+        subscriptionId: fundingSource === 'subscription' ? reserve.subscriptionId : null,
         orderId: reserve.orderId,
         runId: input.runId,
         eventType: 'commit',
@@ -893,6 +1120,8 @@ export class SubscriptionService {
         idempotencyKey: getCommitIdempotencyKey(chargeKey),
         metadataJson: {
           chargeKey,
+          fundingSource,
+          grantId: getGrantIdFromLedgerMetadata(reserve.metadataJson),
           reserveLedgerId: reserve.id,
           planId: input.plan.id,
         },
@@ -940,51 +1169,83 @@ export class SubscriptionService {
       }
 
       const [runRow] = await tx.select({ id: runs.id }).from(runs).where(eq(runs.id, input.runId)).limit(1)
+      const fundingSource = getLaunchCreditFundingSource(reserve.metadataJson)
+      let nextBalance = (reserve.resultingBalance ?? 0) + 1
 
-      const locked = await tx.execute(sql`
-        select *
-        from user_subscriptions
-        where id = ${reserve.subscriptionId}
-        for update
-      `)
+      if (fundingSource === 'subscription') {
+        const locked = await tx.execute(sql`
+          select *
+          from user_subscriptions
+          where id = ${reserve.subscriptionId}
+          for update
+        `)
 
-      const subscription = toLockedSubscriptionRow(locked.rows[0] as Record<string, unknown> | undefined)
+        const subscription = toLockedSubscriptionRow(locked.rows[0] as Record<string, unknown> | undefined)
 
-      if (!subscription) {
-        return null
-      }
-
-      const nextBalance = subscription.remainingCredits + 1
-      const topUpAllocations = parseTopUpAllocations(reserve.metadataJson)
-
-      await tx
-        .update(userSubscriptions)
-        .set({
-          remainingCredits: nextBalance,
-          updatedAt: new Date(),
-        })
-        .where(eq(userSubscriptions.id, subscription.id))
-
-      for (const allocation of topUpAllocations) {
-        const [topUpRow] = await tx
-          .select()
-          .from(subscriptionCreditTopUps)
-          .where(eq(subscriptionCreditTopUps.id, allocation.topUpId))
-          .limit(1)
-
-        if (!topUpRow) {
-          continue
+        if (!subscription) {
+          return null
         }
 
-        const restoredRemaining = topUpRow.creditsRemaining + allocation.credits
+        nextBalance = subscription.remainingCredits + 1
+        const topUpAllocations = parseTopUpAllocations(reserve.metadataJson)
+
         await tx
-          .update(subscriptionCreditTopUps)
+          .update(userSubscriptions)
           .set({
-            creditsRemaining: restoredRemaining,
-            consumedAt: null,
+            remainingCredits: nextBalance,
             updatedAt: new Date(),
           })
-          .where(eq(subscriptionCreditTopUps.id, allocation.topUpId))
+          .where(eq(userSubscriptions.id, subscription.id))
+
+        for (const allocation of topUpAllocations) {
+          const [topUpRow] = await tx
+            .select()
+            .from(subscriptionCreditTopUps)
+            .where(eq(subscriptionCreditTopUps.id, allocation.topUpId))
+            .limit(1)
+
+          if (!topUpRow) {
+            continue
+          }
+
+          const restoredRemaining = topUpRow.creditsRemaining + allocation.credits
+          await tx
+            .update(subscriptionCreditTopUps)
+            .set({
+              creditsRemaining: restoredRemaining,
+              consumedAt: null,
+              updatedAt: new Date(),
+            })
+            .where(eq(subscriptionCreditTopUps.id, allocation.topUpId))
+        }
+      } else {
+        const grantId = getGrantIdFromLedgerMetadata(reserve.metadataJson)
+
+        if (!grantId) {
+          return null
+        }
+
+        const lockedGrantRows = await tx.execute(sql`
+          select *
+          from admin_runtime_grants
+          where id = ${grantId}
+          for update
+        `)
+        const grantRow = lockedGrantRows.rows[0] as Record<string, unknown> | undefined
+
+        if (!grantRow) {
+          return null
+        }
+
+        nextBalance = Number(grantRow.credits_remaining ?? 0) + 1
+        await tx
+          .update(adminRuntimeGrants)
+          .set({
+            consumedAt: null,
+            creditsRemaining: nextBalance,
+            updatedAt: new Date(),
+          })
+          .where(eq(adminRuntimeGrants.id, grantId))
       }
 
       await tx
@@ -997,7 +1258,7 @@ export class SubscriptionService {
       await tx.insert(creditLedger).values({
         id: crypto.randomUUID(),
         userId: input.userId,
-        subscriptionId: subscription.id,
+        subscriptionId: fundingSource === 'subscription' ? reserve.subscriptionId : null,
         orderId: reserve.orderId,
         runId: runRow ? input.runId : null,
         eventType: 'refund',
@@ -1009,12 +1270,123 @@ export class SubscriptionService {
         idempotencyKey: refundIdempotencyKey,
         metadataJson: {
           chargeKey,
+          fundingSource,
+          grantId: getGrantIdFromLedgerMetadata(reserve.metadataJson),
           reserveLedgerId: reserve.id,
           planId: input.plan.id,
         },
       })
 
       return null
+    })
+  }
+
+  async grantAdminRuntimeCredits(input: {
+    credits: number
+    expiresAt: string
+    grantedByUserId?: string | null
+    note?: string | null
+    userId: string
+  }) {
+    const parsed = grantAdminRuntimeCreditsRequestSchema.parse({
+      credits: input.credits,
+      expiresAt: input.expiresAt,
+      note: input.note ?? null,
+    })
+    const expiresAt = new Date(parsed.expiresAt)
+
+    if (expiresAt.getTime() <= Date.now()) {
+      throw new HttpError(400, 'Grant expiration must be in the future.')
+    }
+
+    return this.db.transaction(async (tx) => {
+      await this.expireStaleAdminRuntimeGrantsInDb(tx, input.userId)
+
+      const now = new Date()
+      const activeRows = await tx
+        .select()
+        .from(adminRuntimeGrants)
+        .where(
+          and(
+            eq(adminRuntimeGrants.userId, input.userId),
+            gt(adminRuntimeGrants.creditsRemaining, 0),
+            gt(adminRuntimeGrants.expiresAt, now),
+            sql`${adminRuntimeGrants.revokedAt} is null`,
+          ),
+        )
+
+      for (const row of activeRows) {
+        await tx
+          .update(adminRuntimeGrants)
+          .set({
+            consumedAt: row.consumedAt ?? now,
+            creditsRemaining: 0,
+            revokedAt: now,
+            updatedAt: now,
+          })
+          .where(eq(adminRuntimeGrants.id, row.id))
+
+        await tx.insert(creditLedger).values({
+          id: crypto.randomUUID(),
+          userId: input.userId,
+          subscriptionId: null,
+          orderId: null,
+          runId: null,
+          eventType: 'adjust',
+          unitType: 'launch_credit',
+          deltaCredits: -row.creditsRemaining,
+          resultingBalance: 0,
+          status: 'committed',
+          reasonCode: 'admin_runtime_grant_revoked',
+          idempotencyKey: `admin-runtime-grant-revoke:${row.id}:${now.getTime()}`,
+          metadataJson: {
+            fundingSource: 'admin_runtime_grant',
+            grantId: row.id,
+            note: row.note,
+          },
+        })
+      }
+
+      const [grantRow] = await tx
+        .insert(adminRuntimeGrants)
+        .values({
+          id: crypto.randomUUID(),
+          userId: input.userId,
+          grantedByUserId: input.grantedByUserId ?? null,
+          creditsTotal: parsed.credits,
+          creditsRemaining: parsed.credits,
+          expiresAt,
+          consumedAt: null,
+          revokedAt: null,
+          note: parsed.note ?? null,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .returning()
+
+      await tx.insert(creditLedger).values({
+        id: crypto.randomUUID(),
+        userId: input.userId,
+        subscriptionId: null,
+        orderId: null,
+        runId: null,
+        eventType: 'grant',
+        unitType: 'launch_credit',
+        deltaCredits: parsed.credits,
+        resultingBalance: parsed.credits,
+        status: 'committed',
+        reasonCode: 'admin_runtime_grant',
+        idempotencyKey: `admin-runtime-grant:${grantRow.id}`,
+        metadataJson: {
+          expiresAt: expiresAt.toISOString(),
+          fundingSource: 'admin_runtime_grant',
+          grantId: grantRow.id,
+          grantedByUserId: input.grantedByUserId ?? null,
+          note: parsed.note ?? null,
+        },
+      })
+
+      return toAdminRuntimeGrant(grantRow)
     })
   }
 
@@ -1362,7 +1734,9 @@ export type SubscriptionServiceLike = Pick<
   | 'createTopUpCheckoutSession'
   | 'commitReservedLaunchCredit'
   | 'refundReservedLaunchCredit'
+  | 'grantAdminRuntimeCredits'
   | 'getCurrentSubscription'
+  | 'getCurrentRuntimeGrant'
   | 'getLaunchPolicy'
   | 'handleStripeCheckoutCompletedSession'
   | 'handleStripeSubscriptionDeleted'

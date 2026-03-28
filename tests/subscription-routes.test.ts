@@ -81,6 +81,9 @@ function createSubscriptionServiceStub(
     async createTopUpCheckoutSession() {
       throw new Error('not implemented')
     },
+    async grantAdminRuntimeCredits() {
+      throw new Error('not implemented')
+    },
     async refundReservedLaunchCredit() {
       return null
     },
@@ -88,6 +91,9 @@ function createSubscriptionServiceStub(
       return null
     },
     async getCurrentSubscription() {
+      return null
+    },
+    async getCurrentRuntimeGrant() {
       return null
     },
     async getLaunchPolicy() {
@@ -138,8 +144,44 @@ test('me subscription route returns free plan when user has no active subscripti
   const payload = await response.json()
 
   assert.equal(response.status, 200)
+  assert.equal(payload.availableCredits, 0)
+  assert.equal(payload.effectivePlan.id, 'free')
   assert.equal(payload.plan.id, 'free')
+  assert.equal(payload.runtimeGrant, null)
   assert.equal(payload.subscription, null)
+})
+
+test('me subscription route exposes active admin runtime grant credits without changing the stored tier', async () => {
+  setRequestUserIdForTesting(() => 'user-1')
+  setSubscriptionServiceForTesting(createSubscriptionServiceStub({
+    async getCurrentSubscription() {
+      return null
+    },
+    async getCurrentRuntimeGrant() {
+      return {
+        id: 'grant-1',
+        userId: 'user-1',
+        grantedByUserId: 'admin-1',
+        creditsTotal: 3,
+        creditsRemaining: 2,
+        expiresAt: new Date(Date.now() + 86_400_000).toISOString(),
+        consumedAt: null,
+        revokedAt: null,
+        note: 'trial',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }
+    },
+  }))
+
+  const response = await getCurrentSubscription(new NextRequest('http://localhost/api/me/subscription'))
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(payload.plan.id, 'free')
+  assert.equal(payload.effectivePlan.id, 'run')
+  assert.equal(payload.availableCredits, 2)
+  assert.equal(payload.runtimeGrant?.id, 'grant-1')
 })
 
 test('launch policy route returns plan blockers for the selected order', async () => {
@@ -156,8 +198,11 @@ test('launch policy route returns plan blockers for the selected order', async (
     async getLaunchPolicy() {
       return {
         allowed: false,
+        availableCredits: 0,
         blockers: ['Run allows at most 3 agents per launched bundle.'],
+        effectivePlan: getSubscriptionPlan('run'),
         plan: getSubscriptionPlan('run'),
+        runtimeGrant: null,
         subscription: null,
         usage: {
           activeBundles: 0,

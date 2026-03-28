@@ -7,13 +7,16 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Badge } from '@/components/ui/badge'
 import { useAuth } from '@/lib/auth-context'
 import { getCurrentSubscription, createBillingPortalSession } from '@/services/subscription.api'
-import type { SubscriptionPlan, UserSubscription } from '@/lib/types'
+import type { AdminRuntimeGrant, SubscriptionPlan, UserSubscription } from '@/lib/types'
 import { CreditCard, ExternalLink, Settings } from 'lucide-react'
 
 export default function AccountPage() {
   const { session } = useAuth()
   const [plan, setPlan] = useState<SubscriptionPlan | null>(null)
+  const [effectivePlan, setEffectivePlan] = useState<SubscriptionPlan | null>(null)
   const [subscription, setSubscription] = useState<UserSubscription | null>(null)
+  const [runtimeGrant, setRuntimeGrant] = useState<AdminRuntimeGrant | null>(null)
+  const [availableCredits, setAvailableCredits] = useState<number | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [portalLoading, setPortalLoading] = useState(false)
 
@@ -24,7 +27,10 @@ export default function AccountPage() {
       try {
         const payload = await getCurrentSubscription()
         if (mounted) {
+          setAvailableCredits(payload.availableCredits)
+          setEffectivePlan(payload.effectivePlan)
           setPlan(payload.plan)
+          setRuntimeGrant(payload.runtimeGrant)
           setSubscription(payload.subscription)
         }
       } catch {
@@ -42,6 +48,7 @@ export default function AccountPage() {
   const userEmail = session?.user?.email || ''
   const hasStripeSubscription = subscription?.stripeSubscriptionId != null
   const isFree = !subscription || plan?.id === 'free'
+  const displayPlan = effectivePlan ?? plan
 
   async function handleManageSubscription() {
     setPortalLoading(true)
@@ -103,11 +110,17 @@ export default function AccountPage() {
               <div className="space-y-4">
                 <div className="flex items-center gap-3">
                   <div>
-                    <p className="text-xs text-muted-foreground">Current plan</p>
+                      <p className="text-xs text-muted-foreground">Current plan</p>
                     <div className="flex items-center gap-2 mt-1">
-                      <p className="text-sm font-medium text-foreground">{plan?.name ?? 'Free'}</p>
-                      <Badge variant="secondary">{plan?.priceLabel ?? '$0'}</Badge>
+                      <p className="text-sm font-medium text-foreground">{displayPlan?.name ?? 'Free'}</p>
+                      <Badge variant="secondary">{displayPlan?.priceLabel ?? '$0'}</Badge>
+                      {runtimeGrant ? <Badge variant="outline">Grant</Badge> : null}
                     </div>
+                    {runtimeGrant ? (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Temporary manual run access through {new Date(runtimeGrant.expiresAt).toLocaleDateString()}.
+                      </p>
+                    ) : null}
                   </div>
                 </div>
 
@@ -134,10 +147,10 @@ export default function AccountPage() {
                   </div>
                 )}
 
-                {subscription && (
+                {(subscription || runtimeGrant) && (
                   <div>
                     <p className="text-xs text-muted-foreground">Credits remaining</p>
-                    <p className="text-sm font-medium text-foreground mt-1">{subscription.remainingCredits}</p>
+                    <p className="mt-1 text-sm font-medium text-foreground">{availableCredits ?? 0}</p>
                   </div>
                 )}
 

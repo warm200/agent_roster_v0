@@ -25,6 +25,15 @@ read_when:
 * top-up credits expire `90 days` after purchase
 * top-up credits are consumed before the non-expiring subscription balance
 
+另外，内部运营现在还支持 **admin runtime grant**：
+
+* 不改变用户 `plan_id`
+* 只叠加 **manual run** 语义
+* 当前按 `Run` 语义生效：最多 `3` agents / bundle，1 次成功 launch = 1 credit
+* credit 存在独立表里，不并入 `user_subscriptions.remaining_credits`
+* 前端显示 credit 时，应读 `availableCredits` / `runtimeGrant.creditsRemaining`，不要只看 `subscription.remainingCredits`
+* 过期 / revoke / refund 也写 `credit_ledger`
+
 ---
 
 ## 2) Postgres schema
@@ -173,6 +182,36 @@ select
 from credit_ledger cl
 where cl.run_id is not null;
 ```
+
+### `admin_runtime_grants`
+
+给高意图用户发一次性或手动运营 credit，用来临时打开 runtime launch 能力，但不升 tier。
+
+```sql
+create table admin_runtime_grants (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references users(id),
+  granted_by_user_id uuid references users(id),
+
+  credits_total integer not null,
+  credits_remaining integer not null,
+
+  expires_at timestamptz not null,
+  consumed_at timestamptz,
+  revoked_at timestamptz,
+
+  note text,
+
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+```
+
+约束语义：
+
+* 不叠加 subscription tier
+* 只在当前 plan 没有 runtime access 时作为 overlay 生效
+* 当前 effective runtime policy 直接复用 `Run`
 
 ---
 

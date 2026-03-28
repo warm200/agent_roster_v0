@@ -46,7 +46,7 @@ export function Header() {
 
     try {
       const payload = await getCurrentSubscription()
-      setRemainingCredits(payload.subscription?.remainingCredits ?? payload.plan.includedCredits)
+      setRemainingCredits(payload.availableCredits)
     } catch {
       setRemainingCredits(null)
     }

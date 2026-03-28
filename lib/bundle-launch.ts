@@ -5,14 +5,14 @@ export function hasMonetizationLaunchBlocker(launchPolicy: LaunchPolicyCheck | n
     return false
   }
 
-  if (!launchPolicy.plan.runtimeAccess) {
+  if (!launchPolicy.effectivePlan.runtimeAccess) {
     return true
   }
 
   return Boolean(
-    launchPolicy.subscription &&
-      launchPolicy.plan.includedCredits > 0 &&
-      launchPolicy.subscription.remainingCredits <= 0,
+    (launchPolicy.effectivePlan.id === 'run' || launchPolicy.effectivePlan.id === 'warm_standby') &&
+      launchPolicy.effectivePlan.includedCredits > 0 &&
+      (launchPolicy.availableCredits ?? 0) <= 0,
   )
 }
 

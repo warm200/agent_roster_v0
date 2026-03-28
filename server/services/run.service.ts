@@ -676,8 +676,8 @@ export class RunService {
           source: 'launch_policy',
         },
         orderId,
-        planCodeSnapshot: launchPolicy.plan.id,
-        remainingCreditsSnapshot: launchPolicy.subscription?.remainingCredits ?? null,
+        planCodeSnapshot: launchPolicy.effectivePlan.id,
+        remainingCreditsSnapshot: launchPolicy.availableCredits,
         result: 'blocked',
         runId: null,
         userId,
@@ -702,8 +702,8 @@ export class RunService {
             source: 'ensure_launchable',
           },
           orderId,
-          planCodeSnapshot: launchPolicy.plan.id,
-          remainingCreditsSnapshot: launchPolicy.subscription?.remainingCredits ?? null,
+          planCodeSnapshot: launchPolicy.effectivePlan.id,
+          remainingCreditsSnapshot: launchPolicy.availableCredits,
           result: 'blocked',
           runId: null,
           userId,
@@ -716,11 +716,12 @@ export class RunService {
     const runId = `run-${Date.now()}`
     const launchAttemptId = `launch-attempt-${runId}`
     const pendingRun = buildPendingRun(order, runId, provider.name)
-    const lifecyclePolicy = getRuntimeLifecyclePolicy(launchPolicy.plan)
+    const lifecyclePolicy = getRuntimeLifecyclePolicy(launchPolicy.effectivePlan)
     await subscriptionService.reserveLaunchCredit?.({
       orderId,
-      plan: launchPolicy.plan,
+      plan: launchPolicy.effectivePlan,
       runId,
+      runtimeGrantId: launchPolicy.runtimeGrant?.id ?? null,
       subscriptionId: launchPolicy.subscription?.id ?? null,
       userId,
     })
@@ -733,8 +734,8 @@ export class RunService {
         source: 'create_run',
       },
       orderId,
-      planCodeSnapshot: launchPolicy.plan.id,
-      remainingCreditsSnapshot: launchPolicy.subscription?.remainingCredits ?? null,
+      planCodeSnapshot: launchPolicy.effectivePlan.id,
+      remainingCreditsSnapshot: launchPolicy.availableCredits,
       result: 'reserved',
       runId,
       userId,
@@ -746,7 +747,7 @@ export class RunService {
       if ('createProvisioningRun' in this.repository && typeof this.repository.createProvisioningRun === 'function') {
         const created = await this.repository.createProvisioningRun(
           pendingRun,
-          buildRunUsage(pendingRun, order, launchPolicy.plan),
+          buildRunUsage(pendingRun, order, launchPolicy.effectivePlan),
         )
         createdRun = created.run
       } else {
@@ -754,7 +755,7 @@ export class RunService {
       }
     } catch (error) {
       await subscriptionService.refundReservedLaunchCredit?.({
-        plan: launchPolicy.plan,
+        plan: launchPolicy.effectivePlan,
         reasonCode: 'run_row_create_failed',
         runId,
         userId,
@@ -775,7 +776,7 @@ export class RunService {
           .createRuntimeInstance({
             lifecyclePolicy,
             order,
-            planId: launchPolicy.plan.id,
+            planId: launchPolicy.effectivePlan.id,
             runId,
             runtimeConfig: {
               providerApiKeys,
@@ -790,7 +791,7 @@ export class RunService {
               })
             } else {
               await this.createRuntimeRecordSafe(
-                buildRuntimeInstanceRecord(order, launchPolicy.plan, runtimeInstance),
+                buildRuntimeInstanceRecord(order, launchPolicy.effectivePlan, runtimeInstance),
               )
             }
             return provider.getStatus(runId)
@@ -806,7 +807,7 @@ export class RunService {
         }
         await this.releaseTelegramWebhookToRuntimePolling(order)
         await subscriptionService.commitReservedLaunchCredit?.({
-          plan: launchPolicy.plan,
+          plan: launchPolicy.effectivePlan,
           runId,
           userId,
         })
@@ -845,7 +846,7 @@ export class RunService {
             : 'Managed runtime provisioning failed.'
 
         await subscriptionService.refundReservedLaunchCredit?.({
-          plan: launchPolicy.plan,
+          plan: launchPolicy.effectivePlan,
           reasonCode:
             message.toLowerCase().includes('timeout') ? 'provisioning_timeout' : 'provider_not_accepted',
           runId,
@@ -861,7 +862,7 @@ export class RunService {
         await this.repository.updateRunUsage?.(runId, {
           completedAt: failedAt,
           statusSnapshot: 'failed',
-          terminationReason: getProvisioningFailureReason(launchPolicy.plan.id),
+          terminationReason: getProvisioningFailureReason(launchPolicy.effectivePlan.id),
           updatedAt: failedAt,
           workspaceReleasedAt: failedAt,
         })
@@ -1158,8 +1159,9 @@ export class RunService {
       await subscriptionService.reserveLaunchCredit?.({
         chargeKey,
         orderId: order.id,
-        plan: launchPolicy.plan,
+        plan: launchPolicy.effectivePlan,
         runId: run.id,
+        runtimeGrantId: launchPolicy.runtimeGrant?.id ?? null,
         subscriptionId: launchPolicy.subscription?.id ?? null,
         userId,
       })
@@ -1171,7 +1173,7 @@ export class RunService {
           const runtime = await provider.restartRuntimeInstance(
             run.id,
             order,
-            getRuntimeLifecyclePolicy(launchPolicy.plan),
+            getRuntimeLifecyclePolicy(launchPolicy.effectivePlan),
             {
               providerApiKeys,
             },
@@ -1238,7 +1240,7 @@ export class RunService {
       } catch (error) {
         await subscriptionService.refundReservedLaunchCredit?.({
           chargeKey,
-          plan: launchPolicy.plan,
+          plan: launchPolicy.effectivePlan,
           reasonCode: 'restart_provider_error',
           runId: run.id,
           userId,
@@ -1254,7 +1256,7 @@ export class RunService {
       if (!restarted) {
         await subscriptionService.refundReservedLaunchCredit?.({
           chargeKey,
-          plan: launchPolicy.plan,
+          plan: launchPolicy.effectivePlan,
           reasonCode: 'restart_provider_rejected',
           runId: run.id,
           userId,
@@ -1269,7 +1271,7 @@ export class RunService {
 
       await subscriptionService.commitReservedLaunchCredit?.({
         chargeKey,
-        plan: launchPolicy.plan,
+        plan: launchPolicy.effectivePlan,
         runId: run.id,
         userId,
       })
