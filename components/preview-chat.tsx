@@ -333,7 +333,9 @@ export function PreviewChat({ agent, userAvatarUrl, userName }: PreviewChatProps
               <Avatar
                 className={cn(
                   'h-8 w-8 shrink-0 border',
-                  msg.role === 'user' ? 'border-foreground/20' : 'border-border/70 bg-secondary'
+                  msg.role === 'user'
+                    ? 'border-foreground/20'
+                    : 'rounded-lg border-border/70 bg-secondary'
                 )}
               >
                 {msg.role === 'user' ? (
@@ -345,8 +347,12 @@ export function PreviewChat({ agent, userAvatarUrl, userName }: PreviewChatProps
                   </>
                 ) : (
                   <>
-                    <AvatarImage alt={agent.title} src={agent.thumbnailUrl ?? undefined} />
-                    <AvatarFallback className="bg-secondary text-foreground">
+                    <AvatarImage
+                      alt={agent.title}
+                      className="object-contain"
+                      src={agent.thumbnailUrl ?? undefined}
+                    />
+                    <AvatarFallback className="rounded-lg bg-secondary text-foreground">
                       <Bot className="h-4 w-4" />
                     </AvatarFallback>
                   </>
@@ -366,9 +372,13 @@ export function PreviewChat({ agent, userAvatarUrl, userName }: PreviewChatProps
           ))}
           {isTyping && (
             <div className="flex gap-3">
-              <Avatar className="h-8 w-8 border border-border/70 bg-secondary">
-                <AvatarImage alt={agent.title} src={agent.thumbnailUrl ?? undefined} />
-                <AvatarFallback className="bg-secondary text-foreground">
+              <Avatar className="h-8 w-8 rounded-lg border border-border/70 bg-secondary">
+                <AvatarImage
+                  alt={agent.title}
+                  className="object-contain"
+                  src={agent.thumbnailUrl ?? undefined}
+                />
+                <AvatarFallback className="rounded-lg bg-secondary text-foreground">
                   <Bot className="h-4 w-4" />
                 </AvatarFallback>
               </Avatar>
