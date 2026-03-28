@@ -27,6 +27,7 @@ export function Header() {
   const pathname = usePathname()
   const { items } = useCart()
   const { isAuthenticated, session, signOut, status } = useAuth()
+  const [hasMounted, setHasMounted] = useState(false)
   const [remainingCredits, setRemainingCredits] = useState<number | null>(null)
   const cartCount = items.length
   const userName = session?.user?.name || 'Account'
@@ -51,6 +52,10 @@ export function Header() {
       setRemainingCredits(null)
     }
   }, [isAuthenticated])
+
+  useEffect(() => {
+    setHasMounted(true)
+  }, [])
 
   useEffect(() => {
     void loadSubscription()
@@ -151,69 +156,75 @@ export function Header() {
             )}
 
             {/* Mobile menu */}
-            <Sheet>
-              <SheetTrigger asChild>
-                <Button variant="ghost" size="icon" className="md:hidden">
-                  <Menu className="w-5 h-5" />
-                </Button>
-              </SheetTrigger>
-              <SheetContent side="right" className="w-72">
-                <nav className="flex flex-col gap-2 mt-8">
-                  {navLinks.map((link) => (
-                    <Link
-                      key={link.href}
-                      href={link.href}
-                      className={cn(
-                        'px-4 py-3 text-sm rounded-md transition-colors',
-                        pathname === link.href || pathname.startsWith(link.href + '/')
-                          ? 'bg-secondary text-foreground'
-                          : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50'
-                      )}
-                    >
-                      {link.label}
-                    </Link>
-                  ))}
-                  {isAuthenticated ? (
-                    <div className="mt-4 rounded-lg border border-border bg-secondary/30 p-4">
-                      <div className="flex items-center gap-3">
-                        <Avatar className="h-9 w-9">
-                          <AvatarImage alt={userName} src={session?.user?.image ?? undefined} />
-                          <AvatarFallback>{initials || 'AR'}</AvatarFallback>
-                        </Avatar>
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-medium">{userName}</p>
-                          {userEmail ? (
-                            <p className="truncate text-xs text-muted-foreground">{userEmail}</p>
-                          ) : null}
-                          {remainingCredits !== null ? (
-                            <p className="truncate text-xs text-muted-foreground">{remainingCredits} credits</p>
-                          ) : null}
+            {hasMounted ? (
+              <Sheet>
+                <SheetTrigger asChild>
+                  <Button variant="ghost" size="icon" className="md:hidden">
+                    <Menu className="w-5 h-5" />
+                  </Button>
+                </SheetTrigger>
+                <SheetContent side="right" className="w-72">
+                  <nav className="flex flex-col gap-2 mt-8">
+                    {navLinks.map((link) => (
+                      <Link
+                        key={link.href}
+                        href={link.href}
+                        className={cn(
+                          'px-4 py-3 text-sm rounded-md transition-colors',
+                          pathname === link.href || pathname.startsWith(link.href + '/')
+                            ? 'bg-secondary text-foreground'
+                            : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50'
+                        )}
+                      >
+                        {link.label}
+                      </Link>
+                    ))}
+                    {isAuthenticated ? (
+                      <div className="mt-4 rounded-lg border border-border bg-secondary/30 p-4">
+                        <div className="flex items-center gap-3">
+                          <Avatar className="h-9 w-9">
+                            <AvatarImage alt={userName} src={session?.user?.image ?? undefined} />
+                            <AvatarFallback>{initials || 'AR'}</AvatarFallback>
+                          </Avatar>
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-medium">{userName}</p>
+                            {userEmail ? (
+                              <p className="truncate text-xs text-muted-foreground">{userEmail}</p>
+                            ) : null}
+                            {remainingCredits !== null ? (
+                              <p className="truncate text-xs text-muted-foreground">{remainingCredits} credits</p>
+                            ) : null}
+                          </div>
+                        </div>
+                        <div className="mt-3 grid gap-2">
+                          <Link
+                            href="/app"
+                            className="px-4 py-3 text-sm rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary/50"
+                          >
+                            Account
+                          </Link>
+                          <Button onClick={() => void signOut()} variant="outline">
+                            <LogOut className="mr-2 h-4 w-4" />
+                            Sign Out
+                          </Button>
                         </div>
                       </div>
-                      <div className="mt-3 grid gap-2">
-                        <Link
-                          href="/app"
-                          className="px-4 py-3 text-sm rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary/50"
-                        >
-                          Account
-                        </Link>
-                        <Button onClick={() => void signOut()} variant="outline">
-                          <LogOut className="mr-2 h-4 w-4" />
-                          Sign Out
-                        </Button>
-                      </div>
-                    </div>
-                  ) : (
-                    <Link
-                      href="/login"
-                      className="px-4 py-3 text-sm rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary/50"
-                    >
-                      Sign In
-                    </Link>
-                  )}
-                </nav>
-              </SheetContent>
-            </Sheet>
+                    ) : (
+                      <Link
+                        href="/login"
+                        className="px-4 py-3 text-sm rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary/50"
+                      >
+                        Sign In
+                      </Link>
+                    )}
+                  </nav>
+                </SheetContent>
+              </Sheet>
+            ) : (
+              <Button aria-hidden="true" className="md:hidden" size="icon" tabIndex={-1} variant="ghost">
+                <Menu className="w-5 h-5" />
+              </Button>
+            )}
           </div>
         </div>
       </div>
