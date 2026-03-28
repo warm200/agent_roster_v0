@@ -45,6 +45,12 @@ type SetupAgentOption = {
   version: string
 }
 
+type ModelPreset = {
+  helper: string
+  label: string
+  value: string
+}
+
 const DEFAULT_PROVIDER_KEY_STATUS: AgentSetup['providerKeyStatus'] = {
   anthropic: false,
   google: false,
@@ -79,6 +85,29 @@ const PROVIDER_PLACEHOLDERS: Record<AgentProviderKeyName, string> = {
   openai: 'sk-proj-...',
   openrouter: 'sk-or-...',
 }
+
+const MODEL_PRESETS: ModelPreset[] = [
+  {
+    label: 'Claude Sonnet 4.5',
+    value: 'anthropic/claude-sonnet-4-5',
+    helper: 'Anthropic',
+  },
+  {
+    label: 'GPT-5 mini',
+    value: 'openai/gpt-5-mini',
+    helper: 'OpenAI',
+  },
+  {
+    label: 'Gemini 2.5 Flash',
+    value: 'google/gemini-2.5-flash',
+    helper: 'Google',
+  },
+  {
+    label: 'Claude Sonnet 4.6',
+    value: 'openrouter/anthropic/claude-sonnet-4-6',
+    helper: 'OpenRouter',
+  },
+]
 
 function buildDefaultAgentSetup(defaultAgentSlug: string | null): AgentSetup {
   return {
@@ -140,6 +169,24 @@ export function AgentSetupCard(props: {
     () => availableAgents.find((agent) => agent.slug === form.defaultAgentSlug) ?? availableAgents[0] ?? null,
     [availableAgents, form.defaultAgentSlug],
   )
+
+  const appendFallbackModel = (modelRef: string) => {
+    setForm((current) => {
+      const existing = current.modelFallbacks
+        .split(',')
+        .map((value) => value.trim())
+        .filter(Boolean)
+
+      if (existing.includes(modelRef)) {
+        return current
+      }
+
+      return {
+        ...current,
+        modelFallbacks: [...existing, modelRef].join(', '),
+      }
+    })
+  }
 
   const handleSave = async () => {
     setIsSaving(true)
@@ -299,6 +346,24 @@ export function AgentSetupCard(props: {
               onChange={(event) => setForm((current) => ({ ...current, modelPrimary: event.target.value }))}
               placeholder={DEFAULT_AGENT_SETUP_MODEL_PRIMARY}
             />
+            <p className="text-xs text-muted-foreground">
+              OpenRouter refs use <code className="rounded bg-muted px-1 py-0.5 text-[11px] text-foreground">openrouter/provider/model</code>.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {MODEL_PRESETS.map((preset) => (
+                <Button
+                  key={preset.value}
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-auto min-h-9 px-3 py-2 text-left"
+                  onClick={() => setForm((current) => ({ ...current, modelPrimary: preset.value }))}
+                >
+                  <span className="block text-xs font-medium">{preset.label}</span>
+                  <span className="block text-[11px] text-muted-foreground">{preset.helper}</span>
+                </Button>
+              ))}
+            </div>
           </div>
 
           <div className="space-y-2">
@@ -323,10 +388,25 @@ export function AgentSetupCard(props: {
               onChange={(event) => setForm((current) => ({ ...current, modelFallbacks: event.target.value }))}
               placeholder={DEFAULT_AGENT_SETUP_MODEL_FALLBACKS.join(', ')}
             />
-          <p className="text-xs text-muted-foreground">
+            <div className="flex flex-wrap gap-2">
+              {MODEL_PRESETS.map((preset) => (
+                <Button
+                  key={`fallback-${preset.value}`}
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-auto min-h-9 px-3 py-2 text-left"
+                  onClick={() => appendFallbackModel(preset.value)}
+                >
+                  <span className="block text-xs font-medium">Add {preset.label}</span>
+                  <span className="block text-[11px] text-muted-foreground">{preset.helper}</span>
+                </Button>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">
               Comma-separated values write to OpenClaw `agents.defaults.model.fallbacks`.
-          </p>
-        </div>
+            </p>
+          </div>
         </div>
 
         <div className="space-y-3 rounded-xl border border-border/70 bg-muted/20 p-4">

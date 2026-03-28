@@ -54,7 +54,7 @@ Implemented in the current mock app:
 - Daytona multi-agent runs now also enable OpenClaw cross-agent routing by setting `tools.agentToAgent.enabled=true` with a purchased-agent allowlist, and by allowlisting the same purchased agent ids under each agent’s `subagents.allowAgents`
 - Bundle detail agent setup now lets users choose which purchased agent is OpenClaw’s default inbound agent instead of hardcoding the first item forever
 - Bundle detail agent setup now accepts masked BYOK provider keys for Anthropic, OpenAI, OpenRouter, and Google Gemini; keys are stored encrypted server-side, only “saved/not set” state is returned to the UI, and Daytona injects them into OpenClaw `env` at launch/restart
-- Bundle detail model fields now link directly to the OpenClaw model-provider docs and show the expected `provider/model` format inline next to the label
+- Bundle detail model fields now link directly to the OpenClaw model-provider docs, show the expected `provider/model` format inline, and expose quick-pick presets including OpenRouter refs like `openrouter/anthropic/claude-sonnet-4-6`
 - Deleted Daytona sandboxes now degrade to stale run records instead of breaking bundle/run pages
 - Bundle detail now loads order data independently from runs/download grants, so provider-side run failures no longer masquerade as “bundle not found”
 - Run detail timeline now visually reflects created/started/updated/completed state instead of rendering every row as the same muted style
