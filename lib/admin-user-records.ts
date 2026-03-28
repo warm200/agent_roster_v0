@@ -34,6 +34,7 @@ export const adminUserRecords: AdminUserRecord[] = [
       { id: 'run-4418', status: 'running', providerAcceptedAt: '2026-03-15T12:17:00-04:00', workspaceMinutes: 98, terminationReason: null },
       { id: 'run-4398', status: 'completed', providerAcceptedAt: '2026-03-14T09:22:00-04:00', workspaceMinutes: 246, terminationReason: 'completed' },
     ],
+    previewTimeline: [],
     runtimeGrant: null,
     bundleReadiness: { purchasedBundles: 5, pairedBundles: 5, blockedBundles: 0 },
   },
@@ -69,6 +70,7 @@ export const adminUserRecords: AdminUserRecord[] = [
       { id: 'run-4412', status: 'failed', providerAcceptedAt: null, workspaceMinutes: null, terminationReason: 'telegram_not_ready' },
       { id: 'run-4386', status: 'completed', providerAcceptedAt: '2026-03-13T16:02:00-04:00', workspaceMinutes: 52, terminationReason: 'completed' },
     ],
+    previewTimeline: [],
     runtimeGrant: null,
     bundleReadiness: { purchasedBundles: 4, pairedBundles: 2, blockedBundles: 2 },
   },
@@ -103,6 +105,7 @@ export const adminUserRecords: AdminUserRecord[] = [
     runTimeline: [
       { id: 'run-4415', status: 'completed', providerAcceptedAt: '2026-03-15T11:07:00-04:00', workspaceMinutes: 21, terminationReason: 'completed' },
     ],
+    previewTimeline: [],
     runtimeGrant: null,
     bundleReadiness: { purchasedBundles: 2, pairedBundles: 2, blockedBundles: 0 },
   },
@@ -137,6 +140,7 @@ export const adminUserRecords: AdminUserRecord[] = [
     runTimeline: [
       { id: 'run-4409', status: 'running', providerAcceptedAt: '2026-03-15T10:34:00-04:00', workspaceMinutes: 37, terminationReason: null },
     ],
+    previewTimeline: [],
     runtimeGrant: null,
     bundleReadiness: { purchasedBundles: 6, pairedBundles: 6, blockedBundles: 0 },
   },
@@ -171,6 +175,7 @@ export const adminUserRecords: AdminUserRecord[] = [
     runTimeline: [
       { id: 'run-4396', status: 'completed', providerAcceptedAt: '2026-03-14T19:43:00-04:00', workspaceMinutes: 18, terminationReason: 'completed' },
     ],
+    previewTimeline: [],
     runtimeGrant: null,
     bundleReadiness: { purchasedBundles: 3, pairedBundles: 3, blockedBundles: 0 },
   },

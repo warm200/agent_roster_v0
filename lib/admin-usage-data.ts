@@ -113,6 +113,15 @@ export type AdminRuntimeGrantSummary = {
   updatedAt: string
 }
 
+export type AdminPreviewChatEvent = {
+  id: string
+  agentSlug: string
+  latestUserMessage: string
+  reply: string
+  messageCount: number
+  createdAt: string
+}
+
 export type AdminUserRecord = {
   id: string
   name: string
@@ -139,6 +148,7 @@ export type AdminUserRecord = {
   }
   ledgerTimeline: LedgerEvent[]
   runTimeline: UserRunEvent[]
+  previewTimeline: AdminPreviewChatEvent[]
   runtimeGrant: AdminRuntimeGrantSummary | null
   bundleReadiness: {
     purchasedBundles: number

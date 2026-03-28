@@ -272,6 +272,18 @@ export interface PreviewMessage {
   content: string
 }
 
+export interface PreviewChatInteraction {
+  id: string
+  userId: string
+  agentId: string
+  agentSlug: string
+  latestUserMessage: string
+  messageCount: number
+  messages: PreviewMessage[]
+  reply: string
+  createdAt: string
+}
+
 // User
 export interface User {
   id: string

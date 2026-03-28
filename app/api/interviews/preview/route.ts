@@ -35,7 +35,7 @@ async function resolveAgentSlug(agentId?: string, slug?: string) {
 
 export async function POST(request: NextRequest) {
   try {
-    await getAuthenticatedRequestUserId(request)
+    const userId = await getAuthenticatedRequestUserId(request)
 
     const body = await request.json().catch(() => null)
     const parsed = previewInterviewRequestSchema.safeParse(body)
@@ -52,6 +52,7 @@ export async function POST(request: NextRequest) {
     const preview = await catalogService.previewInterview({
       agentSlug,
       messages: parsed.data.messages,
+      userId,
     })
 
     return NextResponse.json(preview)

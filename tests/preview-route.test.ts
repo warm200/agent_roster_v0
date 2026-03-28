@@ -61,6 +61,7 @@ afterEach(() => {
 test('preview route returns service-backed reply', async () => {
   let receivedSlug = ''
   let receivedMessages = 0
+  let receivedUserId = ''
 
   const stubService: CatalogService = {
     async getAgentBySlug(slug) {
@@ -72,6 +73,7 @@ test('preview route returns service-backed reply', async () => {
     async previewInterview(input) {
       receivedSlug = input.agentSlug
       receivedMessages = input.messages.length
+      receivedUserId = input.userId
       return { reply: 'Preview reply from service' }
     },
   }
@@ -94,6 +96,7 @@ test('preview route returns service-backed reply', async () => {
   assert.equal(payload.reply, 'Preview reply from service')
   assert.equal(receivedSlug, 'ops-agent')
   assert.equal(receivedMessages, 1)
+  assert.equal(receivedUserId, 'user-test-1')
 })
 
 test('preview route requires an authenticated user', async () => {

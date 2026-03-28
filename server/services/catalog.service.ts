@@ -4,7 +4,7 @@ import { agentSchema } from '@/lib/schemas'
 import type { Agent, AgentCategory, PreviewMessage, RiskLevel } from '@/lib/types'
 
 import { createDb, type DbClient } from '../db'
-import { agents, agentVersions, riskProfiles } from '../db/schema'
+import { agents, agentVersions, previewChatInteractions, riskProfiles } from '../db/schema'
 import { HttpError } from '../lib/http'
 import { buildFallbackAgentRiskReview, loadAgentRiskReviewMap } from './agent-risk-reports'
 import {
@@ -20,6 +20,7 @@ type RiskProfileRow = typeof riskProfiles.$inferSelect
 type PreviewInterviewInput = {
   agentSlug: string
   messages: PreviewMessage[]
+  userId: string
 }
 
 type CatalogFilters = {
@@ -46,6 +47,14 @@ type CatalogServiceDeps = {
   ) => Promise<string>
   getAgentRecordBySlug: (slug: string) => Promise<DbAgentRecord | null>
   listAgentRecords: (filters: CatalogFilters) => Promise<DbAgentRecord[]>
+  recordPreviewInteraction?: (input: {
+    agentId: string
+    agentSlug: string
+    latestUserMessage: string
+    messages: PreviewMessage[]
+    reply: string
+    userId: string
+  }) => Promise<void>
 }
 
 type PreviewResponsesMessage = {
@@ -181,6 +190,23 @@ export function createCatalogService(
         input.messages,
       )
 
+      const latestUserMessage = [...input.messages]
+        .reverse()
+        .find((message) => message.role === 'user')
+        ?.content
+        .trim()
+
+      if (latestUserMessage) {
+        await deps.recordPreviewInteraction?.({
+          agentId: agent.id,
+          agentSlug: agent.slug,
+          latestUserMessage,
+          messages: input.messages,
+          reply: reply.trim(),
+          userId: input.userId,
+        })
+      }
+
       return { reply: reply.trim() }
     },
   }
@@ -231,6 +257,20 @@ function createDefaultCatalogServiceDeps(): CatalogServiceDeps {
 
       const [record] = await hydrateAgentRecords([agentRow])
       return record ?? null
+    },
+
+    async recordPreviewInteraction(input) {
+      const db = getDb()
+      await db.insert(previewChatInteractions).values({
+        id: crypto.randomUUID(),
+        userId: input.userId,
+        agentId: input.agentId,
+        agentSlug: input.agentSlug,
+        latestUserMessage: input.latestUserMessage,
+        messageCount: input.messages.length,
+        messagesJson: input.messages,
+        reply: input.reply,
+      })
     },
 
     generatePreviewReply: defaultGeneratePreviewReply,

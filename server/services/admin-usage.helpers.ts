@@ -20,6 +20,7 @@ import {
   adminRuntimeGrants,
   creditLedger,
   orders,
+  previewChatInteractions,
   runChannelConfigs,
   runUsage,
   userSubscriptions,
@@ -400,6 +401,7 @@ export function buildUserRows(input: {
   channelRows: Array<typeof runChannelConfigs.$inferSelect>
   ledgerRows: Array<typeof creditLedger.$inferSelect>
   orderRows: Array<typeof orders.$inferSelect>
+  previewInteractionRows: Array<typeof previewChatInteractions.$inferSelect>
   subscriptionRows: Array<typeof userSubscriptions.$inferSelect>
   usageRows: Array<typeof runUsage.$inferSelect>
   userRows: Array<typeof users.$inferSelect>
@@ -410,6 +412,7 @@ export function buildUserRows(input: {
   const ordersByUser = new Map<string, Array<typeof orders.$inferSelect>>()
   const usageByUser = new Map<string, Array<typeof runUsage.$inferSelect>>()
   const ledgerByUser = new Map<string, Array<typeof creditLedger.$inferSelect>>()
+  const previewByUser = new Map<string, Array<typeof previewChatInteractions.$inferSelect>>()
   const subscriptionByUser = new Map(input.subscriptionRows.map((row) => [row.userId, row]))
   const now = new Date()
   const activeGrantByUser = new Map(
@@ -438,6 +441,12 @@ export function buildUserRows(input: {
     ledgerByUser.set(ledger.userId, rows)
   }
 
+  for (const preview of input.previewInteractionRows) {
+    const rows = previewByUser.get(preview.userId) ?? []
+    rows.push(preview)
+    previewByUser.set(preview.userId, rows)
+  }
+
   const userIds = new Set<string>([
     ...userMap.keys(),
     ...ordersByUser.keys(),
@@ -454,6 +463,9 @@ export function buildUserRows(input: {
       const paidOrders = (ordersByUser.get(userId) ?? []).filter((order) => order.status === 'paid')
       const userUsage = (usageByUser.get(userId) ?? []).sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
       const userLedger = (ledgerByUser.get(userId) ?? []).sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
+      const userPreview = (previewByUser.get(userId) ?? []).sort(
+        (left, right) => right.createdAt.getTime() - left.createdAt.getTime(),
+      )
       const periodStart = subscription?.currentPeriodStart ?? new Date(now.getTime() - WINDOW_DAYS * DAY_MS)
       const usageThisPeriod = userUsage.filter((row) => row.createdAt >= input.windowStart && row.createdAt < input.windowEnd)
       const launchesThisPeriod = usageThisPeriod.length
@@ -510,6 +522,14 @@ export function buildUserRows(input: {
         name: user?.name ?? userId,
         orderIds: paidOrders.map((order) => order.id),
         pairingReady,
+        previewTimeline: userPreview.slice(0, 20).map((row) => ({
+          agentSlug: row.agentSlug,
+          createdAt: row.createdAt.toISOString(),
+          id: row.id,
+          latestUserMessage: row.latestUserMessage,
+          messageCount: row.messageCount,
+          reply: row.reply,
+        })),
         remainingCredits,
         runTimeline: userUsage.slice(0, 20).map<UserRunEvent>((row) => ({
           id: row.runId,

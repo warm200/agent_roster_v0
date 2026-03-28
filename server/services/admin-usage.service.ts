@@ -14,6 +14,7 @@ import {
   creditLedger,
   launchAttempts,
   orders,
+  previewChatInteractions,
   runChannelConfigs,
   runUsage,
   runtimeInstances,
@@ -78,7 +79,7 @@ export async function getAdminUsageSnapshot(input?: {
     const previous24hStart = new Date(now.getTime() - 2 * DAY_MS)
     const todayRowsStart = new Date(now.getTime() - DAY_MS)
 
-    const [userRows, orderRows, channelRows, subscriptionRows, ledgerRows, usageRows, adminRuntimeGrantRows] = await Promise.all([
+    const [userRows, orderRows, channelRows, subscriptionRows, ledgerRows, usageRows, adminRuntimeGrantRows, previewInteractionRows] = await Promise.all([
       db.select().from(users),
       db.select().from(orders),
       db.select().from(runChannelConfigs),
@@ -86,6 +87,7 @@ export async function getAdminUsageSnapshot(input?: {
       db.select().from(creditLedger).orderBy(desc(creditLedger.createdAt)),
       db.select().from(runUsage).orderBy(desc(runUsage.createdAt)),
       db.select().from(adminRuntimeGrants).orderBy(desc(adminRuntimeGrants.createdAt)),
+      db.select().from(previewChatInteractions).orderBy(desc(previewChatInteractions.createdAt)),
     ])
     let runtimeInstanceRows: Array<typeof runtimeInstances.$inferSelect> | null = null
     let runtimeIntervalRows: Array<typeof runtimeIntervals.$inferSelect> | null = null
@@ -154,6 +156,7 @@ export async function getAdminUsageSnapshot(input?: {
       channelRows,
       ledgerRows,
       orderRows,
+      previewInteractionRows,
       subscriptionRows,
       usageRows,
       userRows,

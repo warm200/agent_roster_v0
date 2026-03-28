@@ -222,3 +222,82 @@ test('catalog service prioritizes gif-backed local agent thumbnails', async () =
     ['animated-helper', 'still-image'],
   )
 })
+
+test('catalog service records preview interactions with the latest user question and reply', async () => {
+  let recorded:
+    | {
+        agentId: string
+        agentSlug: string
+        latestUserMessage: string
+        messages: Array<{ content: string; role: 'user' | 'assistant' }>
+        reply: string
+        userId: string
+      }
+    | undefined
+
+  const agent = buildAgent({ id: 'agent-preview-1', slug: 'preview-agent' })
+  const service = createCatalogService({
+    async generatePreviewReply() {
+      return 'Preview reply from model'
+    },
+    async getAgentRecordBySlug() {
+      return {
+        agent: {
+          id: agent.id,
+          slug: agent.slug,
+          title: agent.title,
+          category: agent.category,
+          summary: agent.summary,
+          descriptionMarkdown: agent.descriptionMarkdown,
+          priceCents: agent.priceCents,
+          currency: agent.currency,
+          status: agent.status,
+          createdAt: new Date(agent.createdAt),
+          updatedAt: new Date(agent.updatedAt),
+        },
+        versions: [
+          {
+            riskProfile: {
+              ...agent.currentVersion.riskProfile,
+              createdAt: new Date(agent.currentVersion.riskProfile.createdAt),
+            },
+            version: {
+              ...agent.currentVersion,
+              createdAt: new Date(agent.currentVersion.createdAt),
+            },
+          },
+        ],
+      }
+    },
+    async listAgentRecords() {
+      return []
+    },
+    async recordPreviewInteraction(input) {
+      recorded = input
+    },
+  })
+
+  const response = await service.previewInterview({
+    agentSlug: 'preview-agent',
+    messages: [
+      { role: 'user', content: 'What do you do?' },
+      { role: 'assistant', content: 'I explain the agent.' },
+      { role: 'user', content: 'Can you triage urgent inbox items?' },
+    ],
+    userId: 'user-preview-1',
+  })
+
+  assert.equal(response.reply, 'Preview reply from model')
+  assert.deepEqual(recorded, {
+    agentId: 'agent-preview-1',
+    agentSlug: 'preview-agent',
+    latestUserMessage: 'Can you triage urgent inbox items?',
+    messages: [
+      { role: 'user', content: 'What do you do?' },
+      { role: 'assistant', content: 'I explain the agent.' },
+      { role: 'user', content: 'Can you triage urgent inbox items?' },
+    ],
+    reply: 'Preview reply from model',
+    userId: 'user-preview-1',
+  })
+})

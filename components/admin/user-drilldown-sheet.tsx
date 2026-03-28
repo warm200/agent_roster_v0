@@ -245,6 +245,43 @@ export function UserDrilldownSheet({
 
                 <Panel className="p-5">
                   <div className="mb-4">
+                    <p className="text-[11px] tracking-[0.2em] uppercase text-zinc-500">Preview Chats</p>
+                    <h3 className="mt-2 text-lg font-semibold text-white">Agent preview questions</h3>
+                  </div>
+                  {user.previewTimeline.length > 0 ? (
+                    <div className="space-y-3">
+                      {user.previewTimeline.map((preview) => (
+                        <div key={preview.id} className="rounded-2xl border border-white/8 bg-black/15 p-4">
+                          <div className="flex items-center justify-between gap-3">
+                            <div>
+                              <p className="text-sm font-medium text-white">{preview.agentSlug}</p>
+                              <p className="mt-1 text-xs text-zinc-500">
+                                {formatDateTime(preview.createdAt)} · {preview.messageCount} messages
+                              </p>
+                            </div>
+                            <SignalPill tone="info">preview</SignalPill>
+                          </div>
+                          <Separator className="my-4 bg-white/8" />
+                          <div className="space-y-3">
+                            <div>
+                              <p className="text-[11px] tracking-[0.2em] uppercase text-zinc-500">Latest question</p>
+                              <p className="mt-2 text-sm text-zinc-200">{preview.latestUserMessage}</p>
+                            </div>
+                            <div>
+                              <p className="text-[11px] tracking-[0.2em] uppercase text-zinc-500">Reply</p>
+                              <p className="mt-2 line-clamp-4 text-sm text-zinc-400">{preview.reply}</p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-zinc-400">No preview chats recorded for this user yet.</p>
+                  )}
+                </Panel>
+
+                <Panel className="p-5">
+                  <div className="mb-4">
                     <p className="text-[11px] tracking-[0.2em] uppercase text-zinc-500">Bundle Readiness</p>
                     <h3 className="mt-2 text-lg font-semibold text-white">Operational launch prep</h3>
                   </div>

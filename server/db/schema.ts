@@ -172,6 +172,22 @@ export const agentVersions = pgTable('agent_versions', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 })
 
+export const previewChatInteractions = pgTable('preview_chat_interactions', {
+  id: text('id').primaryKey(),
+  userId: text('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  agentId: text('agent_id')
+    .notNull()
+    .references(() => agents.id, { onDelete: 'cascade' }),
+  agentSlug: text('agent_slug').notNull(),
+  latestUserMessage: text('latest_user_message').notNull(),
+  messageCount: integer('message_count').notNull(),
+  messagesJson: jsonb('messages_json').$type<Array<{ content: string; role: 'user' | 'assistant' }>>().notNull(),
+  reply: text('reply').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
 export const riskProfiles = pgTable(
   'risk_profiles',
   {
@@ -541,6 +557,8 @@ export type DbAgent = InferSelectModel<typeof agents>
 export type NewDbAgent = InferInsertModel<typeof agents>
 export type DbAgentVersion = InferSelectModel<typeof agentVersions>
 export type NewDbAgentVersion = InferInsertModel<typeof agentVersions>
+export type DbPreviewChatInteraction = InferSelectModel<typeof previewChatInteractions>
+export type NewDbPreviewChatInteraction = InferInsertModel<typeof previewChatInteractions>
 export type DbRiskProfile = InferSelectModel<typeof riskProfiles>
 export type NewDbRiskProfile = InferInsertModel<typeof riskProfiles>
 export type DbCart = InferSelectModel<typeof carts>

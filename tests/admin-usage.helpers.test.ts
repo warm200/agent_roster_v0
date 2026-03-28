@@ -107,6 +107,7 @@ test('buildUserRows uses the selected admin window for activity metrics', () => 
         userId: 'user-1',
       } as never,
     ],
+    previewInteractionRows: [],
     subscriptionRows: [
       {
         currentPeriodEnd: new Date('2026-03-31T00:00:00.000Z'),
@@ -174,6 +175,7 @@ test('buildUserRows derives estimated cost from workspace minutes when stored co
         userId: 'user-1',
       } as never,
     ],
+    previewInteractionRows: [],
     subscriptionRows: [],
     usageRows: [
       {
@@ -200,4 +202,53 @@ test('buildUserRows derives estimated cost from workspace minutes when stored co
   })
 
   assert.equal(rows[0]?.estCostThisPeriodCents, 6)
+})
+
+test('buildUserRows attaches recent preview chats per user', () => {
+  const rows = buildUserRows({
+    adminRuntimeGrantRows: [],
+    channelRows: [],
+    ledgerRows: [],
+    orderRows: [],
+    previewInteractionRows: [
+      {
+        id: 'preview-2',
+        userId: 'user-1',
+        agentId: 'agent-1',
+        agentSlug: 'calendar-guard',
+        latestUserMessage: 'Can you protect deep work blocks?',
+        messageCount: 4,
+        messagesJson: [],
+        reply: 'Preview reply',
+        createdAt: new Date('2026-03-07T12:00:00.000Z'),
+      } as never,
+      {
+        id: 'preview-1',
+        userId: 'user-1',
+        agentId: 'agent-2',
+        agentSlug: 'inbox-triage',
+        latestUserMessage: 'How do you sort urgent senders?',
+        messageCount: 2,
+        messagesJson: [],
+        reply: 'Earlier reply',
+        createdAt: new Date('2026-03-06T12:00:00.000Z'),
+      } as never,
+    ],
+    subscriptionRows: [],
+    usageRows: [],
+    userRows: [
+      {
+        email: 'user@example.com',
+        id: 'user-1',
+        name: 'User One',
+      } as never,
+    ],
+    windowEnd: new Date('2026-03-08T00:00:00.000Z'),
+    windowStart: new Date('2026-03-01T00:00:00.000Z'),
+  })
+
+  assert.equal(rows.length, 1)
+  assert.deepEqual(rows[0]?.previewTimeline.map((row) => row.id), ['preview-2', 'preview-1'])
+  assert.equal(rows[0]?.previewTimeline[0]?.agentSlug, 'calendar-guard')
+  assert.equal(rows[0]?.previewTimeline[0]?.latestUserMessage, 'Can you protect deep work blocks?')
 })
