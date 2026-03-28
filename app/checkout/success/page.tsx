@@ -136,7 +136,7 @@ export default function CheckoutSuccessPage({
           </div>
 
           <div className="space-y-3">
-            <Link href={`/app/bundles/${orderId}`} className="block">
+            <Link href={`/app/bundles/${orderId}`} prefetch={false} className="block">
               <Button className="w-full gap-2">
                 <MessageCircle className="h-4 w-4" />
                 Set Up Telegram
@@ -144,7 +144,7 @@ export default function CheckoutSuccessPage({
               </Button>
             </Link>
 
-            <Link href="/app" className="block">
+            <Link href="/app" prefetch={false} className="block">
               <Button variant="outline" className="w-full gap-2">
                 <Bot className="h-4 w-4" />
                 Go to Dashboard

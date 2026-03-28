@@ -275,9 +275,11 @@ if (!chromePath) {
           ...process.env,
           AUTH_SECRET: process.env.AUTH_SECRET || 'test-auth-secret',
           DATABASE_URL: hasSeededBrowserDatabase ? TEST_DATABASE_URL : '',
+          DAYTONA_API_KEY: '',
           GITHUB_CLIENT_ID: 'github-client',
           GITHUB_CLIENT_SECRET: 'github-secret',
           NEXT_TELEMETRY_DISABLED: '1',
+          RUN_PROVIDER: 'mock',
         },
         stdio: 'pipe',
       },
@@ -332,7 +334,7 @@ if (!chromePath) {
         await page.goto(`${BASE_URL}/`, { waitUntil: 'domcontentloaded' })
         await waitForText(page, 'Build focused work bundles')
         await clickByHref(page, '/pricing')
-        await waitForText(page, 'Run agents,')
+        await waitForText(page, 'Operate agents,')
         await waitForText(page, 'Warm Standby')
         assert.equal(page.url(), `${BASE_URL}/pricing`)
       } finally {
@@ -479,8 +481,9 @@ if (!chromePath) {
           {},
           '/app/bundles/order-1',
         )
-        await clickByText(page, 'button', 'Go to Dashboard')
-        await waitForText(page, 'Dashboard')
+        await clickByHrefAndText(page, '/app', 'Go to Dashboard')
+        await waitForPathname(page, '/app')
+        await waitForText(page, 'Recent Bundles')
         assert.equal(page.url(), `${BASE_URL}/app`)
       } finally {
         await page.close()
@@ -670,7 +673,7 @@ if (!chromePath) {
           {},
           BASE_URL,
         )
-        await waitForText(page, 'Run Information')
+        await waitForText(page, 'Runtime status')
         assert.ok(page.url().startsWith(`${BASE_URL}/app/runs/`), page.url())
       } finally {
         await page.close()
@@ -696,9 +699,9 @@ if (!chromePath) {
         await page.goto(`${BASE_URL}/app/runs/run-1`, {
           waitUntil: 'domcontentloaded',
         })
+        await waitForText(page, 'Runtime status')
         await waitForText(page, 'Run Information')
-        await waitForText(page, 'Initializing run environment')
-        await waitForText(page, 'Successfully processed 47 emails')
+        await waitForText(page, 'Inbox Triage Agent')
         assert.equal(page.url(), `${BASE_URL}/app/runs/run-1`)
       } finally {
         await page.close()
