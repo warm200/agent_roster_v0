@@ -42,6 +42,7 @@ export type TelegramWebhookResult =
 export type TelegramUpdate = {
   update_id?: number
   message?: {
+    date?: number
     text?: string
     chat?: {
       id?: number | string

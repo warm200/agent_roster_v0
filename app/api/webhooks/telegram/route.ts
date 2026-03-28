@@ -22,6 +22,16 @@ function buildWakeInProgressNotice() {
   return "[OpenRoster] Your OpenClaw is having coffee and coming back for your message. The agent will reply once it's back at its desk."
 }
 
+function getTelegramMessageOccurredAt(update: TelegramUpdate) {
+  const epochSeconds = update.message?.date
+
+  if (typeof epochSeconds !== 'number' || !Number.isFinite(epochSeconds)) {
+    return undefined
+  }
+
+  return new Date(epochSeconds * 1000).toISOString()
+}
+
 export async function POST(request: NextRequest) {
   try {
     const orderId = request.nextUrl.searchParams.get('orderId')
@@ -40,7 +50,10 @@ export async function POST(request: NextRequest) {
 
     if (result.outcome === 'runtime_activity') {
       try {
-        const wake = await getRunService().wakeStoppedRunForOrder(orderId)
+        const wake = await getRunService().wakeStoppedRunForOrder(
+          orderId,
+          getTelegramMessageOccurredAt(update),
+        )
 
         if (wake.outcome === 'resumed') {
           try {

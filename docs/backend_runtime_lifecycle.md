@@ -143,6 +143,7 @@ Backend behavior:
 
 - launch creates a sandbox
 - stop preserves stopped state
+- Telegram auto-wake only resumes a manually stopped run when the inbound Telegram message is newer than the manual stop timestamp
 - if stopped long enough, reconcile may archive it
 - `recoverableUntilAt` is derived from archive threshold
 - stopped or archived recoverable runtimes can resume later on the same run id

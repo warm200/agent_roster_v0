@@ -801,6 +801,7 @@ async function refreshGatewayStatus(
   manifest: DaytonaRunManifest,
 ): Promise<DaytonaStatusFile> {
   const shouldProbe =
+    (status.status === 'provisioning' && sandbox.state === SandboxState.STARTED) ||
     status.status === 'running' ||
     (status.status === 'failed' &&
       (status.resultSummary?.includes('Managed runtime bootstrap failed.') ?? false))

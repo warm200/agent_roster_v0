@@ -1394,6 +1394,314 @@ test('run service does not auto-wake when an order has multiple stopped warm sta
   setRunServiceDepsForTesting(null)
 })
 
+test('run service does not auto-wake a manually stopped warm standby run for stale pre-stop telegram activity', async () => {
+  const stoppedAt = new Date().toISOString()
+  const occurredAt = new Date(Date.parse(stoppedAt) - 60_000).toISOString()
+  const stoppedRun: Run = {
+    ...baseRun,
+    completedAt: stoppedAt,
+    resultSummary: 'Managed runtime is sleeping and can be resumed later.',
+    status: 'completed',
+  }
+  let restartCalled = false
+
+  const service = new RunService(
+    {
+      async findRunForUser() {
+        return stoppedRun
+      },
+      async listRunsForOrder() {
+        return [stoppedRun]
+      },
+      async updateRun(_runId: string, nextRun: Partial<Run>) {
+        return { ...stoppedRun, ...nextRun }
+      },
+    } as never,
+    {
+      async findRuntimeInstanceByRunId() {
+        return {
+          ...baseRuntimeRecord,
+          runId: stoppedRun.id,
+          userId: stoppedRun.userId,
+          orderId: stoppedRun.orderId,
+          planId: 'warm_standby',
+          runtimeMode: 'wakeable_recoverable',
+          persistenceMode: 'recoverable',
+          state: 'stopped',
+          stoppedAt,
+          stopReason: 'manual_stop',
+          preservedStateAvailable: true,
+          workspaceReleasedAt: null,
+        }
+      },
+    } as never,
+  )
+
+  setRunServiceDepsForTesting({
+    getRunProvider: () => ({
+      name: 'daytona',
+      async createRun() {
+        return baseRun
+      },
+      async getLogs() {
+        return []
+      },
+      async getResult() {
+        return null
+      },
+      async getRuntimeInstance() {
+        return null
+      },
+      async getStatus() {
+        return null
+      },
+      async restartRuntimeInstance() {
+        restartCalled = true
+        return null
+      },
+      async stopRun() {
+        return null
+      },
+    }),
+  })
+
+  const wake = await service.wakeStoppedRunForOrder(stoppedRun.orderId, occurredAt)
+
+  assert.deepEqual(wake, {
+    occurredAt,
+    orderId: stoppedRun.orderId,
+    outcome: 'no_candidate',
+    runId: null,
+  })
+  assert.equal(restartCalled, false)
+
+  setRunServiceDepsForTesting(null)
+})
+
+test('run service can auto-wake a manually stopped warm standby run for new post-stop telegram activity', async () => {
+  const stoppedAt = new Date().toISOString()
+  const occurredAt = new Date(Date.parse(stoppedAt) + 60_000).toISOString()
+  const resumedAt = new Date(Date.parse(stoppedAt) + 120_000).toISOString()
+  const calls: string[] = []
+  const stoppedRun: Run = {
+    ...baseRun,
+    completedAt: stoppedAt,
+    resultSummary: 'Managed runtime is sleeping and can be resumed later.',
+    status: 'completed',
+  }
+
+  const service = new RunService(
+    {
+      async findRunForUser() {
+        return stoppedRun
+      },
+      async listRunsForOrder() {
+        return [stoppedRun]
+      },
+      async updateRun(_runId: string, nextRun: Partial<Run>) {
+        calls.push('repository.updateRun')
+        return { ...stoppedRun, ...nextRun }
+      },
+      async updateRunUsage(_runId: string, patch: Record<string, unknown>) {
+        calls.push(`repository.updateRunUsage:${String(patch.lastMeaningfulActivityAt ?? patch.statusSnapshot ?? 'patch')}`)
+        return null
+      },
+      async findRunUsage() {
+        return {
+          agentCount: 1,
+          completedAt: stoppedRun.completedAt,
+          createdAt: stoppedRun.createdAt,
+          estimatedInternalCostCents: null,
+          id: 'usage-1',
+          inputTokensEst: null,
+          lastMeaningfulActivityAt: null,
+          networkEnabled: true,
+          orderId: stoppedRun.orderId,
+          outputTokensEst: null,
+          planId: 'warm_standby',
+          planVersion: 'v1',
+          providerAcceptedAt: stoppedRun.startedAt,
+          provisioningStartedAt: stoppedRun.createdAt,
+          runId: stoppedRun.id,
+          runningStartedAt: stoppedRun.startedAt,
+          statusSnapshot: 'completed',
+          terminationReason: 'manual_stop',
+          toolCallsCount: null,
+          triggerModeSnapshot: 'auto_wake',
+          ttlPolicySnapshot: {
+            cleanupGraceMinutes: 10,
+            heartbeatMissingMinutes: null,
+            idleTimeoutMinutes: 45,
+            maxSessionTtlMinutes: 360,
+            provisioningTimeoutMinutes: 15,
+            triggerMode: 'auto_wake',
+            unhealthyProviderTimeoutMinutes: null,
+          },
+          updatedAt: stoppedRun.updatedAt,
+          userId: stoppedRun.userId,
+          usesRealWorkspace: true,
+          usesTools: true,
+          workspaceMinutes: null,
+          workspaceReleasedAt: stoppedRun.completedAt,
+        } as never
+      },
+    } as never,
+    {
+      async findRuntimeInstanceByRunId() {
+        return {
+          ...baseRuntimeRecord,
+          runId: stoppedRun.id,
+          userId: stoppedRun.userId,
+          orderId: stoppedRun.orderId,
+          planId: 'warm_standby',
+          runtimeMode: 'wakeable_recoverable',
+          persistenceMode: 'recoverable',
+          state: 'stopped',
+          stoppedAt,
+          stopReason: 'manual_stop',
+          preservedStateAvailable: true,
+          workspaceReleasedAt: null,
+        }
+      },
+      async updateRuntimeInstance(_runId: string, input: Partial<RuntimeInstance>) {
+        calls.push('runtime.updateRuntimeInstance')
+        return {
+          ...baseRuntimeRecord,
+          runId: stoppedRun.id,
+          userId: stoppedRun.userId,
+          orderId: stoppedRun.orderId,
+          planId: 'warm_standby',
+          runtimeMode: 'wakeable_recoverable',
+          persistenceMode: 'recoverable',
+          preservedStateAvailable: true,
+          ...input,
+        }
+      },
+      async findOpenRuntimeInterval() {
+        return null
+      },
+      async createRuntimeInterval() {
+        calls.push('runtime.createRuntimeInterval')
+        return null
+      },
+    } as never,
+  )
+
+  setRunServiceDepsForTesting({
+    getOrderByIdForUser: async () =>
+      ({
+        id: stoppedRun.orderId,
+        userId: stoppedRun.userId,
+        items: [],
+      }) as never,
+    getOrderProviderApiKeysForUser: async () => ({}),
+    getSubscriptionService: () =>
+      ({
+        commitReservedLaunchCredit: async () => {
+          calls.push('subscription.commit')
+          return null
+        },
+        getLaunchPolicy: async () => ({
+          allowed: true,
+          availableCredits: 0,
+          blockers: [],
+          effectivePlan: getSubscriptionPlan('warm_standby'),
+          plan: getSubscriptionPlan('warm_standby'),
+          runtimeGrant: null,
+          subscription: null,
+          usage: {
+            activeBundles: 0,
+            activeRunIds: [],
+            concurrentRuns: 0,
+          },
+        }),
+        refundReservedLaunchCredit: async () => null,
+        reserveLaunchCredit: async () => {
+          calls.push('subscription.reserve')
+          return null
+        },
+      } as never),
+    getRunProvider: () => ({
+      name: 'daytona',
+      async createRun() {
+        return baseRun
+      },
+      async getLogs() {
+        return []
+      },
+      async getResult() {
+        return null
+      },
+      async getRuntimeInstance() {
+        return {
+          ...baseRuntimeRecord,
+          runId: stoppedRun.id,
+          userId: stoppedRun.userId,
+          orderId: stoppedRun.orderId,
+          planId: 'warm_standby',
+          runtimeMode: 'wakeable_recoverable',
+          persistenceMode: 'recoverable',
+          state: 'stopped',
+          stoppedAt,
+          stopReason: 'manual_stop',
+          preservedStateAvailable: true,
+        }
+      },
+      async getStatus() {
+        return {
+          ...stoppedRun,
+          completedAt: null,
+          runtimeState: 'running',
+          startedAt: resumedAt,
+          status: 'running',
+          updatedAt: resumedAt,
+        }
+      },
+      async restartRuntimeInstance() {
+        calls.push('provider.restartRuntimeInstance')
+        return {
+          ...baseRuntimeRecord,
+          runId: stoppedRun.id,
+          userId: stoppedRun.userId,
+          orderId: stoppedRun.orderId,
+          planId: 'warm_standby',
+          runtimeMode: 'wakeable_recoverable',
+          persistenceMode: 'recoverable',
+          state: 'running',
+          startedAt: resumedAt,
+          stoppedAt: null,
+          stopReason: null,
+          preservedStateAvailable: true,
+          workspaceReleasedAt: null,
+          lastReconciledAt: resumedAt,
+        }
+      },
+      async stopRun() {
+        return null
+      },
+    }),
+    getTelegramService: () =>
+      ({
+        releaseWebhookToRuntimePolling: async () => {
+          calls.push('telegram.releaseWebhookToRuntimePolling')
+          return { orderId: stoppedRun.orderId }
+        },
+      }) as never,
+  })
+
+  const wake = await service.wakeStoppedRunForOrder(stoppedRun.orderId, occurredAt)
+
+  assert.deepEqual(wake, {
+    occurredAt,
+    orderId: stoppedRun.orderId,
+    outcome: 'resumed',
+    runId: stoppedRun.id,
+  })
+  assert.equal(calls.includes('provider.restartRuntimeInstance'), true)
+
+  setRunServiceDepsForTesting(null)
+})
+
 test('run service archives old recoverable runtime state on read when threshold is exceeded', async () => {
   const previousArchiveMinutes = process.env.WARM_STANDBY_AUTO_ARCHIVE_MINUTES
   process.env.WARM_STANDBY_AUTO_ARCHIVE_MINUTES = '1'

@@ -296,6 +296,55 @@ test('telegram webhook route records runtime activity for paired inbound message
   assert.equal(payload.wake.outcome, 'already_live')
 })
 
+test('telegram webhook route forwards telegram message timestamp to wake logic', async () => {
+  let wakeAttempted:
+    | { occurredAt?: string; orderId: string }
+    | undefined
+
+  setTelegramServiceForTesting({
+    async handleWebhook(): Promise<TelegramWebhookResult> {
+      return {
+        chatId: '77',
+        outcome: 'runtime_activity',
+      }
+    },
+  } as never)
+
+  setRunServiceForTesting({
+    async wakeStoppedRunForOrder(orderId: string, occurredAt?: string) {
+      wakeAttempted = { occurredAt, orderId }
+      return {
+        occurredAt: occurredAt ?? 'now',
+        orderId,
+        outcome: 'already_live' as const,
+        runId: 'run-1',
+      }
+    },
+  } as unknown as RunService)
+
+  const response = await telegramWebhook(
+    new NextRequest('http://localhost/api/webhooks/telegram?orderId=order-test-1', {
+      body: JSON.stringify({
+        message: {
+          chat: { id: 77 },
+          date: 1_711_641_600,
+          text: 'hello',
+        },
+      }),
+      headers: {
+        'x-telegram-bot-api-secret-token': 'secret-token',
+      },
+      method: 'POST',
+    }),
+  )
+
+  assert.equal(response.status, 200)
+  assert.deepEqual(wakeAttempted, {
+    occurredAt: '2024-03-28T16:00:00.000Z',
+    orderId: 'order-test-1',
+  })
+})
+
 test('telegram webhook route sends a paired notice when wake is blocked by exhausted credits', async () => {
   let pairedNotice:
     | { orderId: string; text: string }

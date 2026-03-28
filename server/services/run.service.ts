@@ -141,6 +141,10 @@ function nowIso() {
   return new Date().toISOString()
 }
 
+function timestampIsOnOrBefore(left: string, right: string) {
+  return new Date(left).getTime() <= new Date(right).getTime()
+}
+
 function buildTerminalRuntimeFromRecord(
   runtime: RuntimeInstance,
   reason: RunTerminationReason,
@@ -1395,6 +1399,13 @@ export class RunService {
         runtimeRecord.preservedStateAvailable &&
         (runtimeRecord.state === 'stopped' || runtimeRecord.state === 'archived')
       ) {
+        if (
+          runtimeRecord.stopReason === 'manual_stop' &&
+          runtimeRecord.stoppedAt &&
+          timestampIsOnOrBefore(occurredAt, runtimeRecord.stoppedAt)
+        ) {
+          continue
+        }
         candidates.push(run)
       }
     }

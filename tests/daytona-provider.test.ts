@@ -352,6 +352,7 @@ test('daytona run provider stages OpenClaw and returns a signed control ui link'
     providerApiKeys: {
       anthropic: 'sk-ant-runtime',
       openai: 'sk-openai-runtime',
+      openrouter: 'sk-or-runtime',
     },
   })
   assert.equal(created.status, 'provisioning')
@@ -390,6 +391,7 @@ test('daytona run provider stages OpenClaw and returns a signed control ui link'
   assert.equal(uploadedConfig.agents?.list?.[0]?.id, 'inbox-triage')
   assert.equal(uploadedConfig.env?.ANTHROPIC_API_KEY, 'sk-ant-runtime')
   assert.equal(uploadedConfig.env?.OPENAI_API_KEY, 'sk-openai-runtime')
+  assert.equal(uploadedConfig.env?.OPENROUTER_API_KEY, 'sk-or-runtime')
   assert.equal(uploadedConfig.channels?.telegram?.botToken, '123456:telegram-bot-token')
   assert.equal(uploadedConfig.channels?.telegram?.dmPolicy, 'allowlist')
   assert.deepEqual(uploadedConfig.channels?.telegram?.allowFrom, ['tg:77'])
@@ -1052,6 +1054,92 @@ test('daytona run provider upgrades legacy running bootstrap state to completed 
   assert.ok(status)
   assert.equal(status.status, 'completed')
   assert.ok(status.completedAt)
+})
+
+test('daytona run provider upgrades provisioning bootstrap state once control ui process is already alive', async () => {
+  const runId = 'run-provisioning-ready'
+  const startedAt = new Date().toISOString()
+  const sandbox = {
+    createdAt: startedAt,
+    files: {
+      '/tmp/agent-roster/manifest.json': JSON.stringify({
+        agentTitles: ['Inbox Triage Agent'],
+        channelConfigId: 'channel-test-1',
+        combinedRiskLevel: 'low',
+        createdAt: startedAt,
+        networkEnabled: true,
+        orderId: 'order-test-1',
+        recipientExternalId: '77',
+        runId,
+        userId: 'user-test-1',
+        usesTools: true,
+      }),
+      '/tmp/agent-roster/status.json': JSON.stringify({
+        completedAt: null,
+        resultSummary: null,
+        startedAt,
+        status: 'provisioning',
+        updatedAt: startedAt,
+      }),
+      '/tmp/agent-roster/result.json': JSON.stringify({
+        artifacts: [],
+        summary: 'Managed runtime is provisioning. Control UI will be available when setup completes.',
+      }),
+      '/tmp/agent-roster/openclaw.pid': '123',
+    } as Record<string, string>,
+  }
+
+  const provider = new DaytonaRunProvider({
+    apiKey: 'daytona-test',
+    clientFactory: () => ({
+      async create() {
+        throw new Error('not used')
+      },
+      async get(id) {
+        assert.equal(id, runId)
+        return {
+          createdAt: sandbox.createdAt,
+          fs: {
+            async downloadFile(filePath: string) {
+              const value = sandbox.files[filePath]
+              if (value === undefined) {
+                const error = new Error(`404 ${filePath}`)
+                ;(error as Error & { status: number }).status = 404
+                throw error
+              }
+
+              return Buffer.from(value, 'utf8')
+            },
+            async uploadFile(file: Buffer, filePath: string) {
+              sandbox.files[filePath] = file.toString('utf8')
+            },
+          },
+          id,
+          process: {
+            async executeCommand(command: string) {
+              if (command.includes('kill -0 "$(cat /tmp/agent-roster/openclaw.pid)"')) {
+                return {
+                  exitCode: 0,
+                  result: 'running',
+                }
+              }
+
+              return {
+                exitCode: 0,
+                result: '',
+              }
+            },
+          },
+          state: SandboxState.STARTED,
+        }
+      },
+    }),
+  })
+
+  const status = await provider.getStatus(runId)
+  assert.ok(status)
+  assert.equal(status.status, 'completed')
+  assert.match(status.resultSummary ?? '', /Open Control UI/)
 })
 
 test('daytona run provider heals failed bootstrap records when control ui process is actually alive', async () => {
