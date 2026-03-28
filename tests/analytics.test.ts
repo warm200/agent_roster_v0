@@ -5,6 +5,7 @@ import {
   buildAttributionEventParams,
   buildAttributionTouch,
   mergeStoredAttribution,
+  trackPurchaseOnce,
 } from '@/lib/analytics'
 
 test('buildAttributionTouch returns null when no UTM params exist', () => {
@@ -104,4 +105,24 @@ test('buildAttributionEventParams flattens first and last touch fields', () => {
     last_utm_term: undefined,
     last_landing_path: '/pricing',
   })
+})
+
+test('trackPurchaseOnce ignores incomplete checkout payloads', () => {
+  const dataLayer: unknown[][] = []
+  const windowStub = {
+    dataLayer,
+    gtag: (...args: unknown[]) => {
+      dataLayer.push(args)
+    },
+    localStorage: {
+      getItem: () => null,
+      setItem: () => undefined,
+    },
+  }
+
+  Object.assign(globalThis, { window: windowStub })
+
+  trackPurchaseOnce({ id: 'order-minimal' })
+
+  assert.deepEqual(dataLayer, [])
 })

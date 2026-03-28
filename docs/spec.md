@@ -30,6 +30,7 @@ Important product distinction:
 - agent-facing risk labels should be driven by `agents_file/agent-risk-report.json`, with only `risk_driving: true` findings treated as primary risk signals
 - bundle detail and run detail combined-risk displays should be recomputed from the actual agents in the bundle/run, not trusted from stale stored aggregate fields
 - agent setup model placeholders are treated as real defaults at launch time if the user leaves model fields blank
+- agent setup model refs stay provider-qualified; OpenRouter refs use `openrouter/<provider>/<model>`
 
 ## Source Of Truth
 
@@ -88,6 +89,7 @@ Preview notes:
 - preview does not use a real managed workspace
 - preview does not consume runtime credits
 - preview is separate from paid run lifecycle
+- preview requests are stored server-side with user, agent, latest question, full message payload, and reply for ops review
 - preview should stay scoped to understanding the selected agent itself
 - preview should refuse unrelated general-assistant requests, prompt-injection attempts, and hidden-prompt leakage requests
 

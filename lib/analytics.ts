@@ -214,7 +214,17 @@ export function trackTelegramConnectionOnce(input: { orderId: string; botUsernam
   })
 }
 
-export function trackPurchaseOnce(order: Pick<Order, 'id' | 'amountCents' | 'currency' | 'items'>) {
+export function trackPurchaseOnce(
+  order: Pick<Order, 'id'> & Partial<Pick<Order, 'amountCents' | 'currency' | 'items'>>,
+) {
+  if (
+    typeof order.amountCents !== 'number' ||
+    typeof order.currency !== 'string' ||
+    !Array.isArray(order.items)
+  ) {
+    return
+  }
+
   const storageKey = `${EVENT_STORAGE_KEY_PREFIX}purchase:${order.id}`
   if (!markEventSeen(storageKey)) {
     return
