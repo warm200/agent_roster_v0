@@ -332,7 +332,7 @@ if (!chromePath) {
 
       try {
         await page.goto(`${BASE_URL}/`, { waitUntil: 'domcontentloaded' })
-        await waitForText(page, 'Build focused work bundles')
+        await waitForText(page, 'Build focused')
         await clickByHref(page, '/pricing')
         await waitForText(page, 'Operate agents,')
         await waitForText(page, 'Warm Standby')
