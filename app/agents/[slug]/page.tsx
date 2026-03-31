@@ -3,6 +3,8 @@
 import { use, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { AgentRiskBadge } from '@/components/agent-risk-badge'
+import { AgentTesslBadge } from '@/components/agent-tessl-badge'
+import { AgentTesslPanel } from '@/components/agent-tessl-panel'
 import { Header } from '@/components/header'
 import { PreviewChat } from '@/components/preview-chat'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
@@ -28,7 +30,6 @@ import {
   CheckCircle2,
   ScrollText,
   Shield,
-  GitBranch,
   AlertTriangle,
   Bot,
   ChevronDown,
@@ -37,16 +38,6 @@ import {
 
 interface PageProps {
   params: Promise<{ slug: string }>
-}
-
-function getVisibleChangelog(markdown: string) {
-  const sanitized = markdown
-    .split('\n')
-    .filter((line) => !line.includes('Imported from `agents_file/'))
-    .join('\n')
-    .trim()
-
-  return sanitized || '- Initial catalog release'
 }
 
 export default function AgentDetailPage({ params }: PageProps) {
@@ -136,6 +127,7 @@ export default function AgentDetailPage({ params }: PageProps) {
   const riskSummary = getAgentSummary(agent)
   const capabilityChips = getAgentCapabilityChips(agent, 4)
   const canUsePreviewChat = isAuthenticated
+  const hasTesslReview = Boolean(agent.tesslReview)
 
   const handleAddToCart = () => {
     addItem(agent)
@@ -166,17 +158,21 @@ export default function AgentDetailPage({ params }: PageProps) {
                   </AvatarFallback>
                 </Avatar>
                 <Badge variant="secondary">{agent.category}</Badge>
+                <Badge variant="outline" className="font-mono">
+                  v{currentVersion.version}
+                </Badge>
                 <AgentRiskBadge level={riskLevel} />
+                {agent.tesslReview ? <AgentTesslBadge review={agent.tesslReview} /> : null}
               </div>
               <h1 className="text-3xl font-bold text-foreground mb-3">{agent.title}</h1>
               <p className="text-lg text-muted-foreground">{agent.summary}</p>
             </div>
 
             <Tabs defaultValue="overview" className="w-full">
-              <TabsList className="grid w-full grid-cols-3">
+              <TabsList className={`grid w-full ${hasTesslReview ? 'grid-cols-3' : 'grid-cols-2'}`}>
                 <TabsTrigger value="overview">Overview</TabsTrigger>
                 <TabsTrigger value="risk">Risk Profile</TabsTrigger>
-                <TabsTrigger value="changelog">Changelog</TabsTrigger>
+                {hasTesslReview ? <TabsTrigger value="tessl">Tessl</TabsTrigger> : null}
               </TabsList>
 
               <TabsContent value="overview" className="mt-6 space-y-6">
@@ -323,34 +319,11 @@ export default function AgentDetailPage({ params }: PageProps) {
                 </Card>
               </TabsContent>
 
-              <TabsContent value="changelog" className="mt-6">
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2 text-lg">
-                      <GitBranch className="w-5 h-5" />
-                      Version History
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between pb-4 border-b border-border">
-                        <div>
-                          <span className="font-medium">v{currentVersion.version}</span>
-                          <span className="text-sm text-muted-foreground ml-2">Current</span>
-                        </div>
-                        <span className="text-sm text-muted-foreground">
-                          {formatDate(currentVersion.createdAt)}
-                        </span>
-                      </div>
-                      <div className="text-sm text-muted-foreground">
-                        <pre className="rounded-lg bg-secondary p-3 whitespace-pre-wrap">
-                          {getVisibleChangelog(currentVersion.changelogMarkdown)}
-                        </pre>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </TabsContent>
+              {agent.tesslReview ? (
+                <TabsContent value="tessl" className="mt-6">
+                  <AgentTesslPanel review={agent.tesslReview} />
+                </TabsContent>
+              ) : null}
             </Tabs>
 
             <Card className="overflow-hidden">

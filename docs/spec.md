@@ -28,6 +28,8 @@ Important product distinction:
 - runtime plans differ by behavior and persistence, not just credits
 - catalog pages should render real synced/DB-backed agents only; mock catalog fallback is not part of the product
 - agent-facing risk labels should be driven by `agents_file/agent-risk-report.json`, with only `risk_driving: true` findings treated as primary risk signals
+- agent-facing external evaluation badges may also surface a Tessl snapshot from `agents_file/tessl-evals.json`, but those are advisory catalog metadata, not runtime gating
+- refresh the Tessl snapshot with `pnpm tessl:sync`; it prefers local Tessl CLI results and falls back to the public registry if needed
 - bundle detail and run detail combined-risk displays should be recomputed from the actual agents in the bundle/run, not trusted from stale stored aggregate fields
 - agent setup model placeholders are treated as real defaults at launch time if the user leaves model fields blank
 - agent setup model refs stay provider-qualified; OpenRouter refs use `openrouter/<provider>/<model>`
@@ -61,6 +63,9 @@ Use these docs by topic:
   - how to trigger maintenance in production
 - [prd.md](/Users/wallacewang/agent_projects/v0_version/docs/prd.md)
   - broader phase requirements and product scope
+- [tessl_sync.md](/Users/wallacewang/agent_projects/v0_version/docs/tessl_sync.md)
+  - how to refresh the local Tessl evaluation snapshot used by the catalog UI
+  - when to use a specific eval run id vs the public-registry fallback
 
 ## Preview Chat Contract
 

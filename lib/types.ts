@@ -105,6 +105,36 @@ export interface AgentRiskReview {
   summary: string
 }
 
+export type AgentTesslSecurityLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'
+
+export interface AgentTesslScores {
+  version: string
+  aggregate: number | null
+  quality: number | null
+  impact: number | null
+  security: AgentTesslSecurityLevel | string
+  evalAvg: number | null
+  evalBaseline: number | null
+  evalImprovement: number | null
+  evalImprovementMultiplier: number | null
+  evalCount: number | null
+  lastScoredAt: string | null
+}
+
+export interface AgentTesslReview {
+  slug: string
+  registrySkillName: string
+  title: string
+  description: string
+  sourceUrl: string
+  path: string
+  createdAt: string
+  updatedAt: string
+  validationPassed: boolean
+  registryUrl: string
+  scores: AgentTesslScores
+}
+
 // Agent Version
 export interface AgentVersion {
   id: string
@@ -133,6 +163,7 @@ export interface Agent {
   currency: string
   status: AgentStatus
   riskReview?: AgentRiskReview | null
+  tesslReview?: AgentTesslReview | null
   currentVersion: AgentVersion
   createdAt: string
   updatedAt: string

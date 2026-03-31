@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { AgentRiskBadge } from './agent-risk-badge'
+import { AgentTesslBadge } from './agent-tessl-badge'
 import { ArrowUpRight, ShoppingCart, Mail, Calendar, FileText, Zap, BarChart3, Sparkles } from 'lucide-react'
 
 interface AgentCardProps {
@@ -75,9 +76,14 @@ export function AgentCard({ agent, onAddToCart, isInCart = false }: AgentCardPro
                     {getAgentDisplayName(agent)}
                   </h3>
                 </Link>
-                <p className="mt-1 text-sm text-muted-foreground">{formatPrice(agent.priceCents, agent.currency)}</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {formatPrice(agent.priceCents, agent.currency)}
+                </p>
               </div>
-              <AgentRiskBadge className="shrink-0" level={riskLevel} />
+              <div className="flex shrink-0 flex-col items-end gap-2">
+                <AgentRiskBadge className="shrink-0" level={riskLevel} />
+                {agent.tesslReview ? <AgentTesslBadge review={agent.tesslReview} /> : null}
+              </div>
             </div>
           </div>
         </div>
@@ -91,6 +97,7 @@ export function AgentCard({ agent, onAddToCart, isInCart = false }: AgentCardPro
                   {categoryLabels[agent.category]}
                 </Badge>
                 <h3 className="text-lg font-semibold text-foreground">{getAgentDisplayName(agent)}</h3>
+                {agent.tesslReview ? <AgentTesslBadge className="mt-2" review={agent.tesslReview} /> : null}
               </div>
               <AgentRiskBadge level={riskLevel} />
             </div>

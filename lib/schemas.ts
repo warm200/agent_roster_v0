@@ -97,6 +97,34 @@ export const agentRiskReviewSchema = z.object({
   summary: z.string().min(1),
 })
 
+export const agentTesslScoresSchema = z.object({
+  version: z.string().min(1),
+  aggregate: z.number().min(0).max(1).nullable(),
+  quality: z.number().min(0).max(1).nullable(),
+  impact: z.number().min(0).max(1).nullable(),
+  security: z.string().min(1),
+  evalAvg: z.number().min(0).max(1).nullable(),
+  evalBaseline: z.number().min(0).max(1).nullable(),
+  evalImprovement: z.number().nullable(),
+  evalImprovementMultiplier: z.number().nullable(),
+  evalCount: z.number().int().nonnegative().nullable(),
+  lastScoredAt: timestampSchema.nullable(),
+})
+
+export const agentTesslReviewSchema = z.object({
+  slug: z.string().min(1),
+  registrySkillName: z.string().min(1),
+  title: z.string().min(1),
+  description: z.string(),
+  sourceUrl: z.string().url(),
+  path: z.string().min(1),
+  createdAt: timestampSchema,
+  updatedAt: timestampSchema,
+  validationPassed: z.boolean(),
+  registryUrl: z.string().url(),
+  scores: agentTesslScoresSchema,
+})
+
 export const agentVersionSchema = z.object({
   id: z.string().min(1),
   agentId: z.string().min(1),
@@ -123,6 +151,7 @@ export const agentSchema = z.object({
   currency: z.string().length(3),
   status: agentStatusSchema,
   riskReview: agentRiskReviewSchema.nullable().optional(),
+  tesslReview: agentTesslReviewSchema.nullable().optional(),
   currentVersion: agentVersionSchema,
   createdAt: timestampSchema,
   updatedAt: timestampSchema,

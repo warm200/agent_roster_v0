@@ -12,6 +12,7 @@ import {
   parseLocalAgentRuntimeSource,
   syncLocalAgentsToDb,
 } from './local-agent-files'
+import { loadAgentTesslReviewMap } from './tessl-evals'
 
 type AgentRow = typeof agents.$inferSelect
 type AgentVersionRow = typeof agentVersions.$inferSelect
@@ -153,8 +154,13 @@ export function createCatalogService(
     async listAgents(filters = {}) {
       const records = await deps.listAgentRecords(filters)
       const riskReviews = await loadAgentRiskReviewMap()
+      const tesslReviews = await loadAgentTesslReviewMap()
       const hydratedAgents = records.map((record) => ({
-        agent: toAgent(record, riskReviews.get(record.agent.slug)),
+        agent: toAgent(
+          record,
+          riskReviews.get(record.agent.slug),
+          tesslReviews.get(record.agent.slug),
+        ),
         hasGifThumbnail: hasGifThumbnail(record),
       }))
       const orderedAgents = hydratedAgents
@@ -176,7 +182,12 @@ export function createCatalogService(
       }
 
       const riskReviews = await loadAgentRiskReviewMap()
-      return toAgent(record, riskReviews.get(record.agent.slug))
+      const tesslReviews = await loadAgentTesslReviewMap()
+      return toAgent(
+        record,
+        riskReviews.get(record.agent.slug),
+        tesslReviews.get(record.agent.slug),
+      )
     },
 
     async previewInterview(input) {
@@ -312,7 +323,11 @@ async function hydrateAgentRecords(agentRows: AgentRow[]): Promise<DbAgentRecord
   }))
 }
 
-function toAgent(record: DbAgentRecord, riskReview: Agent['riskReview'] = null): Agent {
+function toAgent(
+  record: DbAgentRecord,
+  riskReview: Agent['riskReview'] = null,
+  tesslReview: Agent['tesslReview'] = null,
+): Agent {
   const currentVersionRow = record.versions[0]
   if (!currentVersionRow) {
     throw new Error(`Agent "${record.agent.slug}" has no versions.`)
@@ -341,6 +356,7 @@ function toAgent(record: DbAgentRecord, riskReview: Agent['riskReview'] = null):
         storedScanSummary: currentVersionRow.riskProfile.scanSummary,
         summary: record.agent.summary,
       }),
+    tesslReview,
     currentVersion: {
       id: currentVersionRow.version.id,
       agentId: currentVersionRow.version.agentId,
