@@ -2,6 +2,7 @@ import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 import { getToken } from 'next-auth/jwt'
 
+import { AB_COOKIE_MAX_AGE, AB_COOKIE_NAME, parseVariant, pickVariant } from '@/lib/ab-testing'
 import { isAuthConfigured } from '@/server/lib/auth'
 import { getAdminAllowedEmails } from '@/server/lib/route-security'
 
@@ -11,7 +12,28 @@ function rewriteAdminToNotFound(request: NextRequest) {
   return response
 }
 
+function withAbCookie(request: NextRequest, response: NextResponse) {
+  if (request.nextUrl.pathname !== '/') return response
+
+  const existing = parseVariant(request.cookies.get(AB_COOKIE_NAME)?.value)
+  if (existing) return response
+
+  response.cookies.set(AB_COOKIE_NAME, pickVariant(), {
+    path: '/',
+    maxAge: AB_COOKIE_MAX_AGE,
+    httpOnly: false,
+    sameSite: 'lax',
+  })
+
+  return response
+}
+
 export async function proxy(request: NextRequest) {
+  // A/B: assign variant cookie on homepage before any other logic
+  if (request.nextUrl.pathname === '/') {
+    return withAbCookie(request, NextResponse.next())
+  }
+
   const isAdminRoute =
     request.nextUrl.pathname.startsWith('/admin') ||
     request.nextUrl.pathname.startsWith('/api/admin')
@@ -53,5 +75,5 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/app/:path*', '/admin/:path*', '/api/admin/:path*'],
+  matcher: ['/', '/app/:path*', '/admin/:path*', '/api/admin/:path*'],
 }

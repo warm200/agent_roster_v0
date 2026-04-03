@@ -1,11 +1,15 @@
+import { cookies } from 'next/headers'
 import Link from 'next/link'
 import { cache } from 'react'
 
+import { AbImpression } from '@/components/ab-impression'
 import { BrandLogo } from '@/components/brand-logo'
 import { Header } from '@/components/header'
 import { RiskBadge } from '@/components/risk-badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { AB_COOKIE_NAME, HERO_COPY, parseVariant } from '@/lib/ab-testing'
+import type { HeroVariant } from '@/lib/ab-testing'
 import {
   ArrowRight,
   Bot,
@@ -140,10 +144,14 @@ function formatGithubStars(count: number | null) {
 
 export default async function HomePage() {
   const githubStars = formatGithubStars(await getGithubStars())
+  const cookieStore = await cookies()
+  const variant: HeroVariant = parseVariant(cookieStore.get(AB_COOKIE_NAME)?.value) ?? 'control'
+  const hero = HERO_COPY[variant]
 
   return (
     <div className="min-h-screen bg-background">
       <Header />
+      <AbImpression variant={variant} />
 
       <main>
         <section className="relative overflow-hidden border-b border-border/60">
@@ -154,18 +162,17 @@ export default async function HomePage() {
             <div className="relative z-10">
               <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-border/70 bg-card/70 px-3 py-1.5 text-xs uppercase tracking-[0.22em] text-muted-foreground backdrop-blur">
                 <Sparkles className="h-3.5 w-3.5 text-emerald-300" />
-                Compose bundles, not one-off tools
+                {hero.kicker}
               </div>
 
               <h1 className="max-w-4xl text-4xl font-semibold leading-[0.95] tracking-[-0.04em] text-foreground md:text-6xl lg:text-7xl">
-                Build focused
-                <span className="text-muted-foreground"> work bundles </span>
-                that run like a real workspace.
+                {hero.headline}
+                <span className="text-muted-foreground">{hero.headlineAccent}</span>
+                {hero.headlineTail}
               </h1>
 
               <p className="mt-6 max-w-2xl text-base leading-8 text-muted-foreground md:text-lg">
-                OpenRoster is not mainly about buying a single agent. It is about composing the right
-                combinations, running them as a bundle, and keeping the setups that actually fit your day.
+                {hero.subhead}
               </p>
 
               <div className="mt-8 flex flex-col gap-3 sm:flex-row">
